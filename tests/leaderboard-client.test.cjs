@@ -17,7 +17,7 @@ const path = require('node:path');
       calls.push({ url, options });
       if (fail) throw new Error('offline');
       return { ok: true, json: async () => url.endsWith('/api/laps') ? { rank: 2, bestMs: 12346 } :
-        { version: 'lut-20261009-v1', results: [{ nickname: '<script>', lap_ms: 12346 }] } };
+        { version: 'lut-20261011-v3', results: [{ nickname: '<script>', lap_ms: 12346 }] } };
     }
   };
   const source = fs.readFileSync(path.join(__dirname, '../leaderboard.js'), 'utf8');

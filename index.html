@@ -7,11 +7,11 @@
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>LPR Lap Challenge</title>
     <link rel="stylesheet" href="styles.css?v=mobile-20261008" />
-    <link rel="stylesheet" href="3d.css?v=leaderboard-only-20261009" />
-    <script src="i18n.js?v=leaderboard-only-20261009" defer></script>
+    <link rel="stylesheet" href="3d.css?v=leaderboard-close-20261011" />
+    <script src="i18n.js?v=leaderboard-close-20261011" defer></script>
     <script src="campus.js?v=student-cars-20261009" defer></script>
     <script src="sale.js?v=assortment-14" defer></script>
-    <script src="renderer3d.js?v=mobile-resolution-20261009" defer></script>
+    <script src="renderer3d.js?v=side-grip-20261011" defer></script>
     <script src="vehicle.js?v=steering-20261009-2" defer></script>
     <script src="sauna.js?v=ovi-20261008-2" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
@@ -59,7 +59,7 @@
     </main>
 
     <dialog id="settings-dialog">
-      <div class="dialog-head"><h2>Tuloslista</h2><button id="close-settings" class="icon-button close" aria-label="Sulje tuloslista">?</button></div>
+      <div class="dialog-head"><h2>Tuloslista</h2><button id="close-settings" class="icon-button close" type="button" aria-label="Sulje tuloslista"><span aria-hidden="true">×</span> Takaisin peliin</button></div>
       <section id="leaderboard-panel" class="leaderboard-panel" aria-label="Tuloslista">
         <label for="leaderboard-name">Nimimerkki (julkinen)</label>
         <input id="leaderboard-name" maxlength="24" autocomplete="nickname" placeholder="Nimimerkki" />

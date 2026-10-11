@@ -16,9 +16,7 @@
     dialog: document.querySelector('#settings-dialog')
   };
   const WORLD = LPRCampus.bounds;
-  const ROAD_HALF = 27;
-  const KERB_OUTER = 33;
-  const SHOULDER_OUTER = 35;
+  const { halfWidth: ROAD_HALF, kerbOuter: KERB_OUTER, shoulderOuter: SHOULDER_OUTER } = LPRCampus.road;
   const track = LPRCampus.track;
   const POINTS = track.length;
   const renderer = new LPRRenderer3D(canvas, document.querySelector('#cockpit'), track);
@@ -32,9 +30,9 @@
   let touchSteer = 0;
   let suspendedAt = null;
   let activePad = null;
-  let best = Number(localStorage.getItem('lpr-best-time-lut-v1')) || 0;
+  let best = Number(localStorage.getItem('lpr-best-time-lut-20261011-v3')) || 0;
   let storedSectors = null;
-  try { storedSectors = JSON.parse(localStorage.getItem('lpr-best-sectors-lut-v1')); } catch {}
+  try { storedSectors = JSON.parse(localStorage.getItem('lpr-best-sectors-lut-20261011-v3')); } catch {}
   const timing = new LPRLapTiming(storedSectors?.lapTime === best ? storedSectors.sectors : null);
   const sectorUI = document.querySelector('#sector-time');
 
@@ -437,9 +435,9 @@
           if (!car.onlineInvalid && timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
           if (!best || lapTime < best) {
             best = lapTime;
-            localStorage.setItem('lpr-best-time-lut-v1', String(best));
+            localStorage.setItem('lpr-best-time-lut-20261011-v3', String(best));
             timing.best = timing.sectors.slice();
-            localStorage.setItem('lpr-best-sectors-lut-v1', JSON.stringify({ lapTime: best, sectors: timing.best }));
+            localStorage.setItem('lpr-best-sectors-lut-20261011-v3', JSON.stringify({ lapTime: best, sectors: timing.best }));
             ui.best.textContent = formatTime(best);
             showNotice(t("record", { time: formatTime(lapTime) }), 3500);
           } else showNotice(t("lapResult", { time: formatTime(lapTime) }), 2500);

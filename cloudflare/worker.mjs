@@ -1,5 +1,5 @@
 // Paste this entire module into the Cloudflare Worker editor. Bind D1 as DB.
-const VERSION = 'lut-20261009-v1';
+const VERSION = 'lut-20261011-v3';
 const ORIGINS = new Set(['https://panulut.github.io', 'http://localhost:8000', 'http://127.0.0.1:8000']);
 const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(n => n.toString(16).padStart(2, '0')).join('');
 

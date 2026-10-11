@@ -5,6 +5,8 @@ window.LPRRenderer3D = class LPRRenderer3D {
     this.canvas = canvas;
     this.cockpitCanvas = cockpitCanvas;
     this.cockpit = cockpitCanvas.getContext('2d');
+    this.driverArm = new Image();
+    this.driverArm.src = 'assets/driver-arm.png';
     this.gl = canvas.getContext('webgl', { antialias: true, alpha: false, powerPreference: 'high-performance' });
     if (!this.gl) throw new Error(rendererText("WebGL ei ole k\u00e4ytett\u00e4viss\u00e4 t\u00e4ss\u00e4 selaimessa."));
     this.track = track;
@@ -301,12 +303,14 @@ window.LPRRenderer3D = class LPRRenderer3D {
       outdoorLighting=true;
     }
     // The shoulder is a continuous strip beneath the asphalt.
-    strip(-35,35,.01,() => [.16,.18,.17]);
-    strip(-27,27,.05,() => [.19,.22,.225]);
-    strip(-33,-27,.09,i => Math.floor(i / 3) % 2 ? [.92,.9,.82] : [.67,.13,.12]);
-    strip(27,33,.09,i => Math.floor(i / 3) % 2 ? [.67,.13,.12] : [.92,.9,.82]);
-    strip(-25,-24.4,.12,() => [.84,.86,.75]);
-    strip(24.4,25,.12,() => [.84,.86,.75]);
+    const { halfWidth, kerbOuter, shoulderOuter } = window.LPRCampus.road;
+    const edgeLine = halfWidth - 2;
+    strip(-shoulderOuter,shoulderOuter,.01,() => [.16,.18,.17]);
+    strip(-halfWidth,halfWidth,.05,() => [.19,.22,.225]);
+    strip(-kerbOuter,-halfWidth,.09,i => Math.floor(i / 3) % 2 ? [.92,.9,.82] : [.67,.13,.12]);
+    strip(halfWidth,kerbOuter,.09,i => Math.floor(i / 3) % 2 ? [.67,.13,.12] : [.92,.9,.82]);
+    strip(-edgeLine,-edgeLine+.6,.12,() => [.84,.86,.75]);
+    strip(edgeLine-.6,edgeLine,.12,() => [.84,.86,.75]);
     for (let i = 0; i < count; i += 10) {
       const next = (i + 4) % count;
       quad(at(i,-.7,.12),at(next,-.7,.12),at(next,.7,.12),at(i,.7,.12),[.52,.58,.52]);
@@ -318,7 +322,8 @@ window.LPRRenderer3D = class LPRRenderer3D {
     tangent.x /= tangentLength; tangent.z /= tangentLength;
     const square = (side, along) => [first.x + normals[0].x * side + tangent.x * along,.18,first.y + normals[0].z * side + tangent.z * along];
     for (let row = 0; row < 2; row++) for (let col = 0; col < 10; col++) {
-      const a = -25 + col * 5, b = a + 5, f = -2 + row * 2, g = f + 2;
+      const cellWidth = edgeLine * 2 / 10;
+      const a = -edgeLine + col * cellWidth, b = a + cellWidth, f = -2 + row * 2, g = f + 2;
       quad(square(a,f),square(b,f),square(b,g),square(a,g),(row+col)%2 ? [.94,.94,.86] : [.08,.09,.09]);
     }
 
@@ -332,18 +337,19 @@ window.LPRRenderer3D = class LPRRenderer3D {
     }
     for (let i = 15; i < count; i += 20) {
       for (const side of [-1,1]) {
-        const x = points[i].x + normals[i].x * 39 * side;
-        const z = points[i].y + normals[i].z * 39 * side;
+        const x = points[i].x + normals[i].x * (shoulderOuter + 4) * side;
+        const z = points[i].y + normals[i].z * (shoulderOuter + 4) * side;
         cone(x,z,8,3,[.94,.39,.08]);
       }
     }
     for (const side of [-1,1]) {
-      const x = first.x + normals[0].x * 40 * side;
-      const z = first.y + normals[0].z * 40 * side;
+      const x = first.x + normals[0].x * (shoulderOuter + 5) * side;
+      const z = first.y + normals[0].z * (shoulderOuter + 5) * side;
       box(x,0,z,3,30,3,[.035,.17,.12]);
     }
     const beamCenter = [first.x, first.y];
-    for (let i = -40; i < 40; i += 4) {
+    const gantryHalf = shoulderOuter + 5;
+    for (let i = -gantryHalf; i < gantryHalf; i += 4) {
       const x = beamCenter[0] + normals[0].x * (i + 2);
       const z = beamCenter[1] + normals[0].z * (i + 2);
       box(x,26,z,4,5,4,i % 8 === 0 ? [.03,.68,.43] : [.03,.16,.13]);
@@ -1597,13 +1603,13 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gradient.addColorStop(1,'#050b0afb');
     ctx.fillStyle = gradient;
     ctx.fillRect(0,h*.68,w,h*.32);
-    // Bodywork and cockpit rails are one 3D assembly. Only the wheel and its
-    // instruments are drawn here, so no screen-fixed panels mask the chassis.
+    // Bodywork and cockpit rails are one 3D assembly; the driver's arms,
+    // wheel and instruments share this foreground layer.
     this.drawSteeringWheel(car);
   }
 
   steeringWheelLayout(car) {
-    const radius=Math.min(this.width*.29,this.height*.20,165);
+    const radius=Math.min(this.width*.25,this.height*.17,140);
     return { x:this.width*.5, y:this.height-radius*.89-10, radius, angle:(car.steer || 0)*.52 };
   }
 
@@ -1625,6 +1631,110 @@ window.LPRRenderer3D = class LPRRenderer3D {
       {action:'tc',x:0,y:.44,label:'TC',color:'#22c878'}];
   }
 
+  driverArmPose(layout,side) {
+    const height=2.85, width=height*this.driverArm.naturalWidth/this.driverArm.naturalHeight;
+    const wrist={x:width*(.52-.45),y:-.50+height*.36};
+    // Anchor the pinch point to the horizontal side of the wheel (9 and 3),
+    // then turn the glove so the wrist descends from that side grip.
+    const grip={x:width*(.35-.45),y:-.50+height*.13};
+    const baseAngle=.20;
+    const pose={width,height,wrist,grip,baseAngle,side,radius:layout.radius};
+    const wheelWrist=this.driverArmWheelPoint(pose,wrist);
+    const localX=wheelWrist.x,localY=wheelWrist.y;
+    const c=Math.cos(layout.angle),s=Math.sin(layout.angle);
+    const wristWorld={x:layout.x+layout.radius*(localX*c-localY*s),
+      y:layout.y+layout.radius*(localX*s+localY*c)};
+    // The offscreen elbow moves slightly outward as its hand rises. This
+    // changes forearm direction without moving the hand off the wheel.
+    const elbow={x:layout.x+side*layout.radius*(1.60-side*layout.angle*.12),
+      y:this.height+layout.radius*.85};
+    const neutralDirection=Math.atan2(height*.64,side*width*.26)+side*baseAngle+layout.angle;
+    const desiredDirection=Math.atan2(elbow.y-wristWorld.y,elbow.x-wristWorld.x);
+    const difference=Math.atan2(Math.sin(desiredDirection-neutralDirection),Math.cos(desiredDirection-neutralDirection));
+    const bend=Math.max(-.28,Math.min(.28,difference))*side;
+    return {...pose,wristWorld,elbow,bend};
+  }
+
+  driverArmWheelPoint(pose,point) {
+    const x=pose.side*(point.x-pose.grip.x),y=point.y-pose.grip.y;
+    const angle=pose.side*pose.baseAngle,c=Math.cos(angle),s=Math.sin(angle);
+    return {x:pose.side*.94+x*c-y*s,y:x*s+y*c};
+  }
+
+  placeDriverArm(pose) {
+    const ctx=this.cockpit;
+    ctx.translate(pose.side*.94,0);ctx.rotate(pose.side*pose.baseAngle);
+    ctx.scale(pose.side,1);ctx.translate(-pose.grip.x,-pose.grip.y);
+  }
+
+  driverArmPoint(pose,u,v) {
+    const x=pose.width*(u-.45),y=-.50+pose.height*v;
+    // Flex only across the anatomical wrist/cuff. Below it the entire
+    // forearm has one rigid rotation, so it cannot bend in its middle.
+    const t=Math.max(0,Math.min(1,(v-.30)/.13));
+    const angle=pose.bend*t*t*(3-2*t),c=Math.cos(angle),s=Math.sin(angle);
+    return {x:pose.wrist.x+(x-pose.wrist.x)*c-(y-pose.wrist.y)*s,
+      y:pose.wrist.y+(x-pose.wrist.x)*s+(y-pose.wrist.y)*c};
+  }
+
+  drawDriverArm(pose) {
+    const ctx=this.cockpit,image=this.driverArm,W=image.naturalWidth,H=image.naturalHeight;
+    const crop=(start,end)=>ctx.drawImage(image,0,H*start,W,H*(end-start),
+      -pose.width*.45,-.50+pose.height*start,pose.width,pose.height*(end-start));
+    // The glove stays locked to the grip; the sleeve rotates around the wrist.
+    crop(0,.30);
+    ctx.save();ctx.translate(pose.wrist.x,pose.wrist.y);ctx.rotate(pose.bend);
+    ctx.translate(-pose.wrist.x,-pose.wrist.y);crop(.43,1);ctx.restore();
+    const triangle=(uv,points)=>{
+      const [p,q,r]=points;
+      const [a,b,c]=uv.map(([u,v])=>({x:u*W,y:v*H}));
+      const det=(b.x-a.x)*(c.y-a.y)-(c.x-a.x)*(b.y-a.y);
+      const m11=((q.x-p.x)*(c.y-a.y)-(r.x-p.x)*(b.y-a.y))/det;
+      const m12=((q.y-p.y)*(c.y-a.y)-(r.y-p.y)*(b.y-a.y))/det;
+      const m21=((r.x-p.x)*(b.x-a.x)-(q.x-p.x)*(c.x-a.x))/det;
+      const m22=((r.y-p.y)*(b.x-a.x)-(q.y-p.y)*(c.x-a.x))/det;
+      ctx.save();ctx.beginPath();
+      // Subpixel overlap prevents antialiasing cracks along mesh edges.
+      const centre={x:(p.x+q.x+r.x)/3,y:(p.y+q.y+r.y)/3};
+      for(const [i,point] of points.entries()) {
+        const overlap=.75/pose.radius;
+        const x=point.x+Math.sign(point.x-centre.x)*overlap;
+        const y=point.y+Math.sign(point.y-centre.y)*overlap;
+        if(i===0) ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      }
+      ctx.closePath();ctx.clip();
+      ctx.transform(m11,m12,m21,m22,p.x-m11*a.x-m21*a.y,p.y-m12*a.x-m22*a.y);
+      // Sample the full texture so filtering never hits the edge of a cropped
+      // strip; otherwise bright horizontal seams appear across the cuff.
+      ctx.drawImage(image,0,0,W,H,0,0,W,H);ctx.restore();
+    };
+    // Eight narrow bands blend the joint, while hand and forearm stay rigid.
+    for(let band=0;band<8;band++) {
+      const a=.30+.13*band/8,b=.30+.13*(band+1)/8;
+      const tl=this.driverArmPoint(pose,0,a),tr=this.driverArmPoint(pose,1,a);
+      const bl=this.driverArmPoint(pose,0,b),br=this.driverArmPoint(pose,1,b);
+      triangle([[0,a],[1,a],[1,b]],[tl,tr,br]);
+      triangle([[0,a],[1,b],[0,b]],[tl,br,bl]);
+    }
+  }
+
+  drawDriverThumb(pose) {
+    const ctx=this.cockpit;
+    // Mask follows the thumb in the source photograph, not the entire closed
+    // finger loop. Index finger and fingertips remain behind the front rim.
+    ctx.save();ctx.translate(-pose.width*.45,-.50);ctx.scale(pose.width,pose.height);
+    ctx.beginPath();ctx.moveTo(.18,.08);
+    ctx.bezierCurveTo(.250,.074,.285,.074,.310,.083);
+    ctx.bezierCurveTo(.320,.103,.310,.130,.345,.157);
+    ctx.bezierCurveTo(.365,.176,.383,.186,.395,.198);
+    // Continue into the palm where the foreground rim ends; cutting the
+    // mask across the thumb base would leave an artificial triangular edge.
+    ctx.bezierCurveTo(.430,.226,.510,.244,.650,.250);
+    ctx.lineTo(.80,.30);ctx.lineTo(.15,.30);
+    ctx.closePath();ctx.clip();
+    ctx.drawImage(this.driverArm,0,0,1,1);ctx.restore();
+  }
+
   drawSteeringWheel(car) {
     const ctx=this.cockpit, layout=this.steeringWheelLayout(car), r=layout.radius;
     if(r<=0) return;
@@ -1632,9 +1742,25 @@ window.LPRRenderer3D = class LPRRenderer3D {
     ctx.save();
     ctx.translate(layout.x,layout.y);ctx.rotate(layout.angle);ctx.scale(r,r);
     ctx.lineJoin='round';ctx.lineCap='round';
+    const material=(x1,y1,x2,y2,stops)=>{
+      const gradient=ctx.createLinearGradient(x1,y1,x2,y2);
+      for(const [position,color] of stops) gradient.addColorStop(position,color);
+      return gradient;
+    };
+    const rubber=material(-.6,-.7,.6,.7,[[0,'#68706b'],[.18,'#343c38'],[.48,'#161d19'],[1,'#070b09']]);
+    const rim=()=>{
+      ctx.beginPath();ctx.ellipse(0,0,.94,.64,0,0,Math.PI*2);
+      ctx.strokeStyle=rubber;ctx.lineWidth=.145;ctx.stroke();
+      ctx.beginPath();ctx.ellipse(0,-.012,.922,.627,0,0,Math.PI*2);
+      ctx.strokeStyle='#b1b8ab25';ctx.lineWidth=.012;ctx.stroke();
+    };
     // Paddle silhouettes and the quick-release collar sit inside the perimeter.
-    ctx.fillStyle='#83908b';
-    ctx.fillRect(-.72,-.33,.13,.64);ctx.fillRect(.59,-.33,.13,.64);
+    for(const side of [-1,1]) {
+      ctx.beginPath();ctx.moveTo(side*.65,-.35);ctx.lineTo(side*.76,-.29);
+      ctx.lineTo(side*.78,.24);ctx.lineTo(side*.63,.32);ctx.closePath();
+      ctx.fillStyle=material(side*.62,0,side*.78,0,[[0,'#202a28'],[.4,'#8d9690'],[.65,'#c1c5b9'],[1,'#3a4541']]);
+      ctx.fill();ctx.strokeStyle='#08100d';ctx.lineWidth=.014;ctx.stroke();
+    }
     ctx.beginPath();ctx.arc(0,.24,.22,0,Math.PI*2);ctx.fillStyle='#b5bcbc';ctx.fill();
     ctx.beginPath();ctx.arc(0,.24,.15,0,Math.PI*2);ctx.fillStyle='#c4a24b';ctx.fill();
     const faceplate=()=>{
@@ -1643,29 +1769,35 @@ window.LPRRenderer3D = class LPRRenderer3D {
       ctx.lineTo(.26,.56);ctx.lineTo(-.26,.56);ctx.lineTo(-.49,.26);
       ctx.lineTo(-.73,.06);ctx.lineTo(-.72,-.27);ctx.closePath();
     };
-    faceplate();ctx.fillStyle='#101a19';ctx.fill();
-    ctx.strokeStyle='#596762';ctx.lineWidth=.012;ctx.stroke();
+    ctx.save();ctx.translate(0,.035);
+    faceplate();ctx.fillStyle='#020705';ctx.fill();
+    ctx.strokeStyle='#07100c';ctx.lineWidth=.035;ctx.stroke();ctx.restore();
+    faceplate();ctx.fillStyle=material(-.35,-.42,.4,.6,[[0,'#3b4440'],[.35,'#202825'],[.65,'#111916'],[1,'#060c09']]);ctx.fill();
+    ctx.strokeStyle='#8b96865c';ctx.lineWidth=.012;ctx.stroke();
     ctx.save();
     faceplate();ctx.clip();
-    // Staggered twill weave on the sculpted carbon centre plate.
-    for(let row=0;row<24;row++) for(let column=0;column<40;column++) {
-      ctx.fillStyle=(row+column)%4<2 ? '#bccac50b' : '#00000035';
-      ctx.fillRect(-.8+column*.04,-.38+row*.04,.035,.016);
+    // Diagonal two-over-two carbon weave under the satin resin surface.
+    ctx.lineWidth=.009;
+    for(let row=0;row<22;row++) for(let column=0;column<34;column++) {
+      const x=-.82+column*.05,y=-.42+row*.05;
+      ctx.strokeStyle=(row+column)%4<2 ? '#b3c2b31c' : '#02050365';
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+.033,y+.025);ctx.stroke();
     }
     ctx.restore();
-    ctx.beginPath();ctx.ellipse(0,0,.94,.64,0,0,Math.PI*2);
-    ctx.strokeStyle='#050a0b';ctx.lineWidth=.16;ctx.stroke();
-    ctx.strokeStyle='#485754';ctx.lineWidth=.018;ctx.stroke();
+    // The lower offset edge gives the rim depth without changing its outline.
+    ctx.beginPath();ctx.ellipse(0,.025,.94,.64,0,0,Math.PI*2);
+    ctx.strokeStyle='#020604';ctx.lineWidth=.16;ctx.stroke();
+    rim();
     // Padded side grips follow the same convex outer oval. Thumb bolsters
     // are on the inner edge and do not change the closed outer perimeter.
     for(const side of [-1,1]) {
       const start=side===1 ? -.54 : Math.PI-.54;
       ctx.beginPath();ctx.ellipse(0,0,.935,.64,0,start,start+1.08);
-      ctx.strokeStyle='#192725';ctx.lineWidth=.145;ctx.stroke();
+      ctx.strokeStyle=rubber;ctx.lineWidth=.165;ctx.stroke();
       ctx.beginPath();ctx.ellipse(0,0,.885,.59,0,start+.06,start+1.02);
-      ctx.strokeStyle='#36bc70';ctx.lineWidth=.012;ctx.stroke();
+      ctx.strokeStyle='#2d95634d';ctx.lineWidth=.009;ctx.stroke();
       ctx.beginPath();ctx.ellipse(side*.78,-.03,.065,.15,side*.20,0,Math.PI*2);
-      ctx.fillStyle='#243831';ctx.fill();
+      ctx.fillStyle=material(side*.74,-.16,side*.84,.10,[[0,'#546250'],[.5,'#293a2c'],[1,'#0a150e']]);ctx.fill();
     }
     // Grip stitching follows the rim without introducing concave cut-outs.
     ctx.strokeStyle='#93a6a0';ctx.lineWidth=.008;
@@ -1697,9 +1829,13 @@ window.LPRRenderer3D = class LPRRenderer3D {
       ctx.fillRect(-.34+i*.07,-.40,.048,.025);
     }
     // Compact instrument module leaves space for the grips and thumb controls.
-    ctx.fillStyle='#080f11';ctx.fillRect(-.40,-.30,.80,.49);
-    ctx.strokeStyle='#52645e';ctx.lineWidth=.012;ctx.strokeRect(-.40,-.30,.80,.49);
-    ctx.fillStyle='#020b0b';ctx.fillRect(-.36,-.26,.72,.41);
+    ctx.fillStyle='#020504';ctx.fillRect(-.412,-.307,.824,.514);
+    ctx.fillStyle=material(0,-.30,0,.19,[[0,'#859084'],[.06,'#37443b'],[.65,'#17231b'],[1,'#030906']]);
+    ctx.fillRect(-.40,-.30,.80,.49);
+    ctx.fillStyle='#020b09';ctx.fillRect(-.36,-.26,.72,.41);
+    ctx.fillStyle=material(-.36,-.26,.20,.12,[[0,'#aec5b31c'],[.5,'#758c7908'],[1,'#00000000']]);
+    ctx.beginPath();ctx.moveTo(-.36,-.26);ctx.lineTo(.28,-.26);
+    ctx.lineTo(-.08,.15);ctx.lineTo(-.36,.15);ctx.closePath();ctx.fill();
     ctx.save();ctx.globalAlpha=car.wheelDim ? .55 : 1;
     const seconds=Math.max(0,car.lapElapsedMs || 0)/1000;
     const lapTime=`${Math.floor(seconds/60)}:${(seconds%60).toFixed(1).padStart(4,'0')}`;
@@ -1748,6 +1884,41 @@ window.LPRRenderer3D = class LPRRenderer3D {
       text(control.label,control.x,control.y+.155,.065,'#edf5f0');
     }
     text('LPR / LUT',0,.31,.055,'#b1c7bc');
+    // Animate the wrist within the continuous photograph. The hands follow
+    // the wheel, while the forearms turn toward the offscreen elbows.
+    if(this.driverArm?.complete && this.driverArm.naturalWidth>0) {
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
+      for(const side of [-1,1]) {
+        const pose=this.driverArmPose(layout,side);
+        ctx.save();this.placeDriverArm(pose);
+        this.drawDriverArm(pose);
+        ctx.restore();
+      }
+      // The front surface of each grip occludes the fingers curled behind it.
+      // Use the actual rim arc rather than a hole-sized patch: the hidden
+      // fingertips must disappear under the grip, while the outer hand and
+      // the near-side thumb stay visible alongside its inner edge.
+      for(const side of [-1,1]) {
+        ctx.save();ctx.scale(side,1);
+        ctx.shadowColor='#020604b3';ctx.shadowBlur=r*.018;
+        ctx.shadowOffsetX=r*.012;ctx.shadowOffsetY=r*.008;
+        ctx.beginPath();ctx.ellipse(0,0,.94,.64,0,-.40,.17);
+        ctx.strokeStyle=rubber;ctx.lineWidth=.165;ctx.stroke();
+        ctx.shadowColor='transparent';
+        ctx.beginPath();ctx.ellipse(0,-.012,.922,.627,0,-.40,.17);
+        ctx.strokeStyle='#b1b8ab25';ctx.lineWidth=.012;ctx.stroke();
+        ctx.restore();
+      }
+      // Restore only the near-side thumb across the front of the grip.
+      // Grip, hidden fingers and visible thumb must occupy different layers.
+      for(const side of [-1,1]) {
+        const pose=this.driverArmPose(layout,side);
+        ctx.save();this.placeDriverArm(pose);
+        this.drawDriverThumb(pose);
+        ctx.restore();
+      }
+    }
     ctx.restore();
   }
 };

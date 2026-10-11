@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const endpoint = 'https://lpr-leaderboard.panu-musakka.workers.dev';
-  const version = 'lut-20261009-v1';
+  const version = 'lut-20261011-v3';
   const t = text => window.LPRI18n?.t(text) ?? text;
   const nickname = document.querySelector('#leaderboard-name');
   const status = document.querySelector('#leaderboard-status');

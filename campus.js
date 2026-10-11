@@ -2,6 +2,7 @@
  * Screenshot coordinates share one transform for roads and architecture. */
 window.LPRCampus = (() => {
   const scale = 5;
+  const road = { halfWidth: 33, kerbOuter: 39, shoulderOuter: 41 };
   const world = (x, y) => ({ x: (x - 100) * scale + 200, y: (y - 100) * scale + 200 });
   const anchors = [[190,180],[310,180],[445,180],[500,225],[550,260],[600,305],[645,340],[645,360],[625,395],[623,435],[600,445],[550,440],[505,445],[512,510],[512,640],[507,745],[496,798],[480,812],[465,800],[450,735],[430,690],[395,650],[365,590],[350,530],[327,492],[285,470],[235,460],[210,445],[200,410],[200,345],[185,275],[182,225]];
   const dense = [];
@@ -513,7 +514,7 @@ window.LPRCampus = (() => {
     // Three small marina jetties on the lakefront.
     for(let i=0;i<3;i++) block(727+i*24,213,5,64,1,[.56,.46,.32],0,'wood');
   }
-  return { track, length, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
+  return { track, road, length, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
     campusCars, studentCarModels, lakesideCars, vehicleBounds, buildingBounds, resolveBuildingCollision,
     resolveObstacleCollision, bounds:{width:5200,height:4400} };
 })();

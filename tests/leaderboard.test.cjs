@@ -18,7 +18,7 @@ const { pathToFileURL } = require('node:url');
     };
   } } };
   const origin = 'https://panulut.github.io';
-  const data = { version: 'lut-20261009-v1', nickname: 'Test Driver', lapMs: 40000, sectors: [10000, 10000, 20000] };
+  const data = { version: 'lut-20261011-v3', nickname: 'Test Driver', lapMs: 40000, sectors: [10000, 10000, 20000] };
   const request = (body, token = 'a'.repeat(64), extra = {}) => new Request('https://example.com/api/laps', {
     method: 'POST', headers: { Origin: origin, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...extra }, body: JSON.stringify(body)
   });

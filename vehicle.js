@@ -16,11 +16,12 @@ window.VehicleDynamics = class VehicleDynamics {
       grassGrip: 0.58,
       peakDriveForce: 1850,     // N
       peakPower: 60000,         // W
-      peakBrakeForce: 3550,     // N
+      peakBrakeForce: 4500,     // N, tire grip limits the delivered braking force
       coastBrakeForce: 420,     // N, game-tuned lift-off braking with stable axle distribution
       tractionControlEnabled: true,
       maxRoadWheelAngle: 0.36,  // rad
       assistedSteeringGrip: 0.9, // fraction of available grip requested at full assisted steering
+      assistedCornerSpeed: 14,  // m/s at full steering; progressively higher for gentle turns
       dragArea: 0.75,           // CdA, m²
       rollingResistance: 45     // N
     };
@@ -73,10 +74,12 @@ window.VehicleDynamics = class VehicleDynamics {
     const dt = Math.min(seconds, 1 / 90);
     const gravity = 9.81;
     const gas = Math.max(0, Math.min(1, input.gas));
-    const throttle = gas*(1-.65*(state.damage || 0));
     const brake = Math.max(0, Math.min(1, input.brake));
+    // Give the brake priority when keyboard/touch pedals overlap.
+    const throttle = gas * (1 - brake) * (1-.65*(state.damage || 0));
     const desiredSteer = Math.max(-1, Math.min(1, input.steer));
     const analog = !!input.analog;
+    const assisted = !input.wheel;
     const grassFraction = Math.max(0, Math.min(1, Number(grassContact) || 0));
     const mu = p.roadGrip + (p.grassGrip - p.roadGrip) * grassFraction;
 
@@ -86,7 +89,7 @@ window.VehicleDynamics = class VehicleDynamics {
     const speedBlend = Math.min(1, steeringSpeed / 20);
     const reversing = desiredSteer * state.steer < 0;
     const centering = desiredSteer === 0 || reversing;
-    const response = analog ? 8 : centering ? 6 : 3.6 - 1.6 * speedBlend;
+    const response = analog ? 8 : centering ? 8 : 5 - 2 * speedBlend;
     // First unwind to centre before building lock in the opposite direction.
     const steerTarget = !analog && reversing ? 0 : desiredSteer;
     const steerChange = steerTarget - state.steer;
@@ -94,10 +97,8 @@ window.VehicleDynamics = class VehicleDynamics {
     // Keyboard buttons request a turn rate. The steering rack adds a little angle
     // when the car responds less than requested, while keeping lateral demand sane.
     let targetAngle;
-    let assistedYawRate = 0;
-    if (analog) {
-      const mappedSteer = input.wheel ? state.steer : Math.sign(state.steer) * Math.abs(state.steer) ** 1.5;
-      targetAngle = mappedSteer * p.maxRoadWheelAngle;
+    if (!assisted) {
+      targetAngle = state.steer * p.maxRoadWheelAngle;
     } else {
       const speed = Math.max(state.vx, 1.5);
       const yawLimit = mu * gravity * p.assistedSteeringGrip / speed;
@@ -105,7 +106,6 @@ window.VehicleDynamics = class VehicleDynamics {
       // steering demand as speed rises to stay within the lateral grip budget.
       const fullLockYawRate = speed * Math.tan(p.maxRoadWheelAngle) / p.wheelbase;
       const targetYawRate = state.steer * Math.min(fullLockYawRate, yawLimit);
-      assistedYawRate = targetYawRate;
       // The geometric angle alone underestimates the lock needed when the
       // front tires develop slip. Compensate the front/rear stiffness balance.
       const understeer = p.mass / p.wheelbase *
@@ -128,7 +128,14 @@ window.VehicleDynamics = class VehicleDynamics {
     // grip-aware axle distribution as the brakes rather than unloading and
     // locking the driven rear axle in a corner. This is a gameplay assist.
     const coastBrake = (1 - gas) * p.coastBrakeForce * Math.min(1, speed / 4);
-    const brakeRequest = brake * p.peakBrakeForce + (1 - brake) * coastBrake;
+    // A sustained tight turn asks for a manageable corner speed, even with the
+    // throttle held. Small corrections retain the full straight-line speed.
+    // This uses driver input only, without following the track automatically.
+    const turnDemand = Math.max(0, (Math.abs(state.steer) - .2) / .8);
+    const cornerSpeed = 36 - (36 - p.assistedCornerSpeed) * turnDemand;
+    const cornerBrake = assisted ? Math.min(2485,
+      Math.max(0, speed - cornerSpeed) * p.mass * 2) : 0;
+    const brakeRequest = Math.max(brake * p.peakBrakeForce + (1 - brake) * coastBrake, cornerBrake);
     const wheelbase = p.wheelbase;
     // With no wheel-speed measurements, this is a tire-capacity torque limiter rather
     // than a calibrated slip-ratio controller. It leaves lateral grip in reserve.
@@ -146,24 +153,29 @@ window.VehicleDynamics = class VehicleDynamics {
     state.torqueScale += Math.max(-changeRate * dt, Math.min(changeRate * dt, targetScale - state.torqueScale));
     state.tcActive = p.tractionControlEnabled && throttle > .1 && state.torqueScale < .97;
     const driveRequest = rawDriveRequest * state.torqueScale;
-    const estimatedAx = (driveRequest - brakeRequest - drag - rolling) / p.mass;
+    const estimatedAx = Math.max(-mu * gravity, Math.min(mu * gravity,
+      (driveRequest - brakeRequest - drag - rolling) / p.mass));
     const transfer = p.mass * estimatedAx * p.centreOfMassHeight / wheelbase;
     const frontLoad = Math.max(100, p.mass * gravity * p.rearAxle / wheelbase - transfer);
     const rearLoad = Math.max(100, p.mass * gravity * p.frontAxle / wheelbase + transfer);
     const frontLimit = mu * frontLoad;
     const rearLimit = mu * rearLoad;
 
-    // Move brake bias forward as braking unloads the rear axle. Reserve rear
-    // lateral grip in corners so braking does not remove the stabilizing force.
+    // Move brake bias forward as braking unloads the rear axle. Both axles
+    // subsequently share their friction budget between braking and cornering.
     const frontBrakeBias = Math.max(.65, Math.min(.90, frontLoad / (frontLoad + rearLoad) + .10));
     const rearBrakeReserve = Math.min(rearLimit * .95, lateralDemand);
     const rearBrakeCapacity = Math.sqrt(Math.max(0, rearLimit ** 2 - rearBrakeReserve ** 2));
-    const frontFx = Math.max(-frontLimit, -brakeRequest * frontBrakeBias);
-    const rearBrakeForce = Math.min(brakeRequest * (1 - frontBrakeBias), rearBrakeCapacity);
+    // Existing brake-distribution assistance reserves rear lateral capacity.
+    // Front combined-slip saturation below must still allow a steering force,
+    // trading braking force for cornering rather than cancelling cornering.
+    const totalBrake = Math.min(brakeRequest, frontLimit + rearBrakeCapacity);
+    const frontBrakeForce = Math.max(totalBrake - rearBrakeCapacity,
+      Math.min(frontLimit, totalBrake * frontBrakeBias));
+    let frontFx = -frontBrakeForce;
+    const rearBrakeForce = totalBrake - frontBrakeForce;
     // Power is provisionally sent to the rear axle.
-    const rearFx = Math.max(-rearLimit, Math.min(rearLimit, driveRequest - rearBrakeForce));
-    const frontLateralCapacity = Math.sqrt(Math.max(0, frontLimit * frontLimit - frontFx * frontFx));
-    const rearLateralCapacity = Math.sqrt(Math.max(0, rearLimit * rearLimit - rearFx * rearFx));
+    let rearFx = Math.max(-rearLimit, Math.min(rearLimit, driveRequest - rearBrakeForce));
 
     if (speed < 1.5) {
       const ax = (frontFx + rearFx - drag - rolling) / p.mass;
@@ -176,30 +188,38 @@ window.VehicleDynamics = class VehicleDynamics {
     } else {
       const alphaFront = Math.atan2(state.vy + p.frontAxle * state.yawRate, speed) - state.steerAngle;
       const alphaRear = Math.atan2(state.vy - p.rearAxle * state.yawRate, speed);
-      const frontFy = -frontLateralCapacity * Math.tanh(p.frontCorneringStiffness * alphaFront / Math.max(frontLateralCapacity, 1));
-      const rearFy = -rearLateralCapacity * Math.tanh(p.rearCorneringStiffness * alphaRear / Math.max(rearLateralCapacity, 1));
-      const vxDot = (frontFx + rearFx - frontFy * Math.sin(state.steerAngle) - drag - rolling) / p.mass + state.vy * state.yawRate;
-      const vyDot = (frontFy * Math.cos(state.steerAngle) + rearFy) / p.mass - state.vx * state.yawRate;
-      const yawDot = (p.frontAxle * frontFy * Math.cos(state.steerAngle) - p.rearAxle * rearFy) / p.yawInertia;
+      let frontFy = -frontLimit * Math.tanh(p.frontCorneringStiffness * alphaFront / frontLimit);
+      let rearFy = -rearLimit * Math.tanh(p.rearCorneringStiffness * alphaRear / rearLimit);
+      // Simplified combined-slip tire envelope: saturate the requested force
+      // vector, rather than giving longitudinal force absolute priority.
+      // Steering under braking trades some deceleration for lateral force.
+      // This is not a wheel-speed or slip-ratio ABS simulation.
+      const frontScale = Math.min(1, frontLimit / Math.max(1, Math.hypot(frontFx, frontFy)));
+      const rearScale = Math.min(1, rearLimit / Math.max(1, Math.hypot(rearFx, rearFy)));
+      frontFx *= frontScale;
+      frontFy *= frontScale;
+      rearFx *= rearScale;
+      rearFy *= rearScale;
+      const frontBodyFx = frontFx * Math.cos(state.steerAngle) - frontFy * Math.sin(state.steerAngle);
+      const frontBodyFy = frontFx * Math.sin(state.steerAngle) + frontFy * Math.cos(state.steerAngle);
+      const vxDot = (frontBodyFx + rearFx - drag - rolling) / p.mass + state.vy * state.yawRate;
+      const vyDot = (frontBodyFy + rearFy) / p.mass - state.vx * state.yawRate;
+      const yawDot = (p.frontAxle * frontBodyFy - p.rearAxle * rearFy) / p.yawInertia;
       state.vx = Math.max(0, Math.min(36, state.vx + vxDot * dt));
       state.vy = Math.max(-14, Math.min(14, state.vy + vyDot * dt));
       state.yawRate = Math.max(-3, Math.min(3, state.yawRate + yawDot * dt));
-      state.lateralG = (frontFy + rearFy) / (p.mass * gravity);
-      state.longitudinalG = (frontFx + rearFx - drag - rolling) / (p.mass * gravity);
+      state.lateralG = (frontBodyFy + rearFy) / (p.mass * gravity);
+      state.longitudinalG = (frontBodyFx + rearFx - drag - rolling) / (p.mass * gravity);
       state.tireUse = Math.max(Math.hypot(frontFx, frontFy) / Math.max(frontLimit, 1), Math.hypot(rearFx, rearFy) / Math.max(rearLimit, 1));
     }
 
-    // Assisted controls also stabilize the car near the tire limit. This game
-    // assist keeps the extra steering authority from becoming a spin; wheels
-    // retain the unassisted tire model. Yaw stays within the surface grip limit.
-    if (!analog && speed >= 1.5) {
-      const stability = 1 - Math.exp(-(5 + 3 * (1 - gas)) * dt);
-      state.yawRate += (assistedYawRate - state.yawRate) * stability;
-      const surfaceYawLimit = mu * gravity / Math.max(state.vx, 1.5);
-      state.yawRate = Math.max(-surfaceYawLimit, Math.min(surfaceYawLimit, state.yawRate));
-      const slipLimit = Math.max(1, state.vx) * (.08 + .04 * gas);
-      const limitedVy = Math.max(-slipLimit, Math.min(slipLimit, state.vy));
-      state.vy += (limitedVy - state.vy) * stability;
+    // Yaw assistance acts through the steering rack, never by overwriting
+    // rotation after the tire-force integration. Lateral alignment remains
+    // temporarily as a separate assist to be evaluated in the next step.
+    if (assisted && speed >= 1.5) {
+      const rollingVy = p.rearAxle * state.yawRate;
+      const alignment = 1 - Math.exp(-(10 - 6 * grassFraction) * dt);
+      state.vy += (rollingVy - state.vy) * alignment;
     }
 
     state.angle += state.yawRate * dt;

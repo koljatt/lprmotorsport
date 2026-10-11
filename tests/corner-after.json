@@ -1,0 +1,254 @@
+﻿[
+  {
+    "control": "assisted",
+    "gas": 0,
+    "samples": [
+      {
+        "seconds": 1,
+        "xMetres": 13.478630629191688,
+        "yMetres": 2.9014207868175,
+        "speed": 12.900037109774763,
+        "yawRate": 0.5413384951914361,
+        "bodySlip": 0.0047512527383457405,
+        "steerAngle": 0.0717289626261102,
+        "lateralG": 0.30947039942947896,
+        "frontLateralForce": 426.4580277296027,
+        "rearLateralForce": 408.41574233127415
+      },
+      {
+        "seconds": 2,
+        "xMetres": 21.971217064698298,
+        "yMetres": 10.959243654025602,
+        "speed": 10.902143244528041,
+        "yawRate": 0.6344275872209462,
+        "bodySlip": 0.015381666583565892,
+        "steerAngle": 0.09863205376634018,
+        "lateralG": 0.33798529584583165,
+        "frontLateralForce": 467.73792440065046,
+        "rearLateralForce": 444.0619074674418
+      },
+      {
+        "seconds": 3,
+        "xMetres": 26.445156771666944,
+        "yMetres": 19.859183073750685,
+        "speed": 9.048030617760427,
+        "yawRate": 4.079017535509806e-8,
+        "bodySlip": -3.2776027020009205e-9,
+        "steerAngle": 0,
+        "lateralG": 4.236532244073975e-8,
+        "frontLateralForce": -0.000006005488548936407,
+        "rearLateralForce": 0.00012029653716344207
+      }
+    ]
+  },
+  {
+    "control": "assisted",
+    "gas": 0.4,
+    "samples": [
+      {
+        "seconds": 1,
+        "xMetres": 15.131326133159618,
+        "yMetres": 3.1014008168820535,
+        "speed": 16.1210906345873,
+        "yawRate": 0.4448689372796653,
+        "bodySlip": -0.0036697192420400127,
+        "steerAngle": 0.047142486197234296,
+        "lateralG": 0.27044183052598925,
+        "frontLateralForce": 365.1914346184817,
+        "rearLateralForce": 364.3930136830058
+      },
+      {
+        "seconds": 2,
+        "xMetres": 28.3759309887101,
+        "yMetres": 12.996702033731323,
+        "speed": 17.17826521618922,
+        "yawRate": 0.41967541642311473,
+        "bodySlip": -0.005362263322519375,
+        "steerAngle": 0.04193424397990976,
+        "lateralG": 0.2615077334647287,
+        "frontLateralForce": 353.37148429892324,
+        "rearLateralForce": 352.1110036555487
+      },
+      {
+        "seconds": 3,
+        "xMetres": 39.41563297712281,
+        "yMetres": 26.864783907222723,
+        "speed": 18.258249406629293,
+        "yawRate": 0.000036788851350782136,
+        "bodySlip": -0.0000034016079723439126,
+        "steerAngle": 0,
+        "lateralG": 0.00003856679130951805,
+        "frontLateralForce": 0.02550303078277792,
+        "rearLateralForce": 0.07854053047247439
+      }
+    ]
+  },
+  {
+    "control": "assisted",
+    "gas": 1,
+    "samples": [
+      {
+        "seconds": 1,
+        "xMetres": 17.599012442748954,
+        "yMetres": 3.377570051955661,
+        "speed": 20.93210259300815,
+        "yawRate": 0.35643797993305937,
+        "bodySlip": -0.00888862261730371,
+        "steerAngle": 0.028976817802099725,
+        "lateralG": 0.2314928756114328,
+        "frontLateralForce": 307.7645791882234,
+        "rearLateralForce": 316.7453259925194
+      },
+      {
+        "seconds": 2,
+        "xMetres": 37.919884227375164,
+        "yMetres": 15.498706049375116,
+        "speed": 26.452710200841324,
+        "yawRate": 0.29036232194260553,
+        "bodySlip": -0.010976418373627466,
+        "steerAngle": 0.01918752887828372,
+        "lateralG": 0.2042086857620914,
+        "frontLateralForce": 273.50314999168194,
+        "rearLateralForce": 277.4008320230001
+      },
+      {
+        "seconds": 3,
+        "xMetres": 59.51803813552692,
+        "yMetres": 34.97604977522487,
+        "speed": 31.59088723411927,
+        "yawRate": 0.0007705463289674163,
+        "bodySlip": -0.00007357596911376055,
+        "steerAngle": 0,
+        "lateralG": 0.0007932394710267153,
+        "frontLateralForce": 0.7444270283471083,
+        "rearLateralForce": 1.395534754615213
+      }
+    ]
+  },
+  {
+    "control": "wheel",
+    "gas": 0,
+    "samples": [
+      {
+        "seconds": 1,
+        "xMetres": 11.447536509710334,
+        "yMetres": 4.368808948503605,
+        "speed": 9.248716220422443,
+        "yawRate": 2.114987767843943,
+        "bodySlip": -0.4982596235491035,
+        "steerAngle": 0.18,
+        "lateralG": 1.536569397571957,
+        "frontLateralForce": 2210.190043305716,
+        "rearLateralForce": 1935.0900489940313
+      },
+      {
+        "seconds": 2,
+        "xMetres": 12.063229620192047,
+        "yMetres": 7.9073389353599115,
+        "speed": 1.166362994579727,
+        "yawRate": 0.1294788208206939,
+        "bodySlip": -0.10603492618236984,
+        "steerAngle": 0.18,
+        "lateralG": 0.015307962762274755,
+        "frontLateralForce": 2142.9331349323506,
+        "rearLateralForce": 2018.1812274179606
+      },
+      {
+        "seconds": 3,
+        "xMetres": 11.239877145149462,
+        "yMetres": 8.239769109335706,
+        "speed": 0.6537096091609764,
+        "yawRate": 0,
+        "bodySlip": -0.00037965889390845404,
+        "steerAngle": 0,
+        "lateralG": 0,
+        "frontLateralForce": 2142.9331349323506,
+        "rearLateralForce": 2018.1812274179606
+      }
+    ]
+  },
+  {
+    "control": "wheel",
+    "gas": 0.4,
+    "samples": [
+      {
+        "seconds": 1,
+        "xMetres": 11.967830244575746,
+        "yMetres": 4.513074941184235,
+        "speed": 10.139759877050365,
+        "yawRate": 1.8549079126399568,
+        "bodySlip": -0.4494635828502541,
+        "steerAngle": 0.18,
+        "lateralG": 1.541256090148684,
+        "frontLateralForce": 2176.017891077031,
+        "rearLateralForce": 1981.9057261215814
+      },
+      {
+        "seconds": 2,
+        "xMetres": 12.665015919117359,
+        "yMetres": 8.928913464798665,
+        "speed": 1.510471030198642,
+        "yawRate": 0.16775745653601798,
+        "bodySlip": -0.10151530441798745,
+        "steerAngle": 0.18,
+        "lateralG": 0.0256970690678132,
+        "frontLateralForce": 1994.6321360189127,
+        "rearLateralForce": 2022.5951122218387
+      },
+      {
+        "seconds": 3,
+        "xMetres": 10.422496288712303,
+        "yMetres": 9.090104573602295,
+        "speed": 3.172558368600899,
+        "yawRate": 6.178345626785311e-31,
+        "bodySlip": 1.2391710561264586e-30,
+        "steerAngle": 0,
+        "lateralG": -1.9082916707695647e-29,
+        "frontLateralForce": -2.8096536291253127e-26,
+        "rearLateralForce": -2.3384402256932803e-26
+      }
+    ]
+  },
+  {
+    "control": "wheel",
+    "gas": 1,
+    "samples": [
+      {
+        "seconds": 1,
+        "xMetres": 12.718651611691431,
+        "yMetres": 4.7007411381889135,
+        "speed": 11.512328712672861,
+        "yawRate": 1.433636568303099,
+        "bodySlip": -0.3583998209226465,
+        "steerAngle": 0.18,
+        "lateralG": 1.5391289841444329,
+        "frontLateralForce": 2110.7737111155184,
+        "rearLateralForce": 2041.4115058601255
+      },
+      {
+        "seconds": 2,
+        "xMetres": 13.20327364783128,
+        "yMetres": 11.796108774786548,
+        "speed": 5.439424362307938,
+        "yawRate": 0.7048647021014318,
+        "bodySlip": -0.008540948860804757,
+        "steerAngle": 0.18,
+        "lateralG": 0.9327123845570235,
+        "frontLateralForce": 1055.4207265400566,
+        "rearLateralForce": 1460.8041088986533
+      },
+      {
+        "seconds": 3,
+        "xMetres": 6.593241049862164,
+        "yMetres": 15.72035389933478,
+        "speed": 10.731764027374487,
+        "yawRate": -1.4401327306102194e-8,
+        "bodySlip": -5.888647002250751e-9,
+        "steerAngle": 0,
+        "lateralG": 6.751384472530678e-8,
+        "frontLateralForce": 0.00010454694221101411,
+        "rearLateralForce": 0.00007758853239668223
+      }
+    ]
+  }
+]

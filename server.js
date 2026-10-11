@@ -18,6 +18,8 @@ const files = {
   '/tilt.js': ['tilt.js', 'text/javascript; charset=utf-8'],
   '/sauna.js': ['sauna.js', 'text/javascript; charset=utf-8'],
   '/assets/lpr-logo.jpg': ['assets/lpr-logo.jpg', 'image/jpeg'],
+  '/assets/driver-hand.png': ['assets/driver-hand.png', 'image/png'],
+  '/assets/driver-arm.png': ['assets/driver-arm.png', 'image/png'],
   ...Object.fromEntries(['hk-sininen','megaforce','karjala','fazer-sininen','remix','lihapiirakka','snellman-nakki']
     .map(id=>[`/assets/${id}.jpg`,[`assets/${id}.jpg`,'image/jpeg']]))
 };

@@ -5,12 +5,16 @@ const path=require('node:path');
 const source=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
 
 const labels=[];
+const handDraws=[];
 const context={window:{}};
 vm.createContext(context);
 vm.runInContext(source('renderer3d.js'),context);
 const Renderer=context.window.LPRRenderer3D;
 const renderer=Object.create(Renderer.prototype);
-renderer.cockpit=new Proxy({}, {get:(_,key)=>key==='fillText' ? (text)=>labels.push(text) : ()=>{}});
+renderer.cockpit=new Proxy({}, {get:(_,key)=>key==='fillText' ? (text)=>labels.push(text)
+  : key==='createLinearGradient' ? ()=>({addColorStop(){}})
+  : key==='drawImage' ? (...args)=>handDraws.push(args) : ()=>{}});
+renderer.driverArm={complete:true,naturalWidth:1024,naturalHeight:1536};
 for(const [width,height] of [[360,450],[800,380],[1280,720]]) {
   renderer.width=width;renderer.height=height;
   renderer.canvas={getBoundingClientRect:()=>({left:25,top:40,width:width/2,height:height/2})};
@@ -26,12 +30,49 @@ for(const [width,height] of [[360,450],[800,380],[1280,720]]) {
       assert.equal(renderer.steeringWheelActionAt({...car,sauna:true},25+x/2,40+y/2),null);
     }
     labels.length=0;
+    handDraws.length=0;
     renderer.drawSteeringWheel(car);
+    assert(handDraws.length>=2,'Both articulated arms render at every steering angle');
+    assert(handDraws.every(([image])=>image===renderer.driverArm));
+    for(const side of [-1,1]) {
+      const pose=renderer.driverArmPose(layout,side);
+      const contact=renderer.driverArmWheelPoint(pose,pose.grip);
+      assert(Math.abs(contact.x-side*.94)<1e-12 && Math.abs(contact.y)<1e-12,
+        'Hands grip opposite horizontal sides of the wheel at 9 and 3');
+      assert(pose.wristWorld.y>layout.y+layout.radius*contact.x*Math.sin(layout.angle),
+        'Wrist descends from the side grip');
+      assert(pose.elbow.y>height,'Elbow remains below the view');
+      assert(Math.abs(pose.bend)<=.28,'Wrist bend stays anatomically modest');
+      const hand=renderer.driverArmPoint(pose,.4,.20);
+      assert(Math.abs(hand.x-pose.width*(.4-.45))<1e-12 && Math.abs(hand.y-(-.50+pose.height*.20))<1e-12,
+        'Glove remains locked to the wheel as the wrist flexes');
+      const a=renderer.driverArmPoint(pose,.45,.5),b=renderer.driverArmPoint(pose,.7,.9);
+      assert(Math.abs(Math.hypot(b.x-a.x,b.y-a.y)-Math.hypot(pose.width*.25,pose.height*.4))<1e-12,
+        'Visible forearm rotates rigidly without bending or stretching');
+      const bottom=renderer.driverArmPoint(pose,.78,1);
+      const wheelBottom=renderer.driverArmWheelPoint(pose,bottom);
+      assert(layout.y+layout.radius*(wheelBottom.x*Math.sin(layout.angle)+wheelBottom.y*Math.cos(layout.angle))>=height,
+        'Animated forearm continues beyond the viewport');
+    }
     assert(labels.includes('36') && labels.includes('L2  1:05.4'));
     labels.length=0;
     renderer.drawSteeringWheel({...car,wheelPage:1,tcEnabled:false});
     assert(labels.includes('1.20 G') && labels.includes('PITO 86%') && labels.includes('TC OFF'));
   }
+}
+
+for(const side of [-1,1]) {
+  const bends=[];
+  for(let step=-10;step<=10;step++) {
+    const pose=renderer.driverArmPose(renderer.steeringWheelLayout({steer:step/10}),side);
+    const joint=renderer.driverArmPoint(pose,.52,.36);
+    assert(Math.hypot(joint.x-pose.wrist.x,joint.y-pose.wrist.y)<1e-12,'Wrist pivot stays connected');
+    const before=renderer.driverArmPoint(pose,.52,.43-1e-7),after=renderer.driverArmPoint(pose,.52,.43+1e-7);
+    assert(Math.hypot(before.x-after.x,before.y-after.y)<1e-5,'Cuff blends continuously into the forearm');
+    if(bends.length) assert(Math.abs(pose.bend-bends.at(-1))<.12,'Pose changes continuously through a steering sweep');
+    bends.push(pose.bend);
+  }
+  assert(Math.max(...bends)-Math.min(...bends)>.1,'Steering changes the wrist and forearm pose');
 }
 
 const nodes=new Map(), events=new Map();
