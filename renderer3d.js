@@ -15,6 +15,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     this.makeProgram();
     this.makeWorld();
     this.wheelBuffer = this.gl.createBuffer();
+    this.vehicleNormalBuffer = this.gl.createBuffer();
     this.saunaPropBuffer = this.gl.createBuffer();
     this.saunaGuestBuffer = this.gl.createBuffer();
     this.spectatorBuffer = this.gl.createBuffer();
@@ -28,6 +29,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
       attribute vec3 aPosition;
       attribute vec3 aColor;
       attribute vec2 aUV;
+      attribute vec3 aNormal;
       uniform vec3 uCamera;
       uniform vec3 uForward;
       uniform vec3 uRight;
@@ -41,9 +43,11 @@ window.LPRRenderer3D = class LPRRenderer3D {
       varying vec3 vWorld;
       varying vec3 vRay;
       varying vec3 vView;
+      varying vec3 vNormal;
       void main() {
         vWorld = aPosition;
         vView = uCamera-aPosition;
+        vNormal = aNormal;
         vRay = uForward + uRight * aPosition.x * uAspect / uFocal + uUp * aPosition.y / uFocal;
         if (uSky) {
           gl_Position = vec4(aPosition.xy, 0.9999, 1.0);
@@ -72,12 +76,17 @@ window.LPRRenderer3D = class LPRRenderer3D {
       varying vec3 vWorld;
       varying vec3 vRay;
       varying vec3 vView;
+      varying vec3 vNormal;
       uniform sampler2D uTexture;
       uniform bool uTextured;
       uniform bool uSky;
       uniform float uOpacity;
       uniform bool uOutdoor;
       uniform int uMaterial;
+      uniform bool uVehicle;
+      uniform vec3 uCarOrigin;
+      uniform vec3 uCarForward;
+      uniform vec3 uCarRight;
       void main() {
         if (uSky) {
           vec3 ray = normalize(vRay);
@@ -88,6 +97,34 @@ window.LPRRenderer3D = class LPRRenderer3D {
           return;
         }
         vec3 color = vColor;
+        if (uVehicle) {
+          vec3 view=normalize(vView);
+          vec3 normal=normalize(vNormal);
+          if(dot(normal,view)<0.0) normal=-normal;
+          vec3 sun=normalize(vec3(-0.45,0.8,-0.35));
+          float diffuse=max(dot(normal,sun),0.0);
+          float fresnel=pow(1.0-max(dot(normal,view),0.0),3.0);
+          bool rubber=color.r>=0.065 && color.r<0.14 && abs(color.g-color.r)<0.022;
+          bool metal=color.r>0.25 && abs(color.g-color.r)<0.10;
+          bool carbon=color.g<0.08 && !rubber;
+          vec3 relative=vWorld-uCarOrigin;
+          vec2 surface=vec2(dot(relative,uCarForward),dot(relative,uCarRight));
+          // Texture is attached to the chassis, so it cannot slide as the car turns.
+          if(carbon) {
+            vec2 weave=surface*18.0;
+            float thread=sin((weave.x+weave.y)*3.14159)*sin((weave.x-weave.y)*3.14159);
+            color*=1.0+thread*0.10;
+          }
+          float grain=fract(sin(dot(floor(surface*95.0),vec2(7.13,3.71)))*41.31);
+          if(rubber) color*=0.94+grain*0.12;
+          float gloss=metal?64.0:rubber?10.0:38.0;
+          float specular=pow(max(dot(normal,normalize(sun+view)),0.0),gloss);
+          vec3 reflection=mix(vec3(0.025,0.055,0.035),vec3(0.48,0.62,0.68),
+            smoothstep(-0.15,0.6,reflect(-view,normal).y));
+          color*=0.60+diffuse*0.70+max(normal.y,0.0)*0.16;
+          color+=reflection*(rubber?0.022:metal?0.14:0.055+fresnel*0.20);
+          color+=vec3(1.0,0.96,0.86)*specular*(rubber?0.025:metal?0.38:0.16);
+        }
         // World-scaled procedural textures need no downloads or large image assets.
         float detail = 1.0 - smoothstep(180.0, 650.0, vDepth);
         if (uMaterial == 1) {
@@ -147,6 +184,11 @@ window.LPRRenderer3D = class LPRRenderer3D {
       position: gl.getAttribLocation(program, 'aPosition'),
       color: gl.getAttribLocation(program, 'aColor'),
       uv: gl.getAttribLocation(program, 'aUV'),
+      normal: gl.getAttribLocation(program, 'aNormal'),
+      vehicle: gl.getUniformLocation(program, 'uVehicle'),
+      carOrigin: gl.getUniformLocation(program, 'uCarOrigin'),
+      carForward: gl.getUniformLocation(program, 'uCarForward'),
+      carRight: gl.getUniformLocation(program, 'uCarRight'),
       textured: gl.getUniformLocation(program, 'uTextured'),
       texture: gl.getUniformLocation(program, 'uTexture'),
       sky: gl.getUniformLocation(program, 'uSky'),
@@ -844,6 +886,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.vertexAttrib2f(this.locations.uv,0,0);
     gl.uniform1i(this.locations.textured,0);
     gl.uniform1i(this.locations.material,0);
+    gl.uniform1i(this.locations.vehicle,0);
+    gl.disableVertexAttribArray(this.locations.normal);
+    gl.vertexAttrib3f(this.locations.normal,0,1,0);
   }
 
   drawCampusMaterials() {
@@ -979,16 +1024,27 @@ window.LPRRenderer3D = class LPRRenderer3D {
   drawWheels(car, now) {
     const gl = this.gl;
     const vertices = [];
-    const vertex = (p, color) => vertices.push(p[0],p[1],p[2],color[0],color[1],color[2]);
-    const triangle = (a,b,c,color) => { vertex(a,color);vertex(b,color);vertex(c,color); };
-    const quad = (a,b,c,d,color) => { triangle(a,b,c,color);triangle(a,c,d,color); };
+    const normals=[];
+    const vertex = (p,color,normal) => {
+      vertices.push(p[0],p[1],p[2],color[0],color[1],color[2]);normals.push(...normal);
+    };
+    const triangle = (a,b,c,color,smooth) => {
+      const u=b.map((v,i)=>v-a[i]),v=c.map((value,i)=>value-a[i]);
+      const n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+      const length=Math.hypot(...n)||1,normal=n.map(value=>value/length);
+      vertex(a,color,smooth?.[0]||normal);vertex(b,color,smooth?.[1]||normal);vertex(c,color,smooth?.[2]||normal);
+    };
+    const quad = (a,b,c,d,color,smooth) => {
+      triangle(a,b,c,color,smooth&&[smooth[0],smooth[1],smooth[2]]);
+      triangle(a,c,d,color,smooth&&[smooth[0],smooth[2],smooth[3]]);
+    };
     const bodyForward = [Math.cos(car.angle),Math.sin(car.angle)];
     const bodyRight = [-bodyForward[1],bodyForward[0]];
     const steeredAngle = car.angle + (car.steerAngle || 0);
     const wheelForward = [Math.cos(steeredAngle),Math.sin(steeredAngle)];
     const axleDirection = [-wheelForward[1],wheelForward[0]];
     const radius = 2.3;
-    const segments = 28;
+    const segments = 48;
     const tyreBlack = [.075,.085,.09];
     const sidewall = [.11,.12,.125];
     const rim = [.38,.42,.43];
@@ -997,13 +1053,17 @@ window.LPRRenderer3D = class LPRRenderer3D {
     this.lastWheelFrame = now;
 
     const rod = (a,b,width,color) => {
-      const dx=b[0]-a[0], dz=b[2]-a[2];
-      const len=Math.max(.001,Math.hypot(dx,dz));
-      const nx=-dz/len*width, nz=dx/len*width;
-      const leftA=[a[0]+nx,a[1],a[2]+nz],rightA=[a[0]-nx,a[1],a[2]-nz];
-      const leftB=[b[0]+nx,b[1],b[2]+nz],rightB=[b[0]-nx,b[1],b[2]-nz];
-      quad(leftA,leftB,rightB,rightA,color);
-      quad([leftA[0],leftA[1]+width,leftA[2]],[leftB[0],leftB[1]+width,leftB[2]],leftB,leftA,color.map(v=>v*.8));
+      const axis=b.map((value,i)=>value-a[i]),length=Math.hypot(...axis)||1;
+      const direction=axis.map(value=>value/length);
+      const span=Math.hypot(direction[0],direction[2])||1;
+      const u=[-direction[2]/span,0,direction[0]/span];
+      const v=[direction[1]*u[2],direction[2]*u[0]-direction[0]*u[2],-direction[1]*u[0]];
+      const normal=angle=>u.map((value,i)=>value*Math.cos(angle)+v[i]*Math.sin(angle));
+      const point=(origin,n)=>origin.map((value,i)=>value+n[i]*width);
+      for(let segment=0;segment<8;segment++) {
+        const n=normal(segment*Math.PI/4),next=normal((segment+1)*Math.PI/4);
+        quad(point(a,n),point(b,n),point(b,next),point(a,next),color,[n,n,next,next]);
+      }
     };
     const damage=car.damage || 0;
     const bodyPoint=(forward,side,height)=> {
@@ -1031,22 +1091,34 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const bodyShade = [.028,.042,.035];
     const cockpitBlack = [.035,.055,.055];
     const teamGreen = [.12,.75,.36];
+    const bodyWhite = [.78,.86,.81];
     // Rounded nose sections, tapering ahead of the front axle; no wheel covers.
     const sections = [[-1.2,2.7,4.0],[3,2.75,2.65],[7.5,2.25,2.5],
       [10.8,1.65,2.05],[12,1.1,1.55],[12.4,.65,1.1]];
+    const crown=.24;
+    const slope=index=>{
+      const a=sections[Math.max(0,index-1)],b=sections[Math.min(sections.length-1,index+1)];
+      return (b[2]-a[2])/(b[0]-a[0]);
+    };
+    const surfacePoint=(f,w,h,t)=>bodyPoint(f,w*t,h+crown*(1-t*t));
+    const surfaceNormal=(index,w,t)=>{
+      const forward=-slope(index),side=2*crown*t/w;
+      const n=[bodyForward[0]*forward+bodyRight[0]*side,1,bodyForward[1]*forward+bodyRight[1]*side];
+      const length=Math.hypot(...n);return n.map(value=>value/length);
+    };
+    const bands=[-1,-.84,-.66,-.40,-.10,0,.10,.40,.66,.84,1];
     for(let i=0;i<sections.length-1;i++) {
       const [f,w,h]=sections[i], [nf,nw,nh]=sections[i+1];
-      quad(bodyPoint(f,-w,h),bodyPoint(f,w,h),
-        bodyPoint(nf,nw,nh),bodyPoint(nf,-nw,nh),bodyBlack);
+      for(let band=0;band<bands.length-1;band++) {
+        const a=bands[band],b=bands[band+1],mid=Math.abs((a+b)/2);
+        const color=mid<.10 ? bodyWhite : mid>.52 && mid<.86 ? teamGreen : bodyBlack;
+        quad(surfacePoint(f,w,h,a),surfacePoint(f,w,h,b),surfacePoint(nf,nw,nh,b),surfacePoint(nf,nw,nh,a),color,
+          [surfaceNormal(i,w,a),surfaceNormal(i,w,b),surfaceNormal(i+1,nw,b),surfaceNormal(i+1,nw,a)]);
+      }
       for(const side of [-1,1]) {
         quad(bodyPoint(f,side*w,h),bodyPoint(nf,side*nw,nh),
           bodyPoint(nf,side*(nw+.22),.85),bodyPoint(f,side*(w+.22),.85),bodyShade);
-        // Painted stripes follow the surface, rather than floating above it.
-        quad(bodyPoint(f,side*w*.66,h+.018),bodyPoint(f,side*w*.84,h+.018),
-          bodyPoint(nf,side*nw*.84,nh+.018),bodyPoint(nf,side*nw*.66,nh+.018),teamGreen);
       }
-      quad(bodyPoint(f,-.28,h+.02),bodyPoint(f,.28,h+.02),
-        bodyPoint(nf,.28,nh+.02),bodyPoint(nf,-.28,nh+.02),cockpitBlack);
     }
     quad(bodyPoint(12.4,-.65,1.1),bodyPoint(12.4,.65,1.1),
       bodyPoint(12.4,.87,.85),bodyPoint(12.4,-.87,.85),bodyShade);
@@ -1064,7 +1136,8 @@ window.LPRRenderer3D = class LPRRenderer3D {
         bodyPoint(-1.2,side*2.7,4),bodyPoint(-9.4,side*2.7,4),bodyBlack);
       quad(bodyPoint(-9.4,side*2.7,4),bodyPoint(-1.2,side*2.7,4),
         bodyPoint(-1.2,side*3.1,3.8),bodyPoint(-9.4,side*3.1,3.8),bodyShade);
-      rod(bodyPoint(-9.4,side*2.7,4.04),bodyPoint(-1.2,side*2.7,4.04),.08,teamGreen);
+      rod(bodyPoint(-9.4,side*2.7,4.04),bodyPoint(-1.2,side*2.7,4.04),.13,cockpitBlack);
+      rod(bodyPoint(-9.4,side*2.7,4.15),bodyPoint(-1.2,side*2.7,4.15),.035,teamGreen);
     }
     // High contrast university lettering on both sides, 56 mm tall (T12.3).
     // Small geometry glyphs keep it readable without another texture upload.
@@ -1105,6 +1178,35 @@ window.LPRRenderer3D = class LPRRenderer3D {
         upright(bodyPoint(-9.4,2.7,2.3),bodyPoint(-8.6,3.25,10.5),.24,rollHoop);
         rod(bodyPoint(-8.6,-3.25,10.5),bodyPoint(-8.6,3.25,10.5),.24,rollHoop);
 
+    // Split, swept front-wing elements add a clear Formula Student silhouette
+    // without filling the open wheel and suspension areas.
+    const wingPoint=(side,span,forward,height)=>bodyPoint(forward,side*span,height);
+    for(const side of [-1,1]) {
+      const stations=[1.35,5.8,10.25];
+      const panels=[
+        {front:14.1,rear:12.85,sweep:.16,rise:0,color:bodyBlack},
+        {front:12.35,rear:11.78,sweep:.13,rise:.12,color:bodyShade}
+      ];
+      for(const panel of panels) {
+        for(let i=0;i<stations.length-1;i++) {
+          const a=stations[i],b=stations[i+1];
+          const front=(span)=>panel.front-panel.sweep*span;
+          const rear=(span)=>panel.rear-panel.sweep*.72*span;
+          const height=(span)=>1.62-.055*span+panel.rise;
+          quad(wingPoint(side,a,front(a),height(a)),wingPoint(side,a,rear(a),height(a)),
+            wingPoint(side,b,rear(b),height(b)),wingPoint(side,b,front(b),height(b)),panel.color);
+          const stripeStart=front(a)-.16,stripeEnd=front(b)-.16;
+          quad(wingPoint(side,a,stripeStart,height(a)+.035),wingPoint(side,b,stripeEnd,height(b)+.035),
+            wingPoint(side,b,stripeEnd-.12,height(b)+.035),wingPoint(side,a,stripeStart-.12,height(a)+.035),teamGreen);
+        }
+      }
+      quad(wingPoint(side,10.05,12.45,.78),wingPoint(side,10.25,12.4,.78),
+        wingPoint(side,10.25,11.0,2.05),wingPoint(side,10.05,11.1,2.05),bodyBlack);
+      quad(wingPoint(side,10.26,12.24,.82),wingPoint(side,10.28,12.2,.82),
+        wingPoint(side,10.28,11.25,1.95),wingPoint(side,10.26,11.3,1.95),teamGreen);
+      rod(wingPoint(side,1.5,12.0,1.5),wingPoint(side,6.7,11.2,1.45),.075,[.32,.35,.34]);
+    }
+
     for (const side of [-1,1]) {
       const center=bodyPoint(8.1,side*7.2,radius+.07);
       const bentAngle=steeredAngle+side*damage*.65;
@@ -1115,6 +1217,14 @@ window.LPRRenderer3D = class LPRRenderer3D {
         center[1]+rad*Math.sin(theta),
         center[2]+axleDirection[1]*axial+wheelForward[1]*rad*Math.cos(theta)
       ];
+      const tyreProfile=[[-1.1,2.08],[-1.03,2.18],[-.78,2.28],[-.48,radius],
+        [.48,radius],[.78,2.28],[1.03,2.18],[1.1,2.08]];
+      const tyreNormal=(ring,theta)=>{
+        const a=tyreProfile[Math.max(0,ring-1)],b=tyreProfile[Math.min(tyreProfile.length-1,ring+1)];
+        const axial=-(b[1]-a[1])/(b[0]-a[0]),length=Math.hypot(axial,1);
+        return [(axleDirection[0]*axial+wheelForward[0]*Math.cos(theta))/length,
+          Math.sin(theta)/length,(axleDirection[1]*axial+wheelForward[1]*Math.cos(theta))/length];
+      };
       const shadowCenter=bodyPoint(8.1,side*7.2,.16);
       for (let i=0;i<segments;i++) {
         const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
@@ -1134,14 +1244,16 @@ window.LPRRenderer3D = class LPRRenderer3D {
 
       for (let i=0;i<segments;i++) {
         const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
-        const treadShade=i%7===0?[.10,.11,.115]:tyreBlack;
-        quad(point(-.78,radius,a),point(.78,radius,a),point(.78,radius,b),point(-.78,radius,b),treadShade);
-        quad(point(-1.1,2.08,a),point(-.78,radius,a),point(-.78,radius,b),point(-1.1,2.08,b),[.065,.075,.08]);
-        quad(point(.78,radius,a),point(1.1,2.08,a),point(1.1,2.08,b),point(.78,radius,b),[.065,.075,.08]);
+        for(let ring=0;ring<tyreProfile.length-1;ring++) {
+          const [x,rad]=tyreProfile[ring],[nx,nrad]=tyreProfile[ring+1];
+          quad(point(x,rad,a),point(nx,nrad,a),point(nx,nrad,b),point(x,rad,b),tyreBlack,
+            [tyreNormal(ring,a),tyreNormal(ring+1,a),tyreNormal(ring+1,b),tyreNormal(ring,b)]);
+        }
         for (const face of [-1.12,1.12]) {
           quad(point(face,2.08,a),point(face,2.08,b),point(face,1.12,b),point(face,1.12,a),sidewall);
           quad(point(face+Math.sign(face)*.025,1.70,a),point(face+Math.sign(face)*.025,1.70,b),point(face+Math.sign(face)*.025,1.64,b),point(face+Math.sign(face)*.025,1.64,a),[.27,.29,.29]);
-          triangle(point(face,0,a),point(face,1.08,a),point(face,1.08,b),rim);
+          triangle(point(face,0,a),point(face,1.08,a),point(face,1.08,b),[.09,.105,.11]);
+          quad(point(face,1.12,a),point(face,1.12,b),point(face,1.03,b),point(face,1.03,a),rim);
         }
       }
       for (const face of [-1.16,1.16]) {
@@ -1166,8 +1278,20 @@ window.LPRRenderer3D = class LPRRenderer3D {
       }
     }
     this.bindMesh(this.wheelBuffer);
+    this.vehicleNormalBuffer ||= gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.vehicleNormalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(normals),gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(this.locations.normal);
+    gl.vertexAttribPointer(this.locations.normal,3,gl.FLOAT,false,12,0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,this.wheelBuffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);
+    gl.uniform1i(this.locations.vehicle,1);
+    gl.uniform3f(this.locations.carOrigin,car.x,0,car.y);
+    gl.uniform3f(this.locations.carForward,bodyForward[0],0,bodyForward[1]);
+    gl.uniform3f(this.locations.carRight,bodyRight[0],0,bodyRight[1]);
     gl.drawArrays(gl.TRIANGLES,0,vertices.length/6);
+    gl.uniform1i(this.locations.vehicle,0);
+    gl.disableVertexAttribArray(this.locations.normal);
   }
 
   resize() {
