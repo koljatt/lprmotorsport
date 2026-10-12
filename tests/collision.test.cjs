@@ -11,7 +11,7 @@ const radius = 14;
 function move(previous, destination) {
   const car = { ...destination, angle:Math.atan2(destination.y-previous.y,destination.x-previous.x), vx:36, vy:0, yawRate:1, speed:36 };
   const hit = campus.resolveBuildingCollision(car, previous);
-  if(hit) dynamics.applyImpact(car,hit.normal);
+  if(hit) dynamics.applyImpact(car,hit.normal,hit.impactMaterial);
   return { car, hit };
 }
 for (const b of campus.buildingBounds) {
@@ -47,7 +47,7 @@ console.log('PASS: building walls, high-speed sweeps, corners, repeated contact 
 function moveAmongObstacles(previous, destination, speed=36) {
   const car={...destination,angle:Math.atan2(destination.y-previous.y,destination.x-previous.x),vx:speed,vy:0,yawRate:0,speed};
   const hit=campus.resolveObstacleCollision(car,previous);
-  if(hit) dynamics.applyImpact(car,hit.normal);
+  if(hit) dynamics.applyImpact(car,hit.normal,hit.impactMaterial);
   return {car,hit};
 }
 assert(campus.trees.length>0);
@@ -132,6 +132,53 @@ const nearEnd=vehiclePoint(parked,-halfWidth-radius-.5,10);
 assert(!moveAmongObstacles(nearStart,nearEnd).hit,
   'A clear pass alongside a rotated car must remain drivable');
 console.log('PASS: parked cars, rotated footprints, tractor, sauna truck, hard impacts and parking nudges');
+
+// Read the rendered pole so protection checks follow its actual placement.
+const signPoles=[];
+campus.build({box:(x,h,y,w,height,d)=>{
+  if(w===6 && height===58 && d===6) signPoles.push({x,y});
+},quad:()=>{}});
+const pole=signPoles[0];
+assert(pole,'The first-corner sign must have a visible support');
+for(const start of campus.track) {
+  if(Math.hypot(start.x-pole.x,start.y-pole.y)>150) continue;
+  const {car,hit}=moveAmongObstacles(start,pole);
+  assert(hit,'Every nearby track approach to the pole must be blocked');
+  assert(campus.tyreBarrierBounds.some(b=>car.x>=b.minX-radius-.01 && car.x<=b.maxX+radius+.01 &&
+    car.y>=b.minY-radius-.01 && car.y<=b.maxY+radius+.01),
+    'The tyre wall must intercept the car before the sign support');
+  assert(Math.hypot(car.x-pole.x,car.y-pole.y)>radius+3,
+    'The stopped car must remain clear of the support');
+}
+for(let i=1;i<campus.tyreBarrier.length;i++) {
+  const a=campus.tyreBarrier[i-1],b=campus.tyreBarrier[i];
+  assert(Math.hypot(a.x-b.x,a.y-b.y)<=a.radius+b.radius,
+    'Adjacent tyre stacks must form a continuous wall');
+}
+console.log('PASS: continuous tyre wall protects the sign from approaching track directions');
+
+const tyreApproach=campus.track.find(p=>Math.hypot(p.x-pole.x,p.y-pole.y)<150);
+for(const speed of [1,3,4,8,12,32]) {
+  const {car,hit}=moveAmongObstacles(tyreApproach,pole,speed);
+  assert.equal(hit.impactMaterial,'tyres','The actual tyre collision must carry its cushioning material');
+  if(speed<=4) assert.equal(car.damage,0,'Low-speed tyre impacts must not damage the car');
+  if(speed<16) assert(!car.crashed,'Moderate tyre impacts must leave the car usable');
+  else assert(car.crashed,'A severe head-on tyre impact must still disable the car');
+  const worldVx=car.vx*Math.cos(car.angle)-car.vy*Math.sin(car.angle);
+  const worldVy=car.vx*Math.sin(car.angle)+car.vy*Math.cos(car.angle);
+  assert(Math.abs(worldVx*hit.normal.x+worldVy*hit.normal.y)<1e-8,
+    'A tyre impact must stop motion into the barrier');
+}
+let tyrePosition=moveAmongObstacles(tyreApproach,pole,3).car;
+for(let i=0;i<100;i++) {
+  const {car,hit}=moveAmongObstacles(tyrePosition,pole,.5);
+  assert(hit && hit.impactMaterial==='tyres');
+  assert.equal(car.damage,0,'Repeated gentle contact must not accumulate damage');
+  tyrePosition=car;
+}
+assert(!moveAmongObstacles(tyrePosition,tyreApproach,1).hit,
+  'The car must be able to drive away after a gentle tyre impact');
+console.log('PASS: cushioned tyre impacts, repeated gentle contact, severe impacts and driving away');
 
 function impact(vx,vy=0,normal={x:-1,y:0}) {
   const car={x:0,y:0,angle:0};

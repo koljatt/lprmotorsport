@@ -1,16 +1,69 @@
 # LPR Lap Challenge
 
+## Rataeditori
+
+Avaa erillinen rataeditori osoitteessa `http://localhost:8000/tools/track-editor/editor.html`.
+Valitse kartio, suojakaide, puu tai laatikko, paina **Lisää kartalle** ja napauta
+sijoituspaikkaa. Valitse elementti kartalta tai luettelosta ja siirrä vetämällä.
+Sivupaneelissa voit muuttaa metrisijaintia, kiertoa ja kokoa sekä monistaa tai
+poistaa elementin. Ruudukkoon kohdistus, zoomaus sekä kumoa ja tee uudelleen
+ovat käytettävissä. Tyhjän kartan vetäminen siirtää näkymää.
+Rataelementteihin kuuluvat kartiot, suojakaiteet, rengasvallit, rakennukset,
+asfalttialueet, puut ja laatikot. Valittua elementtiä voi kiertää tarttumalla
+sen kulmassa olevaan kiertokuvakkeeseen ja vetämällä, tai kirjoittamalla tarkan
+kulman asteina. Rengasvallit ja rakennukset
+ovat pelissä törmääviä esteitä; asfalttialue on tasainen ajopinta, joka poistaa
+nurmikon pito- ja ajotuntumavaikutuksen alueella.
+Editorissa lisättävät kartiot tallentuvat rataelementteinä ja toimivat
+törmäävinä esteinä.
+**Tallenna projektiin** tallentaa elementit projektin `data/track-objects.json`-tiedostoon, joka kulkee Gitissä mukana. Peli lukee saman ratadatan 3D-näkymään ja törmäysrajoihin.
+**Vie JSON** ja **Tuo JSON** siirtävät elementit selainten välillä. Tuonti korvaa
+editorin nykyiset elementit, ja sen voi kumota. Muokatun radan kierroksia ei
+lähetetä verkkotuloslistaan. Editorilla muokataan lisättyjä elementtejä;
+kampuksen valmiit rakennukset ja radan reitti toimivat kartan taustana.
+Tarkistus: `node tests/track-objects.test.cjs`.
+
+## Jousituksen visualisointi
+
+Korin pystyliike, nyökkäys ja kallistus ratkaistaan jousi- ja vaimennusvoimista ajofysiikan aika-askelissa, ei piirtotaajuudesta tai ennalta määrätystä kallistuskulmasta. Mallissa on neljä 8 kg pyörämassaa, 28 kN/m pyöräjouset, erillinen sisään- ja ulosjouston vaimennus, kallistuksenvakaajat ja joustomatkan rajoittimet. Parametrit ovat arvioita. Korin ja kameran kiertokeskus on painopiste; pyörännavat eivät liiku korin mukana. Iskunvaimentimen varsi ja jousi seuraavat pyöräkohtaisen jouston välityssuhdetta.
+
+Kori kallistuu sivuttaiskiihtyvyyden mukaan ja keula painuu jarrutuksessa sekä nousee kiihdytyksessä. Vaimennettu liike ohjaa kameraa ja koria samalla muunnoksella, joten ohjaamo pysyy yhtenäisenä. Eturenkaat pysyvät tien pinnassa, tukivarret seuraavat pyörän ja korin kiinnityspisteitä ja jousien sekä iskunvaimentimien pituus muuttuu jouston mukana. Uudelleenkäynnistys nollaa liikkeen.
+
+Ajomallissa on pyöräkohtaiset jouset, vaimentimet ja renkaiden pystyjousto alustavilla arvoilla. Kanttikivien noin 6,5 cm korkea pinta ja 45 cm välein toistuvat kohoumat syötetään jokaisen renkaan jousitukseen erikseen. Ajonopeus määrää tärinän taajuuden; kori, kamera ja renkaat seuraavat fyysistä joustoa, ja rengaskuormien vaihtelu vaikuttaa pitoon. Paikallaan oleva auto rauhoittuu myös kanttikivellä. Tarkistukset: `node tests/suspension.test.cjs` ja `node tests/kerb.test.cjs`.
+
 Selainpohjainen Formula Student -henkinen 3D-ajopeli kuljettajan näkökulmasta. Sama peli toimii puhelimen kosketusohjaimilla, tietokoneen näppäimistöllä ja selaimen tunnistamalla ratilla sekä polkimilla. 3D-näkymä käyttää WebGL:ää ilman ulkoisia kirjastoja.
 
 ## Käynnistys
 
-Käynnistä projektikansiossa paikallinen palvelin:
+Käynnistä projektikansiossa paikallinen kehityspalvelin. Se kuuntelee vain
+omaa tietokonetta; editoria ei voi avata lähiverkon toiselta laitteelta:
 
 ```powershell
 node server.js
 ```
 
-Avaa tietokoneella `http://localhost:8000`. Puhelimella voit avata `http://TIETOKONEEN-LÄHIVERKKO-OSOITE:8000`, kun molemmat laitteet ovat samassa verkossa ja palomuuri sallii yhteyden. Julkista käyttöä varten sijoita tiedostot HTTPS-palvelimelle. Pelin kierrosajat tallentuvat vain käytetyn selaimen omaan tallennustilaan.
+Avaa peli osoitteessa `http://localhost:8000` ja editori osoitteessa
+`http://localhost:8000/tools/track-editor/editor.html`.
+
+## Pelin julkaisu
+
+GitHub Pages julkaisee pelin automaattisesti GitHub Actionsilla. Työnkulku
+rakentaa `dist/`-kansion ja julkaisee ainoastaan sen sisällön, joten
+editointityökalu, kehityspalvelin ja testit eivät mene pelaajille. Ota tämä
+käyttöön kerran repositorion asetuksista: **Settings → Pages → Build and
+deployment → Source → GitHub Actions**. Sen jälkeen `main`-haaraan pushaaminen
+julkaisee pelin.
+
+Paikallisesti saman pelaajille tarkoitetun paketin voi rakentaa komennolla:
+
+```powershell
+npm run build
+```
+
+Julkaise aina vain `dist/`-kansion sisältö, älä repositorion juurta. `dist/`
+on generoitu ja ohitettu Gitissä. Editorin lähdekoodi ja tallennettu ratadata
+säilyvät repositoriossa kehitystä varten. Pelin kierrosajat tallentuvat
+käytetyn selaimen omaan tallennustilaan.
 
 ## Ohjaus
 
@@ -32,11 +85,13 @@ Saunan toiminnalliset tarkistukset: `node tests/sauna.test.cjs`.
 
 ## Ajomalli ja sen rajat
 
+Ohjaus ei enää aktivoi automaattista mutkajarrutusta. Kaasu pohjassa ilman jarrupolkimen painamista jarruvoima on nolla myös täydellä ohjauksella. Kaarteen nopeus ja säde määräytyvät rengasvoimista, käytettävissä olevasta vedosta ja ajovastuksista; liian suuri nopeus kasvattaa kääntösädettä. Ohjausavustus ja luistonesto ovat edelleen käytössä. Tarkistus: `node tests/vehicle.test.cjs`.
+
 Jarrutuksen ja kaarreajon yhteispito käyttää nyt molemmilla akseleilla samaa voimaympyrää: rengasmallin sivuttaisvoima ja pitkittäisvoima skaalataan yhdessä, jos niiden yhteistarve ylittää akselin pidon. Aiemmin jarruvoima sai etusijan ja saattoi poistaa eturenkaiden sivuttaisvoiman kokonaan. Ohjaaminen jarrutuksessa vähentää nyt saatavaa jarruvoimaa, eikä auton kiertymistä pakoteta. Etupyörien voimat muunnetaan ohjauskulman mukaan auton koordinaatistoon, myös jarruvoiman sivuttaiskomponentti. Tämä on yksinkertaistettu yhdistetyn luiston malli, ei mitattuun rengasdataan tai pyörien luistosuhteeseen perustuva ABS. Takarenkaiden sivuttaispitoa säästävä jarruvoiman jako on edelleen avustus.
 
 Jarru–ohjaus-vertailu: `node tests/brake-steering-comparison.cjs`. Testi aloittaa 72 km/h nopeudesta, muodostaa maltillisen kaarteen ja jarruttaa siinä puoli sekuntia paineilla 0, 25, 50, 75 ja 100 %. Nopeutta ei pakoteta jarrutuksen aikana. Avustetun ohjauksen pyyntö on 0,5 ja suoran ratin 0,07; ohjaustapoja arvioidaan erikseen. Tulokset ovat `tests/brake-steering-before.json` ja `tests/brake-steering-after.json`; aiempi rengaslaskenta voidaan toistaa valitsimella `--legacy-tires`. Tarkistukset: `node tests/brake-steering.test.cjs`, `node tests/braking.test.cjs` ja `node tests/yaw-forces.test.cjs`.
 
-Ensimmäisessä fysiikkaan perustuvan ohjausavustuksen vaiheessa poistettiin ajon jälkeinen kiertymisnopeuden korjaus ja pintapitoon perustuva kiertymisnopeuden rajoitus. Ohjausavustus vaikuttaa etupyörien kulmaan olemassa olevan ohjauskulmasäädön kautta; ajovauhdissa kiertymisen muutos syntyy akselien rengasvoimien momentista. Hitaassa ajossa (alle 1,5 m/s) käytetään edelleen kinemaattista mallia. Sivuttaisnopeuden oikaisu, automaattinen mutkajarrutus ja moottorijarrutusapu ovat vielä käytössä, joten tämä on rajattu ensimmäinen vaihe eikä valmis realistinen ajomalli.
+Ensimmäisessä fysiikkaan perustuvan ohjausavustuksen vaiheessa poistettiin ajon jälkeinen kiertymisnopeuden korjaus ja pintapitoon perustuva kiertymisnopeuden rajoitus. Ohjausavustus vaikuttaa etupyörien kulmaan olemassa olevan ohjauskulmasäädön kautta; ajovauhdissa kiertymisen muutos syntyy akselien rengasvoimien momentista. Hitaassa ajossa (alle 1,5 m/s) käytetään edelleen kinemaattista mallia. Sivuttaisnopeuden oikaisu ja moottorijarrutusapu ovat vielä käytössä, joten tämä on rajattu ensimmäinen vaihe eikä valmis realistinen ajomalli.
 
 Toistettava vertailu: `node tests/corner-comparison.cjs`. Lähtönopeus on 15 m/s, analoginen ohjauspyyntö 0,5 kahden sekunnin ajan ja sen jälkeen keskitys sekunniksi. Nopeus kehittyy vapaasti; kaasupyynnöt ovat 0, 0,4 ja 1 sekä avustetulla että suoralla rattiohjauksella. Ohjauspyyntö on sama, mutta ohjauskulma eroaa ohjaustapojen välillä. Näytteet sisältävät ajolinjan, nopeuden, kiertymisnopeuden, sivuluisukulman ja akselien sivuttaisvoimat. Ennen–jälkeen-tulokset ovat tiedostoissa `tests/corner-before.json` ja `tests/corner-after.json`. Momenttiin perustuva kiertyminen tarkistetaan komennolla `node tests/yaw-forces.test.cjs`.
 
@@ -138,3 +193,5 @@ kuljettajan näkymässä paikallaan auton suunnan ja G-voimien muuttuessa.
 ## Verkkotuloslista
 
 Yl?palkin ?? avaa suoraan tuloslistan ja nimimerkin valinnan. Ratin ja polkimien kalibrointi on poistettu. K?ytt??notto: [cloudflare/README.md](cloudflare/README.md).
+
+Saunapakun ulkomallissa on referenssivalokuvasta perspektiivikorjattu kylkimaalaus (`assets/sauna-reference.jpg`), py?re? savupiippu, yksityiskohtaiset ter?svanteet, ikkunatiivisteet, peilit, pyyhkij?t ja etus?leikk?. Kylkitekstuuri latautuu paikallisesti; ennen latautumista n?kyy geometrinen varamaalaus. Molemmat kyljet k?ytt?v?t samaa referenssin n?kyv?? kylke?.

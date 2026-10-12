@@ -32,12 +32,12 @@ sale.buildInterior({box(...args){boxes.push(args);},quad(...args){
         'Stock must face a reachable aisle: '+id+' at '+centerX+','+centerZ);
   }
 }});
-assert.equal(counts.size,40);
+assert.equal(counts.size,sale.products.length-1);
 assert(!counts.has('omena'),'Loose apples must use rounded geometry rather than box artwork');
 for(const product of sale.products){
   if(product.id!=='omena') assert(counts.get(product.id)>0,`Missing shelf stock: ${product.name}`);
-  if(product.candyLabel || product.packageLabel) continue; // Original wrappers are rendered directly on canvas.
-  const filename=product.image || `assets/${product.id}.jpg`;
+  assert(product.image,`Missing real package artwork: ${product.name}`);
+  const filename=product.image;
   const image=fs.readFileSync(path.join(root,filename));
   if(filename.endsWith('.jpg')) assert.equal(image.readUInt16BE(0),0xffd8,`Invalid JPEG: ${product.name}`);
   else if(filename.endsWith('.png')) assert.equal(image.toString('hex',0,8),'89504e470d0a1a0a');
@@ -178,3 +178,48 @@ for(const id of stapleIds) assert(counts.get(id)>0,'Basic groceries must be stoc
 assert(stapleIds.reduce((sum,id)=>sum+counts.get(id),0)>10*(counts.get('doris')+counts.get('jaffa')),
   'General groceries must dominate the assortment rather than biscuits');
 console.log('PASS: one small biscuit bay and a varied everyday grocery assortment');
+
+assert(sale.shelves[0].products.includes('nuudelit'),'Instant noodles belong with dry groceries');
+assert(!sale.shelves.some(shelf=>shelf.products.includes('maksalaatikko')),
+  'Chilled ready meals must not be listed as ambient shelf stock');
+let chilledMealXs=[];
+sale.buildInterior({box(){},productFace(id,points){
+  if(id==='maksalaatikko') chilledMealXs.push(points.reduce((sum,p)=>sum+p[0],0)/4+6000);
+}});
+assert(chilledMealXs.some(x=>x>60),
+  'Ready meals must be displayed in the refrigerated case');
+assert(averageZ('riisi')>averageZ('coca-cola'));
+assert(averageZ('coca-cola')>averageZ('talouspaperi'));
+console.log('PASS: dry groceries, drinks, household goods and chilled ready meals are separated');
+
+const dairyIds=['maito','jogurtti','maitorahka','kuohukerma','ruokakerma','smetana','kermaviili','voi','juusto'];
+for(const id of dairyIds)
+  assert(productPositions.get(id).every(z=>z<-135),'Dairy must stay in the refrigerated back-wall cases: '+id);
+const dairyCounts=new Map();
+sale.buildInterior({box(){},productFace(id,points){
+  if(!dairyIds.includes(id) || !points.every(p=>p[2]<-135)) return;
+  assert(points[0][0]<points[1][0],'Dairy artwork must face into the store');
+  const x=points.reduce((sum,p)=>sum+p[0],0)/4+6000;
+  assert(sale.canWalk(x,-130),'All dairy bays must have a reachable cross-aisle');
+  dairyCounts.set(id,(dairyCounts.get(id)||0)+1);
+}});
+for(const id of dairyIds) assert.equal(dairyCounts.get(id),32,'Four stocked shelves and two rows in dairy bay: '+id);
+assert.equal(sale.dairyBays.length,9);
+console.log('PASS: nine refrigerated dairy bays, fully stocked and accessible from the back cross-aisle');
+
+// Inspect actual sight lines, not just the existence of stock callbacks.
+let visibleDairy=0;
+sale.buildInterior({box(){},productFace(id,points){
+  if(!dairyIds.includes(id) || !points.every(p=>p[2]<-135)) return;
+  const faceZ=points[0][2];
+  if(faceZ<-141) return; // Rear stock is naturally behind the front row.
+  const product=sale.products.find(p=>p.id===id);
+  if(product.shape==='tub') assert(faceZ>-141+product.width/2,'Tub label must lie outside its curved body');
+  const x=(points[0][0]+points[1][0])/2,y=(points[0][1]+points[2][1])/2;
+  const blockers=boxes.filter(([bx,by,bz,w,h,d])=>
+    x>bx-w/2 && x<bx+w/2 && y>by && y<by+h && bz+d/2>faceZ+.01 && bz-d/2<-130);
+  assert.equal(blockers.length,0,'Solid cabinet geometry must not obscure dairy: '+id);
+  visibleDairy++;
+}});
+assert.equal(visibleDairy,144);
+console.log('PASS: all 144 front-row dairy labels are outside their packages and have unobstructed sight lines');

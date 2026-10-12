@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const context = { window: {} };
-vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8'), context);
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8').replace(
+  'const vxDot =', 'state.frontFx = frontFx; state.rearFx = rearFx; const vxDot ='), context);
 
 function corner(speed, steer, extraInput = {}) {
   const dynamics = new context.window.VehicleDynamics();
@@ -97,8 +98,7 @@ for (const speed of [8, 15, 20, 30]) {
       assert(Math.abs(state.bodySlip) < .2, 'Sustained assisted cornering must not develop a spin');
       if (step >= 450) settledYaw.push(state.yawRate);
     }
-    // At a forced high speed on grass, corner braking can exhaust the front
-    // friction budget. Steering must not invent yaw when lateral force is zero.
+    // Steering must not invent yaw when lateral force is zero.
     assert(settledYaw.every(yaw => yaw >= -1e-8), 'Holding right must not establish a left turn');
     if (!grass || speed <= 15) assert(state.yawRate > .1,
       'With lateral grip available, holding right must establish a right turn');
@@ -168,16 +168,21 @@ function poweredTurn(steer, analog = false, wheel = false) {
     dynamics.step(state, { gas: 1, brake: 0, steer, analog, wheel }, 1 / 90, 0);
     greatestSlip = Math.max(greatestSlip, Math.abs(state.bodySlip));
     assert([state.vx, state.vy, state.yawRate].every(Number.isFinite));
+    assert(Math.abs(state.frontFx) < 1e-10 && state.rearFx >= 0,
+      'Full throttle without a brake input must never apply axle braking, even at full steering');
   }
   return { state, greatestSlip };
 }
 for (const analog of [false, true]) {
   const tight = poweredTurn(1, analog);
   const gentle = poweredTurn(.15, analog);
-  assert(tight.state.speed < 17, 'Sustained tight steering must bring full-throttle speed below 61 km/h');
+  assert(tight.state.speed > 17, 'Full steering must not impose the former automatic corner speed');
   assert(gentle.state.speed > 30, 'Small steering corrections must retain straight-line acceleration');
   assert(tight.greatestSlip < .1, 'Assisted turns must avoid persistent sideways drift');
-  assert(tight.state.yawRate > .5, 'Corner speed assistance must preserve a useful turning response');
+  assert(tight.state.yawRate > .1, 'Powered cornering must retain a turning response');
+  assert(Math.abs(tight.state.vx / tight.state.yawRate) > 17,
+    'Excess entry speed must produce a wider turn instead of automatic braking into a tight corner');
 }
 assert(poweredTurn(0, true, true).state.speed > 30, 'Direct wheel driving must retain straight-line acceleration');
-console.log('PASS: keyboard and gamepad corner speed, small corrections and reduced sideways drift');
+for (const steer of [-1, 1]) poweredTurn(steer, true, true);
+console.log('PASS: no automatic braking in powered turns, wider fast corners and small corrections');

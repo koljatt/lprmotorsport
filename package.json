@@ -1,0 +1,10 @@
+{
+  "name": "lpr-lap-challenge",
+  "private": true,
+  "scripts": {
+    "dev": "node server.js",
+    "build": "node scripts/build.cjs",
+    "preview": "node server.js --production",
+    "test:tools": "node tests/track-objects.test.cjs && node tests/development-tools.test.cjs"
+  }
+}

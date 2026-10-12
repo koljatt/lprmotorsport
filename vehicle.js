@@ -7,7 +7,7 @@ window.VehicleDynamics = class VehicleDynamics {
       wheelbase: 1.63,           // m
       frontAxle: 0.81,           // centre of mass to front axle, m
       rearAxle: 0.82,            // centre of mass to rear axle, m
-      trackWidth: 1.2,           // m, provisional tire contact spacing
+      trackWidth: 1.44,          // m, matches the rendered front wheel centres
       yawInertia: 120,           // kg m²
       centreOfMassHeight: 0.29,  // m
       frontCorneringStiffness: 13000, // N/rad, combined front axle
@@ -21,13 +21,37 @@ window.VehicleDynamics = class VehicleDynamics {
       tractionControlEnabled: true,
       maxRoadWheelAngle: 0.36,  // rad
       assistedSteeringGrip: 0.9, // fraction of available grip requested at full assisted steering
-      assistedCornerSpeed: 14,  // m/s at full steering; progressively higher for gentle turns
       dragArea: 0.75,           // CdA, m²
-      rollingResistance: 45     // N
+      rollingResistance: 45,    // N
+      suspension: {
+        unsprungMass: 8,        // kg per corner; provisional values throughout
+        wheelRate: 28000,       // N/m at the wheel (includes motion ratio)
+        bumpDamping: 900, reboundDamping: 1400, // N s/m at the wheel
+        tyreRate: 160000, tyreDamping: 120,
+        antiRollRate: 4500,     // N/m of left/right travel difference
+        pitchInertia: 65, rollInertia: 38, // kg m²
+        bumpTravel: .035, droopTravel: .040, bumpStopRate: 180000,
+        motionRatio: .70
+      }
     };
   }
 
+  kerbHeight(distance, along, road) {
+    const width=road.kerbOuter-road.halfWidth;
+    const offset=distance-road.halfWidth;
+    if(offset<=0 || offset>=width) return 0;
+    // SI: 6.5 cm crown with 1.2 cm ribs every 45 cm. Bevel the edges
+    // so entering the kerb loads the tyre rather than teleporting the body.
+    const bevel=Math.min(1,offset/.65,(width-offset)/.65);
+    const smooth=bevel*bevel*(3-2*bevel);
+    const phase=along*this.parameters.metresPerWorldUnit/.45*2*Math.PI;
+    return smooth*(.053+.012*(.5+.5*Math.cos(phase)));
+  }
+
   reset(state) {
+    delete state.visualSuspension;
+    delete state.suspension;
+    delete state.roadHeights;
     state.vx = 0;
     state.vy = 0;
     state.yawRate = 0;
@@ -42,15 +66,73 @@ window.VehicleDynamics = class VehicleDynamics {
     state.speed = 0;
   }
 
-  applyImpact(state, normal) {
+  createSuspension(state) {
+    const p=this.parameters,s=p.suspension,g=9.81;
+    const sprungMass=p.mass-4*s.unsprungMass;
+    const heights=state.roadHeights || [0,0,0,0];
+    state.suspension={heave:0,heaveVelocity:0,pitch:0,pitchVelocity:0,roll:0,rollVelocity:0,
+      centreHeight:p.centreOfMassHeight,motionRatio:s.motionRatio,
+      wheels:[p.frontAxle,-p.rearAxle].flatMap((x,axle)=>[-1,1].map((side,sideIndex)=>{
+        const preload=sprungMass*g*(axle===0?p.rearAxle:p.frontAxle)/p.wheelbase/2;
+        return {x,y:side*p.trackWidth/2,z:0,velocity:0,road:heights[axle*2+sideIndex] || 0,
+          preload,load:preload+s.unsprungMass*g,travel:0};
+      }))};
+    return state.suspension;
+  }
+
+  stepSuspension(state,seconds) {
+    const p=this.parameters,s=p.suspension,g=9.81;
+    const body=state.suspension || this.createSuspension(state);
+    const sprungMass=p.mass-4*s.unsprungMass;
+    const road=state.roadHeights || [0,0,0,0];
+    // Integrate the sprung body and four unsprung masses in SI units. Small
+    // substeps resolve wheel hop independently of the presentation rate.
+    const count=Math.max(1,Math.ceil(seconds*720)),dt=seconds/count;
+    const previousRoad=body.wheels.map(w=>w.road);
+    for(let step=0;step<count;step++) {
+      let force=0,pitchMoment=0,rollMoment=0;
+      const travel=body.wheels.map(w=>w.z-body.heave-w.x*body.pitch-w.y*body.roll);
+      body.wheels.forEach((w,index)=>{
+        const target=Number.isFinite(road[index])?road[index]:0;
+        const surface=previousRoad[index]+(target-previousRoad[index])*(step+1)/count;
+        const roadVelocity=seconds>0?(target-previousRoad[index])/seconds:0;
+        const relativeVelocity=w.velocity-body.heaveVelocity-w.x*body.pitchVelocity-w.y*body.rollVelocity;
+        const damping=relativeVelocity>=0?s.bumpDamping:s.reboundDamping;
+        const stop=s.bumpStopRate*(Math.max(0,travel[index]-s.bumpTravel)+Math.min(0,travel[index]+s.droopTravel));
+        const antiRoll=s.antiRollRate*(travel[index]-travel[index^1]);
+        const spring=w.preload+s.wheelRate*travel[index]+damping*relativeVelocity+stop+antiRoll;
+        // A tyre can push on the road, never pull it. Its static deflection is
+        // implicit in preload; z is displacement from the settled wheel centre.
+        const tyre=Math.max(0,w.preload+s.unsprungMass*g+s.tyreRate*(surface-w.z)+s.tyreDamping*(roadVelocity-w.velocity));
+        force+=spring;pitchMoment+=spring*w.x;rollMoment+=spring*w.y;
+        w.velocity+=(tyre-spring-s.unsprungMass*g)/s.unsprungMass*dt;
+        w.z+=w.velocity*dt;
+        w.load=tyre;w.travel=travel[index];w.road=surface;
+      });
+      const ax=(state.vx || 0)>.1?(state.longitudinalG || 0)*g:0;
+      const ay=(state.vx || 0)>.1?(state.lateralG || 0)*g:0;
+      body.heaveVelocity+=(force-sprungMass*g)/sprungMass*dt;
+      body.pitchVelocity+=(pitchMoment+sprungMass*ax*p.centreOfMassHeight)/s.pitchInertia*dt;
+      body.rollVelocity+=(rollMoment+sprungMass*ay*p.centreOfMassHeight)/s.rollInertia*dt;
+      body.heave+=body.heaveVelocity*dt;
+      body.pitch+=body.pitchVelocity*dt;
+      body.roll+=body.rollVelocity*dt;
+    }
+    for(const w of body.wheels) w.travel=w.z-body.heave-w.x*body.pitch-w.y*body.roll;
+  }
+
+  applyImpact(state, normal, impactMaterial) {
     const cos=Math.cos(state.angle), sin=Math.sin(state.angle);
     const worldVx=state.vx*cos-state.vy*sin;
     const worldVy=state.vx*sin+state.vy*cos;
     const normalVelocity=worldVx*normal.x+worldVy*normal.y;
     const impactSpeed=Math.max(0,-normalVelocity);
-    // Provisional game damage: energy scales with speed squared. A perpendicular
-    // 8 m/s impact disables this lightweight car; parking nudges cause no damage.
-    const damage=Math.max(0,impactSpeed**2-2**2)/(8**2-2**2);
+    // Game tuning: stacked tyres cushion impacts more than rigid obstacles.
+    // Use perpendicular speed; glancing contact keeps its tangential motion.
+    const cushioned=impactMaterial==='tyres';
+    const damageFreeSpeed=cushioned?4:2, disablingSpeed=cushioned?16:8;
+    const damage=Math.max(0,impactSpeed**2-damageFreeSpeed**2)/
+      (disablingSpeed**2-damageFreeSpeed**2);
     state.damage=Math.min(1,(state.damage || 0)+damage);
     state.crashed=state.damage>=1;
     state.impactSpeed=impactSpeed;
@@ -73,6 +155,7 @@ window.VehicleDynamics = class VehicleDynamics {
     const p = this.parameters;
     const dt = Math.min(seconds, 1 / 90);
     const gravity = 9.81;
+    const suspension=state.suspension || this.createSuspension(state);
     const gas = Math.max(0, Math.min(1, input.gas));
     const brake = Math.max(0, Math.min(1, input.brake));
     // Give the brake priority when keyboard/touch pedals overlap.
@@ -128,19 +211,13 @@ window.VehicleDynamics = class VehicleDynamics {
     // grip-aware axle distribution as the brakes rather than unloading and
     // locking the driven rear axle in a corner. This is a gameplay assist.
     const coastBrake = (1 - gas) * p.coastBrakeForce * Math.min(1, speed / 4);
-    // A sustained tight turn asks for a manageable corner speed, even with the
-    // throttle held. Small corrections retain the full straight-line speed.
-    // This uses driver input only, without following the track automatically.
-    const turnDemand = Math.max(0, (Math.abs(state.steer) - .2) / .8);
-    const cornerSpeed = 36 - (36 - p.assistedCornerSpeed) * turnDemand;
-    const cornerBrake = assisted ? Math.min(2485,
-      Math.max(0, speed - cornerSpeed) * p.mass * 2) : 0;
-    const brakeRequest = Math.max(brake * p.peakBrakeForce + (1 - brake) * coastBrake, cornerBrake);
+    // Steering never requests braking. Corner speed follows tire forces,
+    // available drive, drag and the driver's pedal inputs.
+    const brakeRequest = brake * p.peakBrakeForce + (1 - brake) * coastBrake;
     const wheelbase = p.wheelbase;
     // With no wheel-speed measurements, this is a tire-capacity torque limiter rather
     // than a calibrated slip-ratio controller. It leaves lateral grip in reserve.
-    const previousTransfer = p.mass * state.longitudinalG * gravity * p.centreOfMassHeight / wheelbase;
-    const estimatedRearLoad = Math.max(100, p.mass * gravity * p.frontAxle / wheelbase + previousTransfer);
+    const estimatedRearLoad = suspension.wheels[2].load+suspension.wheels[3].load;
     const estimatedRearLimit = mu * estimatedRearLoad;
     const rearSlipAngle = speed >= 1.5 ? Math.atan2(state.vy - p.rearAxle * state.yawRate, speed) : 0;
     const predictedAy = speed * speed * Math.tan(state.steerAngle) / wheelbase;
@@ -153,17 +230,23 @@ window.VehicleDynamics = class VehicleDynamics {
     state.torqueScale += Math.max(-changeRate * dt, Math.min(changeRate * dt, targetScale - state.torqueScale));
     state.tcActive = p.tractionControlEnabled && throttle > .1 && state.torqueScale < .97;
     const driveRequest = rawDriveRequest * state.torqueScale;
-    const estimatedAx = Math.max(-mu * gravity, Math.min(mu * gravity,
-      (driveRequest - brakeRequest - drag - rolling) / p.mass));
-    const transfer = p.mass * estimatedAx * p.centreOfMassHeight / wheelbase;
-    const frontLoad = Math.max(100, p.mass * gravity * p.rearAxle / wheelbase - transfer);
-    const rearLoad = Math.max(100, p.mass * gravity * p.frontAxle / wheelbase + transfer);
-    const frontLimit = mu * frontLoad;
-    const rearLimit = mu * rearLoad;
+    const frontLoad = suspension.wheels[0].load+suspension.wheels[1].load;
+    const rearLoad = suspension.wheels[2].load+suspension.wheels[3].load;
+    // Mild load sensitivity makes an unloaded inside tyre matter to grip.
+    const axleCapacity=offset=>suspension.wheels.slice(offset,offset+2).reduce((sum,w)=>{
+      const reference=w.preload+p.suspension.unsprungMass*gravity;
+      return sum+mu*reference*Math.pow(Math.max(0,w.load)/reference,.94);
+    },0);
+    const frontLimit = Math.max(1,axleCapacity(0));
+    const rearLimit = Math.max(1,axleCapacity(2));
 
     // Move brake bias forward as braking unloads the rear axle. Both axles
     // subsequently share their friction budget between braking and cornering.
-    const frontBrakeBias = Math.max(.65, Math.min(.90, frontLoad / (frontLoad + rearLoad) + .10));
+    // All tyres can lose contact during a kerb hop. Avoid 0/0 propagating
+    // through the brake forces into the vehicle position and camera.
+    const totalLoad = frontLoad + rearLoad;
+    const frontLoadShare = totalLoad > 0 ? frontLoad / totalLoad : p.rearAxle / wheelbase;
+    const frontBrakeBias = Math.max(.65, Math.min(.90, frontLoadShare + .10));
     const rearBrakeReserve = Math.min(rearLimit * .95, lateralDemand);
     const rearBrakeCapacity = Math.sqrt(Math.max(0, rearLimit ** 2 - rearBrakeReserve ** 2));
     // Existing brake-distribution assistance reserves rear lateral capacity.
@@ -229,5 +312,6 @@ window.VehicleDynamics = class VehicleDynamics {
     state.y += (state.vx * forwardY + state.vy * forwardX) * dt * worldUnitsPerMetre;
     state.bodySlip = Math.atan2(state.vy, Math.max(state.vx, 0.5));
     state.speed = Math.hypot(state.vx, state.vy);
+    this.stepSuspension(state,dt);
   }
 };

@@ -1,35 +1,53 @@
-const http = require('node:http');
-const fs = require('node:fs');
-const path = require('node:path');
-
-const files = {
-  '/': ['index.html', 'text/html; charset=utf-8'],
-  '/index.html': ['index.html', 'text/html; charset=utf-8'],
-  '/styles.css': ['styles.css', 'text/css; charset=utf-8'],
-  '/3d.css': ['3d.css', 'text/css; charset=utf-8'],
-  '/renderer3d.js': ['renderer3d.js', 'text/javascript; charset=utf-8'],
-  '/vehicle.js': ['vehicle.js', 'text/javascript; charset=utf-8'],
-  '/game.js': ['game.js', 'text/javascript; charset=utf-8'],
-  '/timing.js': ['timing.js', 'text/javascript; charset=utf-8'],
-  '/leaderboard.js': ['leaderboard.js', 'text/javascript; charset=utf-8'],
-  '/i18n.js': ['i18n.js', 'text/javascript; charset=utf-8'],
-  '/campus.js': ['campus.js', 'text/javascript; charset=utf-8'],
-  '/sale.js': ['sale.js', 'text/javascript; charset=utf-8'],
-  '/tilt.js': ['tilt.js', 'text/javascript; charset=utf-8'],
-  '/sauna.js': ['sauna.js', 'text/javascript; charset=utf-8'],
-  '/assets/lpr-logo.jpg': ['assets/lpr-logo.jpg', 'image/jpeg'],
-  '/assets/driver-hand.png': ['assets/driver-hand.png', 'image/png'],
-  '/assets/driver-arm.png': ['assets/driver-arm.png', 'image/png'],
-  ...Object.fromEntries(['hk-sininen','megaforce','karjala','fazer-sininen','remix','lihapiirakka','snellman-nakki']
-    .map(id=>[`/assets/${id}.jpg`,[`assets/${id}.jpg`,'image/jpeg']]))
-};
-
-const port = Number(process.env.PORT) || 8000;
-http.createServer((request, response) => {
-  const item = files[new URL(request.url, 'http://localhost').pathname];
-  if (!item) { response.writeHead(404); response.end('Not found'); return; }
-  response.writeHead(200, { 'Content-Type': item[1] });
-  fs.createReadStream(path.join(__dirname, item[0])).pipe(response);
-}).listen(port, '0.0.0.0', () => {
-  console.log(`LPR Lap Challenge: http://localhost:${port}`);
-});
+const http=require('node:http');
+const fs=require('node:fs');
+const path=require('node:path');
+const {root,gameFiles,readDocument,dataScript}=require('./scripts/build.cjs');
+const {validate}=require('./shared/track-document.js');
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp'};
+function createServer({production=false}={}) {
+  const base=production?path.join(root,'dist'):root;
+  const allowed=new Set([...gameFiles,'shared/track-document.js','shared/track-objects.js','data/track-objects.json']);
+  if(!production)for(const name of ['editor.html','editor.js','editor.css'])allowed.add(`tools/track-editor/${name}`);
+  return http.createServer(async(request,response)=>{
+    const pathname=new URL(request.url,'http://localhost').pathname;
+    const reply=(code,text)=>{response.writeHead(code,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});response.end(text);};
+    if(pathname==='/api/dev/track-objects') {
+      if(production)return reply(404,'Not found');
+      if(request.method!=='PUT')return reply(405,'Method not allowed');
+      // Browser writes must originate from this local development server.
+      let origin;
+      try{origin=new URL(request.headers.origin);}catch{return reply(403,'Local editor only');}
+      const localHosts=new Set(['localhost','127.0.0.1','[::1]']);
+      if(origin.protocol!=='http:' || origin.host!==request.headers.host || !localHosts.has(origin.hostname) || !['127.0.0.1','::1','::ffff:127.0.0.1'].includes(request.socket.remoteAddress))return reply(403,'Local editor only');
+      if(request.headers['content-type']!=='application/json')return reply(415,'Expected application/json');
+      try {
+        let body='';let size=0;
+        for await(const chunk of request){size+=chunk.length;if(size>1000000)return reply(413,'File too large');body+=chunk.toString();}
+        const doc={version:1,objects:validate(JSON.parse(body))};
+        fs.writeFileSync(path.join(root,'data/track-objects.json'),JSON.stringify(doc,null,2)+'\n');
+        return reply(200,'Saved');
+      } catch(error){return reply(400,error.message);}
+    }
+    if(!['GET','HEAD'].includes(request.method))return reply(405,'Method not allowed');
+    if(!production && pathname==='/data/track-data.js') {
+      try{response.writeHead(200,{'Content-Type':mime['.js'],'Cache-Control':'no-store'});return response.end(request.method==='HEAD'?undefined:dataScript(readDocument()));}catch(e){return reply(500,e.message);}
+    }
+    const name=pathname==='/'?'index.html':pathname.slice(1);
+    const asset=/^assets\/[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(name);
+    if(!allowed.has(name)&&!asset&&!(production&&name==='data/track-data.js'))return reply(404,'Not found');
+    const file=path.join(base,name);
+    if(!fs.existsSync(file)||!fs.statSync(file).isFile())return reply(404,'Not found');
+    response.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'});
+    if(request.method==='HEAD')return response.end();
+    fs.createReadStream(file).pipe(response);
+  });
+}
+module.exports={createServer};
+if(require.main===module){
+  const production=process.argv.includes('--production'),port=Number(process.env.PORT)||8000;
+  if(production&&!fs.existsSync(path.join(root,'dist/index.html')))throw Error('Run npm run build first.');
+  createServer({production}).listen(port,'127.0.0.1',()=>{
+    console.log(`Peli: http://localhost:${port}`);
+    if(!production)console.log(`Kehitystyökalu: http://localhost:${port}/tools/track-editor/editor.html`);
+  });
+}

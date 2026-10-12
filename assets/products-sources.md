@@ -16,6 +16,14 @@ Product artwork used on the Sale shelves (downloaded 2026-10-08):
 
 Brands and packaging artwork belong to their respective owners. Karjala is depicted in a can; the other packages follow the catalogue images of the products supplied as references.
 
+Additional package photographs downloaded on 2026-10-12:
+
+| File | Source |
+| --- | --- |
+| maito.jpg | https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430000128_kuva1.jpg |
+| tomaattimurska.jpg | https://cdn.s-cloud.fi/v1/h480w480/product/ean/0000080042556_kuva1.jpg |
+| salmiakki-mix.jpg | https://cdn.s-cloud.fi/v1/h480w480/product/ean/6416453048850_kuva1.jpg |
+
 Ice cream artwork supplied by the user on 2026-10-08, copied without modification:
 
 | File | Supplied reference |

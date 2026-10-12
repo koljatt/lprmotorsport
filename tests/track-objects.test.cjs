@@ -1,0 +1,44 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const doc={version:1,objects:[{type:'barrier',x:4500,y:4000,angle:Math.PI/2,scale:2}]};
+let stored=JSON.stringify(doc);
+const context={window:{LPRTrackData:doc},console};
+vm.createContext(context);
+for(const f of ['campus.js','shared/track-document.js','shared/track-objects.js'])vm.runInContext(fs.readFileSync(f,'utf8'),context);
+const api=context.window.LPRTrackObjects;
+assert.equal(context.window.LPRCampus.trackCones,undefined,'No automatic trackside cones should remain');
+assert.equal(api.active,true);
+assert.throws(()=>api.validate({version:2,objects:[]}));
+for(const patch of [{type:'unknown'},{x:NaN},{scale:0},{y:4401}])assert.throws(()=>api.validate({version:1,objects:[{...doc.objects[0],...patch}]}));
+assert.equal(api.validate(JSON.parse(stored)).length,1);
+const quads=[];api.build({quad:(...args)=>quads.push(args)});
+assert(quads.length>50,'A guardrail should render posts and corrugated metal beam geometry');
+const points=quads.flatMap(q=>q.slice(0,4));
+assert.equal(Math.min(...points.map(p=>p[0])),4492);
+assert.equal(Math.max(...points.map(p=>p[2])),4040);
+const previous={x:4500,y:3900},car={x:4500,y:4100};
+assert.ok(context.window.LPRCampus.resolveObstacleCollision(car,previous),'swept collision with rotated added barrier');
+assert.ok(car.y<4000);
+console.log('PASS: document validation, save/load, rotated geometry and swept collision');
+
+const expandedContext={window:{LPRTrackData:{version:1,objects:[
+  {type:'tyreWall',x:2500,y:2200,angle:Math.PI/4,scale:1},
+  {type:'building',x:3000,y:2200,angle:Math.PI/6,scale:1},
+  {type:'asphalt',x:2000,y:2200,angle:Math.PI/3,scale:1}
+]}}};
+vm.createContext(expandedContext);
+for(const f of ['campus.js','shared/track-document.js','shared/track-objects.js'])vm.runInContext(fs.readFileSync(f,'utf8'),expandedContext);
+const expanded=expandedContext.window.LPRTrackObjects,expandedCampus=expandedContext.window.LPRCampus;
+assert.deepEqual(Object.keys(expanded.types).filter(type=>['tyreWall','building','asphalt'].includes(type)).sort(),['asphalt','building','tyreWall']);
+assert(expanded.onAsphalt(2000,2200),'Asphalt center should count as paved ground');
+assert(!expanded.onAsphalt(2050,2200),'Rotated asphalt bounds should exclude points outside its footprint');
+const customBounds=expandedCampus.obstacleBounds.filter(b=>[2500,3000].some(x=>Math.abs((b.minX+b.maxX)/2-x)<1&&Math.abs((b.minY+b.maxY)/2-2200)<1));
+assert.equal(customBounds.length,2,'Only the tyre wall and building should have custom collision bounds');
+assert.equal(customBounds.filter(b=>b.impactMaterial==='tyres').length,1);
+const rendered=[];expanded.build({quad:(...args)=>rendered.push(args)});
+assert(rendered.length>100,'Tyre wall and rotated building should generate 3D geometry');
+assert(rendered.some(q=>q.slice(0,4).every(point=>point[1]===-.35)),'Asphalt should be a flat drivable-height surface');
+const tireCar={x:2500,y:2200},tirePrevious={x:2450,y:2200};
+assert.ok(expandedCampus.resolveObstacleCollision(tireCar,tirePrevious),'Tyre wall should block the car');
+console.log('PASS: tyre walls, buildings, asphalt and rotation');

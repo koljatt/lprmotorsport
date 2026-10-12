@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
 const source = name => fs.readFileSync(path.join(root, name), 'utf8');
-const context = { window: {} };
+const images = [];
+const context = { window: {}, Image: class { constructor() { images.push(this); } } };
 vm.createContext(context);
 vm.runInContext(source('sauna.js'), context);
 const captions = [];
@@ -145,8 +146,17 @@ vm.runInContext(source('sale.js'), context);
 vm.runInContext(source('renderer3d.js'), context);
 const points = context.window.LPRCampus.track;
 const renderer = new context.window.LPRRenderer3D({ getContext: () => gl }, { getContext: () => ({}) }, points);
-for(const [buffer,data] of uploads) validateMesh(data,renderer.materialMeshes.some(mesh=>mesh.buffer===buffer)?8:6);
+for(const [buffer,data] of uploads) validateMesh(data,renderer.materialMeshes.some(mesh=>mesh.buffer===buffer) || [renderer.saunaArtwork,renderer.kerbMesh,renderer.roadPaintMesh].some(mesh=>mesh?.buffer===buffer) ? 8 : 6);
 assert(renderer.materialMeshes.every(mesh=>mesh.count>0),'Campus must contain brick, concrete, wood and glass surfaces');
+assert(renderer.saunaArtwork.count > 4000, 'Artwork follows both walls with perspective-correct subdivisions');
+const artwork = uploads.get(renderer.saunaArtwork.buffer);
+for(let i=0;i<artwork.length;i+=8) {
+  assert(artwork[i+6]>=0 && artwork[i+6]<=1 && artwork[i+7]>=0 && artwork[i+7]<=1, 'Photo coordinates stay within the supplied image');
+}
+assert.equal(renderer.saunaArtwork.ready,false);
+images.find(image=>image.src==='assets/sauna-reference.jpg').onload();
+assert.equal(renderer.saunaArtwork.ready,true,'Artwork is drawn only after the image loads');
+renderer.drawKerbs(renderer.saunaArtwork);
 rendererReady=true;
 assert.equal(renderer.saunaGuestMeshes.length, 8);
 assert(renderer.saleVertexCount>0);
@@ -158,6 +168,25 @@ for (const time of [0, 4, 18, 32.5, 34, 36, 38, 39.5, 41, 43, 47.5, 49, 162, 194
   renderer.drawSaunaGuests(car, time * 1000);
   assert(mesh.length > 0);
   renderer.drawSaunaLadle(car, time * 1000);
+}
+
+// The throwing arm follows the player's shoulder on either bench, including
+// after walking and turning, while the hand still grips the ladle.
+for (const side of [-1, 1]) for (const yaw of [0, Math.PI / 2, Math.PI]) {
+  const player = { saunaSide: side, saunaX: 1987, saunaZ: side * 5,
+    saunaYaw: yaw, steamAt: 1000, steamActor: 'player' };
+  renderer.drawSaunaLadle(player, 1450);
+  const skinPoints = [];
+  for (let i = 0; i < mesh.length; i += 6) {
+    if (Math.abs(mesh[i + 3] - .86) < 1e-6 && Math.abs(mesh[i + 4] - .64) < 1e-6)
+      skinPoints.push([mesh[i], mesh[i + 1], mesh[i + 2]]);
+  }
+  const shoulder = [player.saunaX - .8 * Math.cos(yaw) - 1.1 * Math.sin(yaw),
+    14.6, player.saunaZ - .8 * Math.sin(yaw) + 1.1 * Math.cos(yaw)];
+  assert(skinPoints.some(point => Math.abs(Math.hypot(...point.map((v, i) => v - shoulder[i])) - .38) < .001),
+    'Upper arm must start at the player shoulder');
+  assert(skinPoints.some(point => Math.hypot(point[0] - 1988.3, point[1] - 12.85, point[2] - side * 1.7) < .4),
+    'Hand must remain on the moving ladle handle');
 }
 
 // Integration: driving/settings pause the sauna, and exit stops its audio.

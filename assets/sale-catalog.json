@@ -1,0 +1,218 @@
+[
+  {
+    "id": "maito",
+    "name": "Valio vapaan lehman kevytmaito 1 l",
+    "ean": "6408430000128",
+    "price": 1.35,
+    "image": "assets/maito.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430000128_kuva1.jpg"
+  },
+  {
+    "id": "jogurtti",
+    "name": "Valiojogurtti mansikka 200 g",
+    "ean": "6408430002016",
+    "price": 0.69,
+    "image": "assets/jogurtti.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430002016_kuva1.jpg"
+  },
+  {
+    "id": "maitorahka",
+    "name": "Valio pehmea maitorahka 250 g",
+    "ean": "6408430042081",
+    "price": 0.95,
+    "image": "assets/maitorahka.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430042081_kuva1.jpg"
+  },
+  {
+    "id": "kuohukerma",
+    "name": "Valio Keittion kuohukerma laktoositon 2 dl",
+    "ean": "6408430001538",
+    "price": 1.45,
+    "image": "assets/kuohukerma.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430001538_kuva1.jpg"
+  },
+  {
+    "id": "ruokakerma",
+    "name": "Valio Keittion ruokakerma 15% 2 dl",
+    "ean": "6408430014729",
+    "price": 0.99,
+    "image": "assets/ruokakerma.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430014729_kuva1.jpg"
+  },
+  {
+    "id": "smetana",
+    "name": "Valio Keittion smetana 120 g",
+    "ean": "6408430041022",
+    "price": 1.35,
+    "image": "assets/smetana.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430041022_kuva1.jpg"
+  },
+  {
+    "id": "kermaviili",
+    "name": "Valio Keittion kermaviili 200 g",
+    "ean": "6408430004010",
+    "price": 0.85,
+    "image": "assets/kermaviili.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430004010_kuva1.jpg"
+  },
+  {
+    "id": "voi",
+    "name": "Valio voi 500 g",
+    "ean": "6408430030002",
+    "price": 3.85,
+    "image": "assets/voi.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430030002_kuva1.jpg"
+  },
+  {
+    "id": "juusto",
+    "name": "Valio Oltermanni 500 g",
+    "ean": "6408430033805",
+    "price": 4.99,
+    "image": "assets/juusto.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6408430033805_kuva1.jpg"
+  },
+  {
+    "id": "pasta",
+    "name": "Torino makaroni 400 g",
+    "ean": "6416597115609",
+    "price": 0.39,
+    "image": "assets/pasta.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6416597115609_kuva1.jpg"
+  },
+  {
+    "id": "kaurahiutaleet",
+    "name": "Kotimaista luomu kaurahiutale 850 g",
+    "ean": "6415712001070",
+    "price": 1.19,
+    "image": "assets/kaurahiutaleet.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6415712001070_kuva1.jpg"
+  },
+  {
+    "id": "hernekeitto",
+    "name": "Kotimaista hernekeitto 435 g",
+    "ean": "6415712600150",
+    "price": 1.19,
+    "image": "assets/hernekeitto.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6415712600150_kuva1.jpg"
+  },
+  {
+    "id": "kahvi",
+    "name": "Paulig Juhla Mokka 500 g",
+    "ean": "6411300000494",
+    "price": 6.49,
+    "image": "assets/kahvi.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6411300000494_kuva1.jpg"
+  },
+  {
+    "id": "ruisleipa",
+    "name": "Vaasan Ruispalat 330 g",
+    "ean": "6437005003752",
+    "price": 1.22,
+    "image": "assets/ruisleipa.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6437005003752_kuva1.jpg"
+  },
+  {
+    "id": "tee",
+    "name": "Lipton Yellow Label 50 pussia",
+    "ean": "8720608009268",
+    "price": 2.79,
+    "image": "assets/tee.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/8720608009268_kuva1.jpg"
+  },
+  {
+    "id": "riisi",
+    "name": "Bens Original basmatiriisi 1 kg",
+    "ean": "5410673006134",
+    "price": 3.99,
+    "image": "assets/riisi.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/5410673006134_kuva1.jpg"
+  },
+  {
+    "id": "tomaattimurska",
+    "name": "Mutti Polpa 400 g",
+    "ean": "0000080042556",
+    "price": 1.05,
+    "image": "assets/tomaattimurska.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/0000080042556_kuva1.jpg"
+  },
+  {
+    "id": "paahtoleipa",
+    "name": "Vaasan ISOpaahto Graham 500 g",
+    "ean": "6437005040986",
+    "price": 2.15,
+    "image": "assets/paahtoleipa.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6437005040986_kuva1.jpg"
+  },
+  {
+    "id": "astianpesuaine",
+    "name": "Fairy Original 450 ml",
+    "ean": "8001090510327",
+    "price": 3.15,
+    "image": "assets/astianpesuaine.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/8001090510327_kuva1.jpg"
+  },
+  {
+    "id": "talouspaperi",
+    "name": "Lotus Emilia Design 4 rll",
+    "ean": "6413200034067",
+    "price": 3.45,
+    "image": "assets/talouspaperi.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6413200034067_kuva1.jpg"
+  },
+  {
+    "id": "maksalaatikko",
+    "name": "Saarioinen maksalaatikko 400 g",
+    "ean": "6412000030026",
+    "price": 2.69,
+    "image": "assets/maksalaatikko.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6412000030026_kuva1.jpg"
+  },
+  {
+    "id": "nuudelit",
+    "name": "Nissin Demae Ramen kana 100 g",
+    "ean": "8712429350100",
+    "price": 0.89,
+    "image": "assets/nuudelit.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/8712429350100_kuva1.jpg"
+  },
+  {
+    "id": "oatly",
+    "name": "Oatly iKaffe Chilled 1 l",
+    "ean": "7394376620171",
+    "price": 2.49,
+    "image": "assets/oatly.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/7394376620171_kuva1.jpg"
+  },
+  {
+    "id": "kirpeat-mix",
+    "name": "Fazer Assa Mix 220 g",
+    "ean": "6416453051324",
+    "price": 2.49,
+    "image": "assets/kirpeat-mix.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6416453051324_kuva1.jpg"
+  },
+  {
+    "id": "karkki-mix",
+    "name": "Malaco Aakkoset Sirkus 340 g",
+    "ean": "6420256016527",
+    "price": 2.39,
+    "image": "assets/karkki-mix.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6420256016527_kuva1.jpg"
+  },
+  {
+    "id": "vaahtokarkit",
+    "name": "Haribo Chamallows Original 250 g",
+    "ean": "5410358454939",
+    "price": 2.75,
+    "image": "assets/vaahtokarkit.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/5410358454939_kuva1.jpg"
+  },
+  {
+    "id": "salmiakki-mix",
+    "name": "Fazer Pantteri Mix 230 g",
+    "ean": "6416453048850",
+    "price": 2.67,
+    "image": "assets/salmiakki-mix.jpg",
+    "imageSource": "https://cdn.s-cloud.fi/v1/h480w480/product/ean/6416453048850_kuva1.jpg"
+  }
+]

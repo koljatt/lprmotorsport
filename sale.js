@@ -1,88 +1,112 @@
 /* Sale Skinnarila, stylised from the supplied exterior and interior photos. */
 window.LPRSale = {
   products: [
-    {"id":"riisi","name":"Riisi","packageLabel":"Riisi","color":[0.88,0.79,0.5],"width":4,"height":5},
-    {"id":"pasta","name":"Pasta","packageLabel":"Pasta","color":[0.85,0.57,0.13],"width":4,"height":5},
-    {"id":"kaurahiutaleet","name":"Kaurahiutaleet","packageLabel":"Kaurahiutaleet","color":[0.73,0.41,0.15],"width":4,"height":5.5},
-    {"id":"kahvi","name":"Kahvi","packageLabel":"Kahvi","color":[0.35,0.13,0.08],"width":4,"height":4.5},
-    {"id":"tee","name":"Tee","packageLabel":"Tee","color":[0.18,0.42,0.22],"width":4,"height":3.5},
-    {"id":"tomaattimurska","name":"Tomaattimurska","packageLabel":"Tomaattimurska","color":[0.77,0.16,0.08],"width":3.5,"height":4},
-    {"id":"hernekeitto","name":"Hernekeitto","packageLabel":"Hernekeitto","color":[0.34,0.48,0.16],"width":3.5,"height":4},
-    {"id":"maito","name":"Maito","packageLabel":"Maito","color":[0.18,0.45,0.73],"width":3,"height":6},
-    {"id":"jogurtti","name":"Jogurtti","packageLabel":"Jogurtti","color":[0.82,0.35,0.5],"width":3,"height":4},
-    {"id":"juusto","name":"Juusto","packageLabel":"Juusto","color":[0.88,0.72,0.24],"width":4.8,"height":3.5},
-    {"id":"ruisleipa","name":"Ruisleip?","packageLabel":"Ruisleip?","color":[0.53,0.32,0.12],"width":5,"height":4},
-    {"id":"paahtoleipa","name":"Paahtoleip?","packageLabel":"Paahtoleip?","color":[0.69,0.5,0.25],"width":5,"height":5},
-    {"id":"talouspaperi","name":"Talouspaperi","packageLabel":"Talouspaperi","color":[0.55,0.66,0.7],"width":5,"height":5.5},
-    {"id":"astianpesuaine","name":"Astianpesuaine","packageLabel":"Astianpesuaine","color":[0.12,0.5,0.34],"width":3,"height":5.5},
+    {"id":"riisi","name":"Ben's Original basmatiriisi 1 kg","image":"assets/riisi.jpg","color":[0.88,0.79,0.5],"width":4,"height":5},
+    {"id":"pasta","name":"Torino makaroni 400 g","image":"assets/pasta.jpg","color":[0.85,0.57,0.13],"width":4,"height":5},
+    {"id":"kaurahiutaleet","name":"Kotimaista luomukaurahiutale 850 g","image":"assets/kaurahiutaleet.jpg","color":[0.73,0.41,0.15],"width":4,"height":5.5},
+    {"id":"kahvi","name":"Paulig Juhla Mokka 500 g","image":"assets/kahvi.jpg","color":[0.35,0.13,0.08],"width":4,"height":4.5},
+    {"id":"tee","name":"Lipton Yellow Label 50 pussia","image":"assets/tee.jpg","color":[0.18,0.42,0.22],"width":4,"height":3.5},
+    {"id":"tomaattimurska","name":"Mutti Polpa tomaattimurska 400 g","image":"assets/tomaattimurska.jpg","color":[0.77,0.16,0.08],"width":3.5,"height":4},
+    {"id":"hernekeitto","name":"Kotimaista hernekeitto 435 g","image":"assets/hernekeitto.jpg","color":[0.34,0.48,0.16],"width":3.5,"height":4},
+    {"dairy":true,"id":"maito","name":"Valio vapaan lehmän kevytmaito 1 l","image":"assets/maito.jpg","color":[0.18,0.45,0.73],"width":3,"height":6},
+    {"dairy":true,"shape":"tub","id":"jogurtti","name":"Valiojogurtti mansikka 200 g","image":"assets/jogurtti.jpg","color":[0.82,0.35,0.5],"width":3,"height":4},
+    {"dairy":true,"id":"juusto","name":"Valio Oltermanni 500 g","image":"assets/juusto.jpg","color":[0.88,0.72,0.24],"width":4.8,"height":3.5},
+    {"id":"ruisleipa","name":"Vaasan Ruispalat 330 g","image":"assets/ruisleipa.jpg","color":[0.53,0.32,0.12],"width":5,"height":4},
+    {"id":"paahtoleipa","name":"Vaasan ISOpaahto Graham 500 g","image":"assets/paahtoleipa.jpg","color":[0.69,0.5,0.25],"width":5,"height":5},
+    {"id":"talouspaperi","name":"Lotus Emilia Design 4 rll","image":"assets/talouspaperi.jpg","color":[0.55,0.66,0.7],"width":5,"height":5.5},
+    {"id":"astianpesuaine","name":"Fairy Original 450 ml","image":"assets/astianpesuaine.jpg","color":[0.12,0.5,0.34],"width":3,"height":5.5},
+    {id:'maitorahka',name:'Valio pehmeä maitorahka 250 g',image:'assets/maitorahka.jpg',color:[.31,.59,.82],width:3.2,height:3.5,dairy:true,shape:'tub',amount:'250 g'},
+    {id:'kuohukerma',name:'Valio Keittiön kuohukerma laktoositon 2 dl',image:'assets/kuohukerma.jpg',color:[.72,.24,.31],width:2.8,height:4.5,dairy:true,amount:'2 dl'},
+    {id:'ruokakerma',name:'Valio Keittiön ruokakerma 15% 2 dl',image:'assets/ruokakerma.jpg',color:[.28,.62,.36],width:2.8,height:4.5,dairy:true,amount:'2 dl'},
+    {id:'smetana',name:'Valio Keittiön smetana 120 g',image:'assets/smetana.jpg',color:[.72,.52,.18],width:3,height:3.2,dairy:true,shape:'tub',amount:'120 g'},
+    {id:'kermaviili',name:'Valio Keittiön kermaviili 200 g',image:'assets/kermaviili.jpg',color:[.19,.58,.57],width:3.2,height:3.5,dairy:true,shape:'tub',amount:'200 g'},
+    {id:'voi',name:'Valio voi 500 g',image:'assets/voi.jpg',color:[.91,.74,.24],width:4,height:2.8,dairy:true,amount:'500 g'},
     {id:'doris',name:'Fazer Doris Tryffeli',image:'assets/doris.png',color:[.92,.57,.65],width:5.4,height:4.1},
     {id:'jaffa',name:'Fazer Jaffa Appelsiini',image:'assets/jaffa.webp',color:[.94,.36,.04],width:5.4,height:4.1},
-    {id:'hedelma-mix',name:'Hedelmä Mix',candyLabel:'HEDELMÄ',color:[.92,.28,.06],width:4.7,height:5.6},
-    {id:'salmiakki-mix',name:'Salmiakki Mix',candyLabel:'SALMIAKKI',color:[.12,.1,.16],width:4.7,height:5.6},
-    {id:'kirpeat-mix',name:'Kirpeä Mix',candyLabel:'KIRPEÄ',color:[.75,.06,.4],width:4.7,height:5.6},
-    {id:'lakritsi-mix',name:'Lakritsi Mix',candyLabel:'LAKRITSI',color:[.06,.29,.46],width:4.7,height:5.6},
-    {id:'vaahtokarkit',name:'Vaahtokarkit',candyLabel:'VAAHTO',color:[.36,.66,.08],width:4.7,height:5.6},
-    {id:'karkki-mix',name:'Karkki Mix',candyLabel:'KARKKI',color:[.94,.65,.04],width:4.7,height:5.6},
-    {id:'hartwall-vichy',name:'Hartwall Vichy Original',color:[.85,.86,.8],width:2.8,height:6},
-    {id:'coca-cola',name:'Coca-Cola Original Taste',color:[.85,.03,.04],width:3,height:5.5},
+    {id:'salmiakki-mix',name:'Fazer Pantteri Mix 230 g',image:'assets/salmiakki-mix.jpg',candyLabel:'SALMIAKKI',color:[.12,.1,.16],width:4.7,height:5.6},
+    {id:'kirpeat-mix',name:'Fazer Ässä Mix 220 g',image:'assets/kirpeat-mix.jpg',candyLabel:'KIRPEÄ',color:[.75,.06,.4],width:4.7,height:5.6},
+    {id:'vaahtokarkit',name:'Haribo Chamallows Original 250 g',image:'assets/vaahtokarkit.jpg',candyLabel:'VAAHTO',color:[.36,.66,.08],width:4.7,height:5.6},
+    {id:'karkki-mix',name:'Malaco Aakkoset Sirkus 340 g',image:'assets/karkki-mix.jpg',candyLabel:'KARKKI',color:[.94,.65,.04],width:4.7,height:5.6},
+    {id:'hartwall-vichy',name:'Hartwall Vichy Original 1,5 l',image:'assets/hartwall-vichy.jpg',color:[.85,.86,.8],width:2.8,height:6},
+    {id:'coca-cola',name:'Coca-Cola Original Taste 1,5 l',image:'assets/coca-cola.jpg',color:[.85,.03,.04],width:3,height:5.5},
     {id:'ekstroms-vadelma',name:'Ekströms Vadelmainen sekamehu',image:'assets/ekstroms-vadelma.webp',color:[.24,.04,.08],width:2.8,height:6},
-    {id:'marli-juissi',name:'Marli Juissi Mustikka-vadelma',color:[.7,.12,.35],width:3,height:6},
-    {id:'hk-sininen',name:'HK Sininen Lenkki',color:[.9,.88,.8],width:5.8,height:5.5},
-    {id:'megaforce',name:'Megaforce',color:[.75,.04,.03],width:3,height:6},
-    {id:'karjala',name:'Karjala',color:[.08,.07,.06],width:3,height:6},
-    {id:'fazer-sininen',name:'Karl Fazer Maitosuklaa',color:[.02,.12,.35],width:6,height:3},
-    {id:'remix',name:'Fazer Remix',color:[.12,.06,.12],width:4.7,height:5.6},
-    {id:'lihapiirakka',name:'HoviRuoka Lihapiirakka',color:[.94,.55,.08],width:6,height:3.8},
-    {id:'snellman-nakki',name:'Snellman Kunnon kuoreton nakki',color:[.03,.33,.16],width:4.8,height:5.8},
-    {id:'banaani',name:'Banaani',color:[.96,.81,.12],width:6,height:3.8},
-    {id:'omena',name:'Omena Royal Gala',color:[.78,.16,.08],width:4.4,height:4.4},
-    {id:'croissant',name:'Voicroissant',color:[.83,.49,.16],width:6,height:3.5},
-    {id:'nakkipiilo',name:'Nakkipiilo',color:[.76,.42,.17],width:6,height:3.6},
-    {id:'aino-maitosuklaa',name:'Aino Ihana Maitosuklaa',color:[.85,.77,.6],width:8,height:4},
+    {id:'marli-juissi',name:'Marli Juissi Mustikka-vadelma',image:'assets/marli-juissi.jpg',color:[.7,.12,.35],width:3,height:6},
+    {id:'hk-sininen',name:'HK Sininen Lenkki',image:'assets/hk-sininen.jpg',color:[.9,.88,.8],width:5.8,height:5.5},
+    {id:'megaforce',name:'Megaforce',image:'assets/megaforce.jpg',color:[.75,.04,.03],width:3,height:6},
+    {id:'karjala',name:'Karjala',image:'assets/karjala.jpg',color:[.08,.07,.06],width:3,height:6},
+    {id:'fazer-sininen',name:'Karl Fazer Maitosuklaa',image:'assets/fazer-sininen.jpg',color:[.02,.12,.35],width:6,height:3},
+    {id:'remix',name:'Fazer Remix',image:'assets/remix.jpg',color:[.12,.06,.12],width:4.7,height:5.6},
+    {id:'lihapiirakka',name:'HoviRuoka Lihapiirakka',image:'assets/lihapiirakka.jpg',color:[.94,.55,.08],width:6,height:3.8},
+    {id:'snellman-nakki',name:'Snellman Kunnon kuoreton nakki',image:'assets/snellman-nakki.jpg',color:[.03,.33,.16],width:4.8,height:5.8},
+    {id:'maksalaatikko',name:'Saarioinen maksalaatikko 400 g',image:'assets/maksalaatikko.jpg',color:[.58,.28,.12],width:5.5,height:3.8},
+    {id:'nuudelit',name:'Nissin Demae Ramen kana 100 g',image:'assets/nuudelit.jpg',color:[.88,.58,.12],width:4,height:4.5},
+    {id:'banaani',name:'Banaani',image:'assets/banaani.jpg',color:[.96,.81,.12],width:6,height:3.8},
+    {id:'omena',name:'Omena Royal Gala',image:'assets/omena.jpg',color:[.78,.16,.08],width:4.4,height:4.4},
+    {id:'croissant',name:'Voicroissant',image:'assets/croissant.jpg',color:[.83,.49,.16],width:6,height:3.5},
+    {id:'nakkipiilo',name:'Nakkipiilo',image:'assets/nakkipiilo.jpg',color:[.76,.42,.17],width:6,height:3.6},
+    {id:'aino-maitosuklaa',name:'Aino Ihana Maitosuklaa',image:'assets/aino-maitosuklaa.jpg',color:[.85,.77,.6],width:8,height:4},
     {id:'pingviini-suklaatuutit',name:'Pingviini Sukkela Suklaa',image:'assets/pingviini-suklaatuutit.png',color:[.05,.12,.5],width:8,height:4},
-    {id:'eskimo-vanilja',name:'Eskimo Vanilja',color:[.16,.56,.8],width:8,height:4},
+    {id:'eskimo-vanilja',name:'Eskimo Vanilja',image:'assets/eskimo-vanilja.jpg',color:[.16,.56,.8],width:8,height:4},
     {id:'pingviini-vanilja',name:'Pingviini Veikeä Vanilja',image:'assets/pingviini-vanilja.webp',color:[.02,.38,.65],width:8,height:4}
   ],
-  entrance: window.LPRCampus.world(520,453),
-  buildExterior({box,quad}) {
+  // Street-facing corner entrance; interaction point sits in front of the threshold.
+  entrance: window.LPRCampus.world(575.2,446.4),
+  buildExterior({box,quad,materialBox=box,artwork=()=>{}}) {
     const p=window.LPRCampus.world(550,462), x=p.x,z=p.y;
-    box(x,0,z,300,65,100,[.86,.88,.87]);
-    box(x,65,z,303,3,103,[.25,.28,.27]);
-    // Panel joints, continuous yellow window advertisements and glazed door.
-    for(let dx=-150;dx<=150;dx+=25) box(x+dx,0,z-50.6,.6,65,.6,[.54,.59,.6]);
-    for(const h of [20,40,60]) box(x,h,z-50.6,300,.6,.6,[.54,.59,.6]);
-    for(let dx=-85;dx<140;dx+=23) {
-      box(x+dx,23,z-51,21,15,1,[.93,.73,.14]);
-      box(x+dx,25,z-52,8,10,.5,[.79,.23,.08]);
+    const white=[.94,.95,.94],metal=[.27,.32,.34];
+    materialBox(x,0,z,300,65,100,white,'concrete');
+    box(x,65,z,304,2,104,[.2,.25,.27]);
+    box(x,0,z-50.8,300,2,1,[.48,.51,.51]);
+    // Fine square panel joints, including the return wall.
+    for(let dx=-150;dx<=100;dx+=25) box(x+dx,2,z-50.7,.35,63,.35,[.55,.6,.62]);
+    for(const h of [18,38,58]) box(x-25,h,z-50.7,250,.35,.35,[.55,.6,.62]);
+    for(let dz=-50;dz<=50;dz+=25) box(x+150.4,0,z+dz,.35,65,.35,[.55,.6,.62]);
+    for(const h of [18,38,58]) box(x+150.4,h,z, .35,.35,100,[.55,.6,.62]);
+    // Full-height glazed corner, divided by charcoal aluminium mullions.
+    materialBox(x+126,0,z-51,47,64,1,[.32,.48,.53],'glass');
+    materialBox(x+150.6,0,z-30,1,64,40,[.32,.48,.53],'glass');
+    for(const dx of [102,125,149]) box(x+dx,0,z-52,1.1,65,1,metal);
+    for(const h of [0,20,42,64]) box(x+126,h,z-52,48,1,1,metal);
+    for(const h of [20,42,64]) box(x+151,h,z-30,1,1,40,metal);
+    // Dark recessed opening and warm shop light behind the open door.
+    box(x+126,0,z-52.1,20,40,.5,[.055,.075,.065]);
+    box(x+126,34,z-52.5,17,1,.3,[1,.89,.52]);
+    for(const dx of [115,137]) box(x+dx,0,z-53,1.3,42,1.3,metal);
+    box(x+126,41,z-53,23,1.5,1.5,metal);
+    const hinge=x+137, tip=x+146, doorZ=z-69;
+    quad([hinge,2,z-53],[tip,2,doorZ],[tip,40,doorZ],[hinge,40,z-53],[.2,.34,.37]);
+    for(const h of [2,15,40]) quad([hinge,h,z-53.2],[tip,h,doorZ-.2],[tip,h+1,doorZ-.2],[hinge,h+1,z-53.2],metal);
+    box(tip,2,doorZ,1,39,1,metal);
+    box(tip-1,17,doorZ-1,.65,8,.65,[.78,.81,.8]);
+    box(x+126,.1,z-64,27,.6,22,[.15,.17,.17]);
+    box(x+126,.8,z-76,29,.5,3,[1,.76,.08]);
+    // Continuous framed advertisement strip below the projecting round sign.
+    box(x-25,21,z-51.5,246,18,1.5,metal);
+    for(let i=0;i<10;i++) {
+      const cx=x+84-i*24;
+      box(cx,22,z-52.5,22,16,.6,i%3===2 ? [.21,.48,.26] : [.99,.76,.16]);
+      artwork('poster'+i,[[cx+11,22,z-53],[cx-11,22,z-53],[cx-11,38,z-53],[cx+11,38,z-53]]);
     }
-    box(x-126,0,z-51,35,41,1,[.16,.28,.31]);
-    for(const dx of [-144,-126,-108]) box(x+dx,0,z-52,1,42,1,[.35,.41,.42]);
-    box(x-126,0,z-67,37,1,31,[.65,.65,.59]);
-    box(x-126,1,z-81,37,1,2,[.95,.71,.05]);
-    // Circular projecting red Sale sign, with white lettering.
-    const cx=x-88, cy=49, front=z-54;
-    for(let i=0;i<40;i++) {
-      const a=i*Math.PI/20,b=(i+1)*Math.PI/20;
-      quad([cx,cy,front],[cx+Math.cos(a)*16,cy+Math.sin(a)*16,front],
-        [cx+Math.cos(b)*16,cy+Math.sin(b)*16,front],[cx,cy,front],[.85,.03,.1]);
+    const cx=x+85,cy=49,front=z-56;
+    box(cx,48,z-53,3,3,6,metal);
+    for(let i=0;i<64;i++) {
+      const a=i*Math.PI/32,b=(i+1)*Math.PI/32;
+      quad([cx,cy,front],[cx+Math.cos(a)*13,cy+Math.sin(a)*13,front],
+        [cx+Math.cos(b)*13,cy+Math.sin(b)*13,front],[cx,cy,front],[.88,.015,.065]);
     }
-    const glyphs={S:['111','100','111','001','111'],a:['000','110','001','111','111'],l:['10','10','10','10','11'],e:['000','111','101','110','111']};
-    // From the street (-Z), screen-right points toward decreasing world X.
-    let cursor=-12;
-    for(const letter of 'Sale') {
-      glyphs[letter].forEach((row,r)=>[...row].forEach((bit,c)=>{
-        if(bit==='1') box(cx-(cursor+c*1.8+(4-r)*.25),cy+4-r*1.8,front-.5,1.6,1.6,.4,[1,1,.97]);
-      }));
-      cursor+=letter==='l' ? 4.8 : 6.8;
+    artwork('sign',[[cx+13,cy-13,front-.1],[cx-13,cy-13,front-.1],[cx-13,cy+13,front-.1],[cx+13,cy+13,front-.1]]);
+    // Paved approach, retaining curb and two continuous steel handrails.
+    materialBox(x,0,z-67,300,.3,29,[.52,.54,.52],'concrete');
+    box(x-12,0,z-81,230,3,2,[.83,.85,.82]);
+    for(const railZ of [z-79,z-58]) {
+      for(let dx=-124;dx<=94;dx+=22) box(x+dx,1,railZ,.65,11,.65,[.59,.65,.67]);
+      for(const h of [7,12]) box(x-15,h,railZ,220,.65,.65,[.65,.7,.72]);
     }
-    // Accessible side ramp and steel railing.
-    box(x+45,0,z-68,155,2,24,[.58,.6,.59]);
-    for(let dx=-28;dx<125;dx+=20) box(x+dx,2,z-79,1,10,1,[.52,.57,.57]);
-    box(x+45,12,z-79,155,1,1,[.52,.57,.57]);
   },
-  buildInterior({box,quad=()=>{},productFace=()=>{}}) {
+  buildInterior({box,quad=()=>{},productFace=()=>{},artwork=()=>{}}) {
     const b=(x,y,z,w,h,d,c)=>box(-6000+x,y,z,w,h,d,c);
     const q=(a,c,d,e,color)=>quad(...[a,c,d,e].map(p=>[p[0]-6000,p[1],p[2]]),color);
+    const label=(id,x,y,z,w,h)=>artwork(id,[[x-6000-w/2,y,z],[x-6000+w/2,y,z],[x-6000+w/2,y+h,z],[x-6000-w/2,y+h,z]]);
     const apple=(x,y,z,seed=0)=>{
       const radius=1.65+.12*Math.sin(seed*2.7);
       const point=(ring,segment)=>{
@@ -137,12 +161,27 @@ window.LPRSale = {
       if(id==='omena') { apple(x,y,z,x+z); return; }
       const product=this.products.find(p=>p.id===id),w=product.width,h=product.height;
       if(id==='remix' || product.candyLabel) { candyBag(product,x,y,z,side,'z'); return; }
-      b(x,y,z,w,h,2.6,product.color);
-      const faceZ=z+side*1.32;
+      if(product.shape==='tub') {
+        const radius=w/2,point=(a,v,r)=>[x+Math.cos(a)*r,y+v,z+Math.sin(a)*r];
+        for(let i=0;i<16;i++) {
+          const a=i*Math.PI/8,c=(i+1)*Math.PI/8;
+          q(point(a,0,radius*.8),point(c,0,radius*.8),point(c,h-.3,radius),point(a,h-.3,radius),[.92,.94,.92]);
+          q([x,y+h,z],point(a,h,radius*1.05),point(c,h,radius*1.05),[x,y+h,z],product.color);
+        }
+      } else {
+        b(x,y,z,w,h,2.6,product.dairy ? [.93,.94,.9] : product.color);
+        if(product.dairy && id!=='voi' && id!=='juusto') {
+          q([x-w/2,y+h,z-1.3],[x+w/2,y+h,z-1.3],[x+w/2,y+h+.7,z],[x-w/2,y+h+.7,z],[.84,.86,.83]);
+          q([x-w/2,y+h,z+1.3],[x+w/2,y+h,z+1.3],[x+w/2,y+h+.7,z],[x-w/2,y+h+.7,z],product.color);
+          b(x,y+h+.7,z,.9,.25,.7,product.color);
+        }
+      }
+      // Tub labels must sit beyond the widest curved wall, not inside it.
+      const faceZ=z+side*(product.shape==='tub' ? w/2+.04 : 1.32);
       productFace(id,[[x-6000-side*w/2,y,faceZ],[x-6000+side*w/2,y,faceZ],
         [x-6000+side*w/2,y+h,faceZ],[x-6000-side*w/2,y+h,faceZ]]);
     };
-    const candyIds=['hedelma-mix','salmiakki-mix','kirpeat-mix','lakritsi-mix','vaahtokarkit','karkki-mix','remix'];
+    const candyIds=['salmiakki-mix','kirpeat-mix','vaahtokarkit','karkki-mix','remix'];
     const candyRack=(x,z,side,axis,width,columns)=>{
       const p=(u,y,d)=>axis==='x' ? [x+side*d,y,z-side*u] : [x+side*u,y,z+side*d];
       const block=(u,y,d,w,h,depth,color)=>b(...p(u,y,d),...(axis==='x' ? [depth,h,w] : [w,h,depth]),color);
@@ -170,18 +209,31 @@ window.LPRSale = {
         if(axis==='x') stock('fazer-sininen',...pos,side); else stockZ('fazer-sininen',...pos,side);
       }
     };
-    const dryGoods=['riisi','pasta','kaurahiutaleet','kahvi','tee','tomaattimurska','hernekeitto'];
-    const department=z=>z>70 ? ['ruisleipa','paahtoleipa'] : z>20 ? dryGoods :
-      z>-20 ? ['hk-sininen','snellman-nakki','lihapiirakka'] :
-      z>-75 ? ['maito','jogurtti','juusto'] : ['talouspaperi','astianpesuaine'];
-    b(0,-1,0,180,1,300,[.36,.38,.35]);
+    const dryGoods=['riisi','pasta','kaurahiutaleet','kahvi','tee','tomaattimurska','hernekeitto','nuudelit'];
+    // Perimeter shelving is ambient; chilled products stay in the cases.
+    const department=z=>z>70 ? ['ruisleipa','paahtoleipa'] :
+      z<=-75 ? ['talouspaperi','astianpesuaine'] : dryGoods;
+    b(0,-1,0,180,1,300,[.56,.58,.56]);
+    // Individual ceramic tiles with quiet variation and recessed grout.
+    for(let iz=0;iz<30;iz++) for(let ix=0;ix<18;ix++) {
+      const tone=.68+.025*Math.sin(ix*17+iz*31);
+      b(-85+ix*10,-.03,-145+iz*10,9.85,.05,9.85,[tone,tone+.015,tone]);
+    }
+    for(const x of [-88,88]) b(x,0,0,.7,2,298,[.28,.31,.29]);
     b(0,45,0,180,2,300,[.28,.3,.29]);
     for(const x of [-90,90]) b(x,0,0,2,45,300,[.7,.71,.67]);
     for(const z of [-150,150]) b(0,0,z,180,45,2,[.7,.71,.67]);
+    // Suspended ceiling grid, framed diffusers and warm perimeter trim.
+    for(let x=-90;x<=90;x+=15) b(x,44,0,.3,.3,298,[.48,.51,.49]);
+    for(let z=-150;z<=150;z+=15) b(0,44,z,178,.3,.3,[.48,.51,.49]);
+    for(const x of [-88,88]) b(x,35,0,1,4,298,[.96,.75,.12]);
     // Ceiling panels and long bright strip lights.
     for(let z=-130;z<150;z+=35) {
       b(-20,43,z,110,1,28,[.72,.73,.67]);
-      for(const x of [-55,35]) b(x,41,z,2,1,27,[1,1,.88]);
+      for(const x of [-55,35]) {
+        b(x,42,z,5,1,29,[.64,.68,.68]);
+        b(x,41.8,z,3.5,.2,27,[1,1,.96]);
+      }
     }
     // Meat and chilled foods follow dry groceries, midway into the shop.
     b(80,0,0,18,36,70,[.16,.18,.17]);
@@ -191,8 +243,8 @@ window.LPRSale = {
       b(66,15,z+2,1,10,1,[.67,.69,.65]);
       for(let h=3;h<34;h+=7) {
         b(74,h,z+11,14,.8,21,[.76,.77,.7]);
-        const chilled=['hk-sininen','snellman-nakki','lihapiirakka'];
-        for(let item=0;item<3;item++) stock(chilled[Math.floor((z+34)/23)%3],69,h+1,z+4+item*7,-1);
+        const chilled=['hk-sininen','snellman-nakki','lihapiirakka','maksalaatikko'];
+        for(let item=0;item<4;item++) stock(chilled[(item+Math.floor((z+34)/23))%chilled.length],69,h+1,z+3+item*4.8,-1);
       }
       b(67,1,z+11,.5,1,22,[.65,.71,.7]);
       b(67,34,z+11,.5,1,22,[.65,.71,.7]);
@@ -204,12 +256,18 @@ window.LPRSale = {
       for(const side of [-1,1]) {
         if(z===30 && side===-1) { candyRack(x-35,z,-1,'x',60,10); continue; }
         for(let h=2;h<29;h+=7) {
-          b(x+side*27,h,z,18,1,60,[.74,.75,.68]);
-          for(let item=0;item<10;item++) {
-            // Biscuits occupy one small vertical bay, not entire aisles.
+          b(x+side*27,h,z,18,1,60,[.84,.86,.82]);
+          b(x+side*36,h,z,.5,1,60,[.38,.42,.4]);
+          for(let priceZ=z-26;priceZ<z+30;priceZ+=5.8) {
+            const faceX=-6000+x+side*36.3;
+            artwork('price',[[faceX,h,priceZ+side*2],[faceX,h,priceZ-side*2],
+              [faceX,h+.85,priceZ-side*2],[faceX,h+.85,priceZ+side*2]]);
+          }
+          const facingProducts=side===1 && shelf.reverseProducts ? shelf.reverseProducts : products;
+          for(let item=0;item<12;item++) {
             const id=side===1 && z===-30 && item<2 ? (item===0 ? 'doris' : 'jaffa') :
-              side===1 ? dryGoods[Math.floor(item*dryGoods.length/10)] : products[Math.floor(item*products.length/10)];
-            stock(id,x+side*35,h+1,z-26+item*5.8,side);
+              facingProducts[Math.floor(item*facingProducts.length/12)];
+            stock(id,x+side*35,h+1,z-26+item*4.8,side);
           }
 
         }
@@ -242,6 +300,7 @@ window.LPRSale = {
     }
     // Both end walls are stocked, with a clear opening at the entrance.
     for(const side of [-1,1]) for(const x of [-66,-44,-22,0,24,48]) {
+      if(side===-1) continue; // Back wall is dedicated to refrigerated dairy.
       if(side===1 && x>=-22 && x<=48) continue; // Separate entry and exit openings.
       b(x,0,side*146,22,30,6,[.23,.25,.23]);
       const ids=side===1 ? (x===-66 ? ['croissant','nakkipiilo'] : ['ruisleipa','paahtoleipa']) : ['talouspaperi','astianpesuaine'];
@@ -250,6 +309,39 @@ window.LPRSale = {
         for(let item=0;item<3;item++) stockZ(ids[item%ids.length],x-7+item*7,h+1,side*140,-side);
       }
     }
+    // Nine illuminated refrigeration bays on the back wall; clear cross-aisle in front.
+    const dairy=['maito','jogurtti','maitorahka','kuohukerma','ruokakerma','smetana','kermaviili','voi','juusto'];
+    this.dairyBays.forEach((bay,index)=>{
+      const x=bay.x,z=-144,id=dairy[index];
+      b(x,0,z-4.5,15,37,1,[.21,.25,.26]);
+      b(x,3,z-3.9,13,29,.2,[.87,.92,.93]);
+      for(const dx of [-7.2,7.2]) b(x+dx,0,z,.6,37,10,[.21,.25,.26]);
+      b(x,32,z,15,1,10,[.21,.25,.26]);
+      b(x,0,z+5.3,15,3,.8,[.12,.13,.17]);
+      for(let vent=-7;vent<=7;vent+=1.5) b(x+vent,1,z+5.8,.7,.2,.15,[.45,.5,.5]);
+      for(const dx of [-7,7]) {
+        b(x+dx,3,z+6,.65,30,.65,[.34,.41,.43]);
+        b(x+dx*.9,4,z+5.2,.3,28,.3,[.86,.98,1]);
+      }
+      for(let level=0;level<4;level++) {
+        const h=4+level*7;
+        b(x,h,z+1,13,.5,8,[.72,.8,.82]);
+        b(x,h,z+5.5,13,.8,.4,[.28,.35,.37]);
+        for(let column=0;column<4;column++) {
+          const px=x-4.5+column*3;
+          // A second row adds depth behind the aisle-facing packages.
+          stockZ(id,px,h+.6,z-.7,1);
+          stockZ(id,px,h+.6,z+3,1);
+        }
+        label('price',x,h,z+5.8,6,.75);
+      }
+      b(x,33,z+5.6,15,4,.8,[.13,.34,.37]);
+      label(id,x,33.5,z+6.1,13,2.7);
+      b(x+5.7,13,z+6.2,.55,9,.7,[.68,.75,.77]);
+      // Narrow reflected streaks suggest glass without hiding the product artwork.
+      q([x-6,6,z+6.1],[x-5.5,6,z+6.1],[x-3,31,z+6.1],[x-3.5,31,z+6.1],[.64,.78,.8]);
+    });
+    label('dairy',-4,38,-138,95,5);
     // Bottle-return machine: dark intake, screen and green status light.
     b(-80,0,81,14,30,22,[.64,.68,.65]);
     b(-72.8,8,81,.5,20,18,[.15,.19,.17]);
@@ -366,10 +458,12 @@ window.LPRSale = {
     b(-47,20,129.4,3,2,.4,[.96,.96,.88]);
   },
   shelves: [
-    {x:-3,z:30,products:['riisi','pasta','kaurahiutaleet','kahvi','tee']},
-    {x:-3,z:-30,products:['hartwall-vichy','coca-cola','ekstroms-vadelma','marli-juissi','megaforce','karjala']},
+    {x:-3,z:30,products:['riisi','pasta','kaurahiutaleet','kahvi','tee','tomaattimurska','hernekeitto','nuudelit']},
+    {x:-3,z:-30,products:['hartwall-vichy','coca-cola','ekstroms-vadelma','marli-juissi','megaforce','karjala'],
+      reverseProducts:['riisi','pasta','kaurahiutaleet','kahvi','tee','tomaattimurska','hernekeitto','nuudelit']},
     {x:-3,z:-90,products:['talouspaperi','astianpesuaine']}
   ],
+  dairyBays: Array.from({length:9},(_,i)=>({x:-66+i*15})),
   freezer: {x:-79,z:-85,width:22,depth:74},
   canWalk(x,z) {
     if(x<-82 || x>60 || z<-140 || z>139) return false;

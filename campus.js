@@ -30,6 +30,26 @@ window.LPRCampus = (() => {
     const f = (target-distances[segment])/(distances[segment+1]-distances[segment]);
     return { x:a.x+(b.x-a.x)*f, y:a.y+(b.y-a.y)*f };
   });
+  const outsideTrackClearance = (x,y,clearance) => {
+    const clearanceSquared=clearance*clearance;
+    for(let i=0;i<track.length;i++) {
+      const a=track[i],b=track[(i+1)%track.length],dx=b.x-a.x,dy=b.y-a.y;
+      const t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/(dx*dx+dy*dy)));
+      const offsetX=x-(a.x+dx*t),offsetY=y-(a.y+dy*t);
+      if(offsetX*offsetX+offsetY*offsetY<clearanceSquared) return false;
+    }
+    return true;
+  };
+  const lakeOutline = [[590,80],[1050,80],[1050,520],[850,480],[780,400],[745,330],[715,240]]
+    .map(([x,y])=>world(x,y));
+  const inLake = (x,y) => {
+    let inside=false;
+    for(let i=0,j=lakeOutline.length-1;i<lakeOutline.length;j=i++) {
+      const a=lakeOutline[i],b=lakeOutline[j];
+      if((a.y>y)!==(b.y>y) && x<(b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x) inside=!inside;
+    }
+    return inside;
+  };
   const buildings = [
     [240,238,65,70,65],[318,222,35,50,80],[335,285,38,70,75],
     [270,325,115,34,65],[260,385,82,75,65],[370,438,195,32,75],
@@ -53,7 +73,7 @@ window.LPRCampus = (() => {
     // A conservative circular footprint includes the nose and wheels at every
     // heading. Sweep it along the entire step so thin walls cannot be skipped.
     const radius=14, dx=state.x-previous.x, dy=state.y-previous.y;
-    let firstHit=Infinity, normal={x:0,y:0};
+    let firstHit=Infinity, normal={x:0,y:0}, impactMaterial;
     for(const bounds of obstacles) {
       // Test rotated vehicle footprints in their own frame, then rotate the
       // contact normal back so glancing impacts preserve world-space motion.
@@ -82,6 +102,7 @@ window.LPRCampus = (() => {
       }
       if(enter<exit && exit>0 && enter<firstHit) {
         firstHit=enter;
+        impactMaterial=bounds.impactMaterial;
         normal={x:hitNormal.x*cos-hitNormal.y*sin,y:hitNormal.x*sin+hitNormal.y*cos};
       }
     }
@@ -93,11 +114,18 @@ window.LPRCampus = (() => {
       const distance=Math.hypot(dx,dy);
       if(distance>0) normal={x:-dx/distance,y:-dy/distance};
     }
-    return {normal};
+    return {normal,impactMaterial};
   }
   const bonfireSite = world(625,228);
   const parkClearing = (x,z) => [saunaSite,bonfireSite].some(p=>Math.hypot(x-p.x,z-p.y)<110);
-  const occupied = (x,z) => (parkClearing(x,z) || (x > world(449,0).x && x < world(612,0).x &&
+  const parkingLots = [
+    {minX: 850, minY: 1300, maxX: 1650, maxY: 2150},
+    {minX: 1650, minY: 1450, maxX: 2450, maxY: 2200},
+    {minX: 2150, minY: 2550, maxX: 3300, maxY: 3700},
+    {minX: 3300, minY: 2100, maxX: 4620, maxY: 3050}
+  ];
+  const inParkingLot = (x,z) => parkingLots.some(p=>x>=p.minX&&x<=p.maxX&&z>=p.minY&&z<=p.maxY);
+  const occupied = (x,z) => (parkClearing(x,z) || inParkingLot(x,z) || (x > world(449,0).x && x < world(612,0).x &&
     z > world(0,308).y && z < world(0,427).y) || (x > world(650,0).x && x < world(780,0).x && z > world(0,250).y && z < world(0,425).y) || buildings.some(([bx,by,w,d]) => {
     const p = world(bx,by); return Math.abs(x-p.x)<w*scale/2+18 && Math.abs(z-p.y)<d*scale/2+18;
   }));
@@ -105,17 +133,55 @@ window.LPRCampus = (() => {
   let treeSeed = 17;
   const treeRandom = () => { treeSeed = (treeSeed * 1664525 + 1013904223) >>> 0; return treeSeed / 4294967296; };
   const trees = [];
-  for(let i=0;i<track.length;i+=6) {
+  const treeSpecies = () => {
+    const choice=treeRandom();
+    if(choice<.48) return 'pine';
+    if(choice<.83) return 'birch';
+    return 'broadleaf';
+  };
+  const addTree = (x,y,species) => {
+    const profiles={
+      pine:{height:145,spread:24,trunk:3.5,color:[.055,.20,.115]},
+      birch:{height:125,spread:22,trunk:2.5,color:[.12,.29,.17]},
+      broadleaf:{height:82,spread:38,trunk:4.2,color:[.20,.28,.105]}
+    };
+    const profile=profiles[species],height=profile.height+treeRandom()*profile.height*.34;
+    const canopyRadius=profile.spread+treeRandom()*profile.spread*.32;
+    const tint=.88+treeRandom()*.24;
+    trees.push({x,y,species,height,trunkWidth:profile.trunk+treeRandom()*profile.trunk*.35,
+      canopyRadius,color:profile.color.map(value=>value*tint)});
+  };
+  // The road-edge woods are mixed boreal forest, not evenly spaced ornamental
+  // conifers. Two staggered rows approximate the dense pine/birch margins.
+  for(let i=0;i<track.length;i+=3) {
     const before=track[(i-1+track.length)%track.length], after=track[(i+1)%track.length];
     const dx=after.x-before.x, dy=after.y-before.y, length=Math.hypot(dx,dy);
     for(const side of [-1,1]) {
       if(i>=18 && i<=42 && side===-1) continue;
-      const distance=75+treeRandom()*100;
-      const x=track[i].x-dy/length*distance*side;
-      const y=track[i].y+dx/length*distance*side;
-      if(occupied(x,y) || (x>2850 && y<1200)) continue;
-      trees.push({x,y,height:28+treeRandom()*20,trunkWidth:3,
-        canopyRadius:9+treeRandom()*6,color:treeRandom()>.5?[.08,.29,.19]:[.055,.23,.16]});
+      for(const [row,distance] of [[0,145+treeRandom()*35],[1,220+treeRandom()*60]]) {
+        if(row && treeRandom()>.76) continue;
+        const radialDistance=distance+(treeRandom()-.5)*34;
+        const along=(treeRandom()-.5)*82;
+        const x=track[i].x-dy/length*radialDistance*side+dx/length*along;
+        const y=track[i].y+dx/length*radialDistance*side+dy/length*along;
+        if(occupied(x,y) || inLake(x,y) || !outsideTrackClearance(x,y,110) || (x>2850 && y<1200)) continue;
+        addTree(x,y,treeSpecies());
+      }
+    }
+  }
+  const forestBands = [
+    {minX: 0, minY: 1000, maxX: 1250, maxY: 4300, maxTrees:700, species:['pine','birch','pine']},
+    {minX: 1450, minY: 3000, maxX: 2600, maxY: 4400, maxTrees:500, species:['birch','pine','broadleaf']},
+    {minX: 3000, minY: 900, maxX: 5200, maxY: 4100, maxTrees:1100, species:['pine','broadleaf','birch']}
+  ];
+  for(const band of forestBands) {
+    for(let i=0, added=0; i<band.maxTrees*5 && added<band.maxTrees; i++) {
+      const x = band.minX + treeRandom()*(band.maxX-band.minX);
+      const y = band.minY + treeRandom()*(band.maxY-band.minY);
+      if(occupied(x,y) || inParkingLot(x,y) || inLake(x,y) || !outsideTrackClearance(x,y,110) || (x>2850 && y<1200)) continue;
+      const choice = Math.floor(treeRandom()*band.species.length);
+      addTree(x,y,band.species[choice]);
+      added++;
     }
   }
   const treeBounds=trees.map(tree=>({minX:tree.x-tree.trunkWidth/2,maxX:tree.x+tree.trunkWidth/2,
@@ -160,7 +226,38 @@ window.LPRCampus = (() => {
   vehicleBounds.push(footprint(lakesideSite.x+(-153+22)*diagonal,
     lakesideSite.y+(-153-22)*diagonal,37.3,56,Math.PI/4));
   vehicleBounds.push(footprint(saunaSite.x,saunaSite.y,68,24,-3*Math.PI/4));
-  const obstacleBounds=[...buildingBounds,...treeBounds,...vehicleBounds];
+  // Protect the first-corner sign with stacked used tyres outside the kerb.
+  const signSite=world(479,212);
+  let signRoadPoint,signRoadDistance=Infinity,signTangent;
+  for(let i=0;i<track.length;i++) {
+    const a=track[i],b=track[(i+1)%track.length],dx=b.x-a.x,dy=b.y-a.y;
+    const t=Math.max(0,Math.min(1,((signSite.x-a.x)*dx+(signSite.y-a.y)*dy)/(dx*dx+dy*dy)));
+    const point={x:a.x+dx*t,y:a.y+dy*t},distance=Math.hypot(signSite.x-point.x,signSite.y-point.y);
+    if(distance<signRoadDistance) {
+      signRoadDistance=distance; signRoadPoint=point;
+      const length=Math.hypot(dx,dy); signTangent={x:dx/length,y:dy/length};
+    }
+  }
+  const signNormal={x:(signSite.x-signRoadPoint.x)/signRoadDistance,y:(signSite.y-signRoadPoint.y)/signRoadDistance};
+  const protectedSignSite={x:signRoadPoint.x+signNormal.x*64,y:signRoadPoint.y+signNormal.y*64};
+  // Wrap the road-facing half of the pole and return both ends behind it.
+  // The upstream return blocks approaches that could bypass a straight wall.
+  const barrierOffsets=[];
+  for(let i=3;i>=1;i--) barrierOffsets.push([-19,i*19/3]);
+  for(let i=0;i<=9;i++) {
+    const angle=Math.PI*i/9;
+    barrierOffsets.push([-19*Math.cos(angle),-19*Math.sin(angle)]);
+  }
+  for(let i=1;i<=3;i++) barrierOffsets.push([19,i*19/3]);
+  const tyreBarrier=barrierOffsets.map(([along,outward])=>({
+    x:protectedSignSite.x+signNormal.x*outward+signTangent.x*along,
+    y:protectedSignSite.y+signNormal.y*outward+signTangent.y*along,
+    radius:3.8,height:3.1,layers:3
+  }));
+  const tyreBarrierBounds=tyreBarrier.map(tyre=>({
+    ...footprint(tyre.x,tyre.y,tyre.radius*2,tyre.radius*2),impactMaterial:'tyres'
+  }));
+  const obstacleBounds=[...buildingBounds,...treeBounds,...vehicleBounds,...tyreBarrierBounds];
   const resolveBuildingCollision=(state,previous)=>resolveBoundsCollision(state,previous,buildingBounds);
   const resolveObstacleCollision=(state,previous)=>resolveBoundsCollision(state,previous,obstacleBounds);
   function build({box,quad,materialBox=box}) {
@@ -304,7 +401,7 @@ window.LPRCampus = (() => {
       for(const end of [-19,19]) box(bonfireSite.x+side*42,0,bonfireSite.y+end,5,5,5,[.27,.19,.11]);
     }
     // Lake and shore lie to the northeast of the campus loop.
-    const lake = [[590,80],[1050,80],[1050,520],[850,480],[780,400],[745,330],[715,240]].map(([x,z])=>{const p=world(x,z);return [p.x,-.12,p.y];});
+    const lake = lakeOutline.map(p=>[p.x,-.12,p.y]);
     for(let i=1;i<lake.length-1;i++) quad(lake[0],lake[i],lake[i+1],lake[i+1],[.12,.36,.45]);
     // Lakeside scene from the 31 Yliopistonkatu reference, looking northeast.
     // Local forward points NE; lateral points SE, parallel to Yliopistonkatu.
@@ -348,13 +445,48 @@ window.LPRCampus = (() => {
       });
     }
     for(const [index,[side,forward,color]] of lakesideCars.entries()) parkedCar(side,forward,color,index);
-    // Weathered tractor: large rear wheels, smaller front wheels, bonnet and cab.
-    prism(-153,24,22,38,8,6,[.28,.3,.25]);
-    prism(-153,34,17,23,14,11,[.54,.54,.43]);
-    prism(-153,10,20,18,14,23,[.28,.38,.39]);
-    for(const edge of [-10,10]) for(const forward of [1,19]) prism(-153+edge,forward,1.6,1.6,14,24,[.66,.64,.5]);
-    prism(-153,10,24,21,37,2,[.65,.63,.49]);
-    prism(-145,36,1.8,1.8,22,19,[.13,.14,.13]);
+    // Reference tractor: orange enclosed cab, orange rims and rear safety triangle.
+    const tractorOrange=[1,.19,.025], tractorDark=[.12,.13,.12], tractorGlass=[.22,.34,.35];
+    prism(-153,24,22,38,8,6,tractorDark);
+    prism(-153,34,17,23,14,11,tractorOrange);
+    prism(-153,10,22,20,17,7,tractorOrange);
+    // Individual panes leave the orange frame visible on all four sides.
+    prism(-153,10,19,17,24,15,tractorGlass);
+    for(const edge of [-11,11]) for(const forward of [0,20])
+      prism(-153+edge,forward,1.6,1.6,23,17,tractorOrange);
+    for(const forward of [0,20]) {
+      prism(-153,forward,23,1.6,23,1.3,tractorOrange);
+      prism(-153,forward,23,1.6,38.5,1.5,tractorOrange);
+      prism(-153,forward+(forward===0?-.85:.85),20,.35,24,1,[.045,.055,.05]);
+    }
+    for(const edge of [-11,11]) {
+      prism(-153+edge,10,1.6,21,23,1.3,tractorOrange);
+      prism(-153+edge,10,1.6,21,38.5,1.5,tractorOrange);
+      prism(-153+edge,11,.9,1,24,15,tractorOrange);
+      // Flat orange fenders over the large rear tyres, with rear light clusters.
+      prism(-153+edge*1.25,7,8,25,26.5,1.5,tractorOrange);
+      prism(-153+edge*1.25,-5.65,6,.65,25,2.4,tractorDark);
+      prism(-153+edge*1.25-1,-6.05,2.3,.25,25.3,1.7,[.65,.025,.015]);
+      prism(-153+edge*1.25+1.5,-6.05,1.6,.25,25.3,1.7,[1,.48,.03]);
+      prism(-153+edge*1.25,22,3,7,11,1,tractorDark);
+    }
+    prism(-153,10,26,24,40,2,tractorOrange);
+    prism(-153,-2.15,7,.35,39,1.7,[.65,.57,.3]);
+    prism(-145,36,1.8,1.8,22,19,tractorDark);
+    prism(-145,36,2.4,2.4,41,1,tractorDark);
+    prism(-153,45.65,15,.5,15,8,tractorDark);
+    for(const edge of [-6,6]) prism(-153+edge,46,3,.5,21,2,[.86,.86,.7]);
+    // Reflective slow-vehicle triangle on the back, raised clear of the hitch.
+    const rearTriangle=(f,inset,color)=>quad(local(-153,-2.5+f,29-inset),
+      local(-159+inset,-2.5+f,19+inset),local(-147-inset,-2.5+f,19+inset),
+      local(-147-inset,-2.5+f,19+inset),color);
+    rearTriangle(0,0,[.45,.025,.015]);
+    rearTriangle(-.1,1,[.95,.82,.57]);
+    prism(-153,-3,5,6,8,8,tractorDark);
+    for(const edge of [-5,5]) {
+      prism(-153+edge,-6,1.5,9,5,2,[.27,.28,.25]);
+      prism(-153+edge,-9,2.3,2,5,3,[.36,.34,.26]);
+    }
     function tractorWheel(side,forward,radius,width) {
       for(let i=0;i<20;i++) {
         const a=i*Math.PI/10,b=(i+1)*Math.PI/10;
@@ -366,7 +498,22 @@ window.LPRCampus = (() => {
              local(side+width/2,forward+Math.cos(b)*radius,radius+Math.sin(b)*radius),
              local(side-width/2,forward+Math.cos(b)*radius,radius+Math.sin(b)*radius),[.1,.105,.09]);
       }
-      prism(side,forward,width+.3,radius*.7,radius*.65,radius*.7,[.52,.5,.38]);
+      // Round orange rims sit on the outer tyre faces; raised diagonal tread
+      // blocks make the rear wheels read as agricultural tyres at close range.
+      for(const edge of [-1,1]) for(let i=0;i<20;i++) {
+        const a=i*Math.PI/10,b=(i+1)*Math.PI/10,r=radius*.48;
+        quad(local(side+edge*(width/2+.12),forward,radius),
+          local(side+edge*(width/2+.12),forward+Math.cos(a)*r,radius+Math.sin(a)*r),
+          local(side+edge*(width/2+.12),forward+Math.cos(b)*r,radius+Math.sin(b)*r),
+          local(side+edge*(width/2+.12),forward,radius),tractorOrange);
+      }
+      prism(side,forward,width+.5,radius*.19,radius*.905,radius*.19,[.32,.29,.22]);
+      for(let i=0;i<20;i++) for(const edge of [-1,1]) {
+        const a=i*Math.PI/10, b=a+.1;
+        const tread=(s,angle,r)=>local(side+s,forward+Math.cos(angle)*r,radius+Math.sin(angle)*r);
+        quad(tread(0,a,radius+.35),tread(edge*width/2,a+.13,radius+.35),
+          tread(edge*width/2,b+.13,radius+.35),tread(0,b,radius+.35),[.16,.17,.15]);
+      }
     }
     for(const edge of [-15,15]) { tractorWheel(-153+edge,7,13,7); tractorWheel(-153+edge,42,8,5); }
     for(const side of [-190,180]) {
@@ -466,7 +613,7 @@ window.LPRCampus = (() => {
     wallText('LUT',23,35,16);
     wallText('University',23,15,14);
     function sign(x,z) {
-      const p=world(x,z);
+      const p=x===479 && z===212 ? protectedSignSite : world(x,z);
       // End the support at the panel's lower edge so both faces stay unobstructed.
       box(p.x,0,p.y,6,58,6,[.35,.37,.35]);
       box(p.x,58,p.y,100,34,5,[1,1,1]);
@@ -486,6 +633,18 @@ window.LPRCampus = (() => {
       }
     }
     sign(479,212); sign(226,418);
+    // Hollow horizontal tyres: rounded shoulders, tread and open centre holes.
+    for(const tyre of tyreBarrier) for(let layer=0;layer<tyre.layers;layer++) {
+      const base=.12+layer*tyre.height;
+      const profile=[[2.05,.15],[3.25,.15],[3.8,.6],[3.8,2.5],[3.25,2.95],[2.05,2.95],[2.05,.15]];
+      for(let ring=0;ring<profile.length-1;ring++) for(let segment=0;segment<16;segment++) {
+        const a=segment*Math.PI/8,b=(segment+1)*Math.PI/8;
+        const point=(r,h,angle)=>[tyre.x+r*Math.cos(angle),base+h,tyre.y+r*Math.sin(angle)];
+        const [r,h]=profile[ring],[nr,nh]=profile[ring+1];
+        const shade=ring===2 ? (segment%2 ? .075 : .085) : ring===5 ? .035 : .105;
+        quad(point(r,h,a),point(r,h,b),point(nr,nh,b),point(nr,nh,a),[shade,shade*1.04,shade*1.06]);
+      }
+    }
     // Paved forecourt and car park: leave the racing line at x≈623 clear.
     block(539,385,128,74,.12,[.29,.31,.3]);
     block(490,338,40,50,.15,[.6,.6,.56]);
@@ -515,6 +674,6 @@ window.LPRCampus = (() => {
     for(let i=0;i<3;i++) block(727+i*24,213,5,64,1,[.56,.46,.32],0,'wood');
   }
   return { track, road, length, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
-    campusCars, studentCarModels, lakesideCars, vehicleBounds, buildingBounds, resolveBuildingCollision,
-    resolveObstacleCollision, bounds:{width:5200,height:4400} };
+    campusCars, studentCarModels, lakesideCars, vehicleBounds, buildingBounds, obstacleBounds, resolveBuildingCollision,
+    resolveObstacleCollision, tyreBarrier, tyreBarrierBounds, bounds:{width:5200,height:4400} };
 })();

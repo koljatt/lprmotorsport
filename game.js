@@ -19,6 +19,9 @@
   const { halfWidth: ROAD_HALF, kerbOuter: KERB_OUTER, shoulderOuter: SHOULDER_OUTER } = LPRCampus.road;
   const track = LPRCampus.track;
   const POINTS = track.length;
+  const trackDistances=[0];
+  for(let i=0;i<POINTS;i++) trackDistances.push(trackDistances[i]+Math.hypot(
+    track[(i+1)%POINTS].x-track[i].x,track[(i+1)%POINTS].y-track[i].y));
   const renderer = new LPRRenderer3D(canvas, document.querySelector('#cockpit'), track);
   const dynamics = new VehicleDynamics();
   const startAngle = Math.atan2(track[1].y - track[0].y, track[1].x - track[0].x);
@@ -51,6 +54,7 @@
   let noticeTimeout = 0;
   const saleEnter = document.querySelector('#sale-enter');
   const saunaEnter = document.querySelector('#sauna-enter');
+  const poolEnter = document.querySelector('#pool-enter');
   const saunaSteam = document.querySelector('#sauna-steam');
   const saunaSeat = document.querySelector('#sauna-seat');
   const saunaHint = document.querySelector('#sauna-hint');
@@ -158,11 +162,13 @@
     return !!entrance && Math.hypot(car.x-entrance.x,car.y-entrance.y)<40;
   }
 
-  function toggleSale() {
+  function toggleSale(force = false) {
     if(car.crashed) return;
-    if(ui.dialog.open || car.sauna || (!car.sale && (!nearSale() || Math.abs(car.speed)>.5))) return;
+    const canEnterDirectly = !car.sauna && !car.pool && !ui.dialog.open && (force || (!car.sale && nearSale() && Math.abs(car.speed) <= .5));
+    if(!canEnterDirectly && !(car.sale && !car.sauna && !car.pool && !ui.dialog.open)) return;
     clearInput();
     stopLooking();
+    car.pool = false;
     car.sale=!car.sale;
     if(car.sale) {
       car.onlineInvalid = true;
@@ -182,27 +188,59 @@
     return Math.hypot(car.x-renderer.saunaStop.x,car.y-renderer.saunaStop.y) < 40;
   }
 
+  function nearPool() {
+    const pool = renderer.poolStop || { x: renderer.saunaStop.x - 36, y: renderer.saunaStop.y + 18 };
+    return Math.hypot(car.x-pool.x,car.y-pool.y) < 42;
+  }
+
   function updateSaunaUI() {
-    saleEnter.disabled = car.crashed || ui.dialog.open || car.sauna || (!car.sale && (!nearSale() || Math.abs(car.speed)>.5));
-    saleEnter.hidden = saleEnter.disabled;
+    saleEnter.disabled = car.crashed || ui.dialog.open || car.sauna || car.pool;
+    saleEnter.hidden = !car.sale && !nearSale() || saleEnter.disabled;
     saleEnter.textContent = car.sale ? t('Palaa autoon (E)') : t('Mene Saleen (E)');
-    saunaEnter.disabled = car.crashed || ui.dialog.open || car.sale || !car.sauna && (!nearSauna() || Math.abs(car.speed) > .5);
+    saunaEnter.disabled = car.crashed || ui.dialog.open || car.sale || car.pool || !car.sauna && (!nearSauna() || Math.abs(car.speed) > .5);
     saunaEnter.hidden = saunaEnter.disabled;
     saunaEnter.textContent = car.sauna ? t("Palaa autoon (E)") : t("Mene saunaan (E)");
+    poolEnter.disabled = car.crashed || ui.dialog.open || car.sale || car.sauna || !car.pool && (!nearPool() || Math.abs(car.speed) > .5);
+    poolEnter.hidden = poolEnter.disabled;
+    poolEnter.textContent = car.pool ? t("Palaa autoon (E)") : t("Mene paljuun (E)");
     updateSteamTarget();
     saunaSeat.hidden = !car.sauna;
     saunaSound.hidden = !car.sauna;
-    saunaHint.textContent = car.sauna ? t("W/S: eteen/taakse, A/D: sivuille. Klikkaa n\u00e4kym\u00e4\u00e4 ja katsele hiirell\u00e4 (Esc vapauttaa). Kosketuksella katsele vet\u00e4m\u00e4ll\u00e4. Valitse \u00e4mp\u00e4ri tai kauha heitt\u00e4\u00e4ksesi l\u00f6yly\u00e4.") : nearSauna() ? t("Pys\u00e4hdy saunapakun viereen ja tule l\u00f6ylyihin.") : '';
+    saunaHint.textContent = car.sauna ? t("W/S: eteen/taakse, A/D: sivuille. Klikkaa n\u00e4kym\u00e4\u00e4 ja katsele hiirell\u00e4 (Esc vapauttaa). Kosketuksella katsele vet\u00e4m\u00e4ll\u00e4. Valitse \u00e4mp\u00e4ri tai kauha heitt\u00e4\u00e4ksesi l\u00f6yly\u00e4.") : car.pool ? t("Paljussa: katsele ympärilläsi ja rauhoitu. Palaa autoon painikkeella tai E:llä.") : nearPool() ? t("Pys\u00e4hdy paljun vieress\u00e4 ja mene paljuun.") : nearSauna() ? t("Pys\u00e4hdy saunapakun viereen ja tule l\u00f6ylyihin.") : '';
     if(car.sale) saunaHint.textContent=t('Salessa: klikkaa n\u00e4kym\u00e4\u00e4 ja katsele hiirell\u00e4 (Esc vapauttaa). Kosketuksella katsele vet\u00e4m\u00e4ll\u00e4. W/S: eteen/taakse, A/D: sivuille. Palaa autoon: E.');
     else if(nearSale()) saunaHint.textContent=t('Pysähdy Salen ovelle ja mene sisään painikkeella tai E-näppäimellä.');
-    canvas.classList.toggle('sauna-view', !!(car.sauna || car.sale));
-    document.querySelector('#track').setAttribute('aria-label', car.sale ? t("Sale Skinnarilan sisätila") : car.sauna ? t("Saunapakun lauteet ja kiuas") : t("3D-n\u00e4kym\u00e4 kuljettajan paikalta"));
+    canvas.classList.toggle('sauna-view', !!(car.sauna || car.sale || car.pool));
+    document.querySelector('#track').setAttribute('aria-label', car.sale ? t("Sale Skinnarilan sisätila") : car.pool ? t("Paljun lähellä oleva vedenpinta") : car.sauna ? t("Saunapakun lauteet ja kiuas") : t("3D-n\u00e4kym\u00e4 kuljettajan paikalta"));
+  }
+
+  function togglePool() {
+    if(car.crashed) return;
+    if (car.sale || car.sauna || ui.dialog.open || (!car.pool && (!nearPool() || Math.abs(car.speed) > .5))) return;
+    clearInput();
+    car.sauna = false;
+    car.pool = !car.pool;
+    if (car.pool) {
+      car.onlineInvalid = true;
+      dynamics.reset(car);
+      car.saunaYaw = 0;
+      car.saunaPitch = -.12;
+      car.saunaSide = -1;
+      car.poolX = (renderer.poolStop?.x ?? renderer.saunaStop.x) - 18;
+      car.poolZ = (renderer.poolStop?.y ?? renderer.saunaStop.y) + 12;
+      ui.speed.textContent = '0';
+      ui.lateralG.textContent = '0.0 G';
+      ui.grip.textContent = t('PALJUTAUKO');
+      ui.tc.textContent = t('AUTO PARKISSA');
+    }
+    ui.notice.classList.add('hidden');
+    updateSaunaUI();
   }
 
   function toggleSauna() {
     if(car.crashed) return;
-    if (car.sale || ui.dialog.open || (!car.sauna && (!nearSauna() || Math.abs(car.speed) > .5))) return;
+    if (car.sale || car.pool || ui.dialog.open || (!car.sauna && (!nearSauna() || Math.abs(car.speed) > .5))) return;
     clearInput();
+    car.pool = false;
     car.sauna = !car.sauna;
     if (car.sauna) {
       car.onlineInvalid = true;
@@ -254,7 +292,7 @@
     sectorUI.hidden = true;
     clearInput();
     saunaLife.leave();
-    car = { x: track[0].x, y: track[0].y, angle: startAngle, speed: 0, lap: 1, lapStart: 0, stage: 0, started: false, offroad: false, damage:0, crashed:false };
+    car = { x: track[0].x, y: track[0].y, angle: startAngle, speed: 0, lap: 1, lapStart: 0, stage: 0, started: false, offroad: false, damage:0, crashed:false, pool:false, poolX:0, poolZ:0 };
     dynamics.reset(car);
     dynamics.parameters.tractionControlEnabled=true;
     car.tcEnabled=true;
@@ -320,6 +358,7 @@
   function nearestTrack(x, y) {
     let bestDist = Infinity;
     let index = 0;
+    let along = 0;
     for (let i = 0; i < POINTS; i++) {
       const a = track[i];
       const b = track[(i + 1) % POINTS];
@@ -327,9 +366,12 @@
       const dy = b.y - a.y;
       const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy)));
       const distance = (x - a.x - t * dx) ** 2 + (y - a.y - t * dy) ** 2;
-      if (distance < bestDist) { bestDist = distance; index = i; }
+      if (distance < bestDist) {
+        bestDist = distance; index = i;
+        along=trackDistances[i]+t*(trackDistances[i+1]-trackDistances[i]);
+      }
     }
-    return { index, distance: Math.sqrt(bestDist) };
+    return { index, distance: Math.sqrt(bestDist), along };
   }
 
   function grassContact(state) {
@@ -338,18 +380,25 @@
     const forwardX = Math.cos(state.angle), forwardY = Math.sin(state.angle);
     let total = 0;
     let kerbTires = 0;
+    const heights=[];
     // Sample each tire rather than switching the whole car to grass at its centre.
     for (const axle of [p.frontAxle, -p.rearAxle]) {
       for (const side of [-p.trackWidth / 2, p.trackWidth / 2]) {
         const x = state.x + (axle * forwardX - side * forwardY) * scale;
         const y = state.y + (axle * forwardY + side * forwardX) * scale;
-        const distance = nearestTrack(x, y).distance;
+        const contact = nearestTrack(x, y);
+        const distance = contact.distance;
+        const loop=trackDistances[POINTS];
+        const ribAlong=contact.along*(Math.round(loop*p.metresPerWorldUnit/.45)*.45)/(loop*p.metresPerWorldUnit);
+        heights.push(dynamics.kerbHeight(distance,ribAlong,LPRCampus.road));
         if (distance >= ROAD_HALF && distance <= KERB_OUTER) kerbTires++;
-        const blend = Math.max(0, Math.min(1, (distance - KERB_OUTER) / (SHOULDER_OUTER - KERB_OUTER)));
+        const blend = window.LPRTrackObjects?.onAsphalt(x,y) ? 0 :
+          Math.max(0, Math.min(1, (distance - KERB_OUTER) / (SHOULDER_OUTER - KERB_OUTER)));
         total += blend * blend * (3 - 2 * blend);
       }
     }
     state.kerbFraction = kerbTires / 4;
+    state.roadHeights = heights;
     return total / 4;
   }
 
@@ -400,7 +449,7 @@
       dynamics.step(car, input, dt / steps, car.grassFraction);
       const collision=window.LPRCampus.resolveObstacleCollision(car, previous);
       if(collision) {
-        const damage=dynamics.applyImpact(car,collision.normal);
+        const damage=dynamics.applyImpact(car,collision.normal,collision.impactMaterial);
         if(damage>0) showNotice(t("Auto vaurioitui."),2500);
         if(car.crashed) {
           car.crashedAt=now;
@@ -432,7 +481,7 @@
         const lapTime = now - car.lapStart;
         if (lapTime > 5000) {
           showSector(lapTime);
-          if (!car.onlineInvalid && timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
+          if (!car.onlineInvalid && !window.LPRTrackObjects?.active && timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
           if (!best || lapTime < best) {
             best = lapTime;
             localStorage.setItem('lpr-best-time-lut-20261011-v3', String(best));
@@ -531,7 +580,10 @@
     if (!ui.dialog.open && !event.repeat && !['BUTTON','INPUT','SELECT','TEXTAREA'].includes(event.target.tagName)) {
       if (event.code === 'KeyE') {
         event.preventDefault();
-        if (car.sale || (!car.sauna && nearSale())) toggleSale();
+        if (car.sale) toggleSale(true);
+        else if (car.pool) togglePool();
+        else if (!car.sauna && nearSale()) toggleSale();
+        else if (!car.sauna && nearPool()) togglePool();
         else toggleSauna();
         return;
       }
@@ -610,8 +662,9 @@
   });
   window.addEventListener('resize', clearInput);
   document.querySelector('#restart-button').addEventListener('click', reset);
-  saleEnter.addEventListener('click', toggleSale);
+  saleEnter.addEventListener('click', () => toggleSale(true));
   saunaEnter.addEventListener('click', toggleSauna);
+  poolEnter.addEventListener('click', togglePool);
   saunaSteam.addEventListener('click', throwSteam);
   saunaSeat.addEventListener('click', switchSaunaSeat);
   saunaSound.addEventListener('click', () => {
@@ -645,4 +698,3 @@
   resize();
   requestAnimationFrame(frame);
 })();
-

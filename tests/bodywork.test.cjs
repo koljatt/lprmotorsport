@@ -13,6 +13,7 @@ renderer.gl=new Proxy({}, {get:(_,key)=>key==='bufferData' ? (_,data)=>{mesh=dat
 renderer.locations={camera:'camera',forward:'forward',right:'right',up:'up'};
 renderer.bindMesh=()=>{};
 renderer.drawCampusMaterials=()=>{};
+renderer.drawKerbs=()=>{};
 renderer.drawSpectators=()=>{};
 renderer.drawCockpit=()=>{};
 renderer.width=1280;renderer.height=720;renderer.wheelPhase=0;
