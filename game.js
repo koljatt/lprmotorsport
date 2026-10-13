@@ -525,7 +525,7 @@
         if (lapTime > 5000) {
           audio.lap(!best || lapTime < best);
           showSector(lapTime);
-          if (!car.onlineInvalid && !window.LPRTrackObjects?.active && timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
+          if (!car.onlineInvalid && timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
           if (!best || lapTime < best) {
             best = lapTime;
             localStorage.setItem('lpr-best-time-lut-20261011-v3', String(best));
