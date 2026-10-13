@@ -2,24 +2,33 @@
 <html lang="fi">
   <head>
     <meta charset="UTF-8" />
+    <script id="local-game-entry">
+      if (window.location.protocol === 'file:') {
+        window.location.replace('http://localhost:8000/' + (window.location.search || ''));
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>LPR Lap Challenge</title>
     <link rel="stylesheet" href="styles.css?v=mobile-20261008" />
-    <link rel="stylesheet" href="3d.css?v=leaderboard-close-20261011" />
-    <script src="i18n.js?v=leaderboard-close-20261011" defer></script>
-    <script src="campus.js?v=student-cars-20261009" defer></script>
-    <script src="shared/track-document.js?v=3" defer></script>
+    <link rel="stylesheet" href="3d.css?v=sound-20261013" />
+    <script src="i18n.js?v=sound-20261013" defer></script>
+    <script src="shared/vehicle-spec.js?v=vehicle-dimensions-20261013" defer></script>
+    <script src="campus.js?v=vehicle-dimensions-20261013" defer></script>
+    <script src="shared/track-document.js?v=asphalt-small-brush-20261013" defer></script>
+    <script src="shared/terrain.js?v=asphalt-small-brush-20261013" defer></script>
     <script src="data/track-data.js?v=2" defer></script>
-    <script src="shared/track-objects.js?v=3" defer></script>
-    <script src="sale.js?v=store-products-20261012" defer></script>
-    <script src="renderer3d.js?v=store-products-20261012" defer></script>
-    <script src="vehicle.js?v=suspension-physics-20261012" defer></script>
-    <script src="sauna.js?v=ovi-20261008-2" defer></script>
+    <script src="shared/track-objects.js?v=asphalt-small-brush-20261013" defer></script>
+    <script src="shared/track-sync.js?v=20261013" defer></script>
+    <script src="sale.js?v=solid-shelves-long-checkout-20261013" defer></script>
+    <script src="renderer3d.js?v=vehicle-dimensions-20261013" defer></script>
+    <script src="vehicle.js?v=vehicle-dimensions-20261013" defer></script>
+    <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
     <script src="leaderboard.js?v=online-20261009" defer></script>
-    <script src="game.js?v=sale-direct-preview-20261012" defer></script>
+    <script src="audio.js?v=warm-sound-20261013" defer></script>
+    <script src="game.js?v=scene-testing-20261013" defer></script>
   </head>
   <body>
     <main class="app">
@@ -27,6 +36,7 @@
         <img class="logo" src="assets/lpr-logo.jpg" alt="LPR Motorsport Formula Student" />
         <div class="topbar-title"><span>FORMULA STUDENT</span><strong>LAP CHALLENGE</strong></div>
         <select id="language-select" aria-label="Kieli / Language"><option value="fi">FI</option><option value="en">EN</option></select>
+        <button id="sound-button" class="icon-button" type="button" aria-label="Äänet: päällä" aria-pressed="true">♫<span>Äänet: päällä</span></button>
         <button id="leaderboard-button" class="icon-button" type="button" aria-label="Tuloslista">🏆</button>
         <button id="restart-button" class="icon-button" type="button" aria-label="Aloita uudelleen">↺ <span>Aloita uudelleen</span></button>
       </header>
@@ -41,7 +51,7 @@
         <canvas id="track" aria-label="3D-näkymä kuljettajan paikalta"></canvas>
         <div id="sector-time" class="sector-time" role="status" hidden></div>
         <canvas id="cockpit" aria-hidden="true"></canvas>
-        <div class="sauna-actions"><span id="sauna-hint" role="status">Saunapaku on ensimmäisen mutkan ulkopuolella.</span><button id="sale-enter" type="button" hidden disabled>Mene Saleen (E)</button><button id="sauna-enter" type="button" hidden disabled>Mene saunaan (E)</button><button id="pool-enter" type="button" hidden disabled>Mene paljuun (E)</button><button id="sauna-seat" type="button" hidden>Vaihda vastakkaiselle lauteelle (F)</button><button id="sauna-steam" type="button" hidden>Heitä löylyä (välilyönti)</button><button id="sauna-sound" type="button" hidden aria-pressed="false">Saunan äänet: pois</button></div>
+        <div class="sauna-actions"><span id="sauna-hint" role="status"></span><button id="sale-enter" type="button" hidden disabled>Mene Saleen (E)</button><button id="sauna-enter" type="button" hidden disabled>Mene saunaan (E)</button><button id="pool-enter" type="button" hidden disabled>Mene paljuun (E)</button><button id="sauna-seat" type="button" hidden>Vaihda vastakkaiselle lauteelle (F)</button><button id="sauna-steam" type="button" hidden>Heitä löylyä (välilyönti)</button><button id="sauna-sound" type="button" hidden aria-pressed="false">Saunan äänet: pois</button></div>
         <div id="sauna-dialogue" class="sauna-dialogue" role="status" aria-live="polite" hidden></div>
         <div class="telemetry"><strong id="lateral-g">0.0 G</strong><span id="grip-state">PITO OK</span><span id="tc-status">TC PÄÄLLÄ</span></div>
         <div id="notice" class="notice" role="status">Paina kaasua ja lähde ajamaan!</div>

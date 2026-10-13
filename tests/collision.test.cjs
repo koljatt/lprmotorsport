@@ -2,16 +2,18 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const context = { window: {} };
+const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), } };
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../campus.js'), 'utf8'), context);
 const campus = context.window.LPRCampus;
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8'), context);
 const dynamics = new context.window.VehicleDynamics();
-const radius = 14;
+// The central nose reaches 12.4 units forward; wings reach farther only at
+// their actual lateral positions. The old 14-unit circle is no longer used.
+const radius = 12.4 * context.window.LPRVehicleSpec.bodyLengthScale;
 function move(previous, destination) {
   const car = { ...destination, angle:Math.atan2(destination.y-previous.y,destination.x-previous.x), vx:36, vy:0, yawRate:1, speed:36 };
-  const hit = campus.resolveBuildingCollision(car, previous);
-  if(hit) dynamics.applyImpact(car,hit.normal,hit.impactMaterial);
+  const hit = campus.resolveBuildingCollision(car, {...previous,angle:car.angle},
+    contact=>dynamics.applyImpact(car,contact.normal,contact.impactMaterial));
   return { car, hit };
 }
 for (const b of campus.buildingBounds) {
@@ -24,10 +26,10 @@ for (const b of campus.buildingBounds) {
       const {car,hit}=move({[axis]:start,[other]:center},{[axis]:end,[other]:center});
       assert(hit, 'Swept movement must hit even when the destination is beyond the building');
       assert(direction===1?car[axis]<=low-radius:car[axis]>=high+radius);
-      assert.equal(car.speed,0);
-      assert.equal(car.vx,0);
-      assert.equal(car.vy,0);
-      assert.equal(car.yawRate,0);
+      const vx=car.vx*Math.cos(car.angle)-car.vy*Math.sin(car.angle);
+      const vy=car.vx*Math.sin(car.angle)+car.vy*Math.cos(car.angle);
+      assert(Math.abs(vx*hit.normal.x+vy*hit.normal.y)<1e-8,
+        'Contact must stop movement into the actual contacted surface');
     }
   }
 }
@@ -46,8 +48,8 @@ console.log('PASS: building walls, high-speed sweeps, corners, repeated contact 
 
 function moveAmongObstacles(previous, destination, speed=36) {
   const car={...destination,angle:Math.atan2(destination.y-previous.y,destination.x-previous.x),vx:speed,vy:0,yawRate:0,speed};
-  const hit=campus.resolveObstacleCollision(car,previous);
-  if(hit) dynamics.applyImpact(car,hit.normal,hit.impactMaterial);
+  const hit=campus.resolveObstacleCollision(car,{...previous,angle:car.angle},
+    contact=>dynamics.applyImpact(car,contact.normal,contact.impactMaterial));
   return {car,hit};
 }
 assert(campus.trees.length>0);
@@ -60,7 +62,8 @@ for(const tree of campus.trees) {
     assert(hit,'A high-speed sweep must hit the visible tree trunk');
     assert(direction*(car.x-tree.x)<=-radius-tree.trunkWidth/2,
       'The car must stop before passing through the trunk');
-    assert(car.crashed,'A hard tree impact must use the existing damage model');
+    assert.equal(car.crashed,car.damage>=1,
+      'Multiple contacts during a tree sweep must disable the car only at full accumulated damage');
   }
 }
 // Find a tree with enough clear surrounding ground to isolate near misses.
@@ -108,7 +111,8 @@ for(const bounds of campus.vehicleBounds) {
     const end=vehiclePoint(bounds,axis==='x'?direction*100:0,axis==='y'?direction*100:0);
     const {car,hit}=moveAmongObstacles(start,end);
     assert(hit,'High-speed movement must not pass through a stationary vehicle');
-    assert(car.crashed,'A hard vehicle impact must use the existing damage model');
+    assert.equal(car.crashed,car.damage>=1,
+      'Vehicle sweeps must account for accumulated contact damage');
     const travelX=end.x-start.x, travelY=end.y-start.y;
     const travelled=((car.x-start.x)*travelX+(car.y-start.y)*travelY)/(travelX*travelX+travelY*travelY);
     const halfSize=axis==='x'?(bounds.maxX-bounds.minX)/2:(bounds.maxY-bounds.minY)/2;
@@ -144,8 +148,10 @@ for(const start of campus.track) {
   if(Math.hypot(start.x-pole.x,start.y-pole.y)>150) continue;
   const {car,hit}=moveAmongObstacles(start,pole);
   assert(hit,'Every nearby track approach to the pole must be blocked');
-  assert(campus.tyreBarrierBounds.some(b=>car.x>=b.minX-radius-.01 && car.x<=b.maxX+radius+.01 &&
-    car.y>=b.minY-radius-.01 && car.y<=b.maxY+radius+.01),
+  const reach=Math.max(...campus.carCollisionParts({...car,damage:0}).flat().map(p=>Math.hypot(...p)));
+  assert.equal(hit.impactMaterial,'tyres');
+  assert(campus.tyreBarrierBounds.some(b=>car.x>=b.minX-reach-.01 && car.x<=b.maxX+reach+.01 &&
+    car.y>=b.minY-reach-.01 && car.y<=b.maxY+reach+.01),
     'The tyre wall must intercept the car before the sign support');
   assert(Math.hypot(car.x-pole.x,car.y-pole.y)>radius+3,
     'The stopped car must remain clear of the support');
@@ -204,3 +210,30 @@ assert.equal(impact(12).impactEnergy,.5*dynamics.parameters.mass*12**2);
 for(let i=0;i<3;i++) { medium.vx=5; dynamics.applyImpact(medium,{x:-1,y:0}); }
 assert(medium.crashed,'Repeated moderate impacts must accumulate damage');
 console.log('PASS: impact energy, progressive damage, glancing response, accumulated damage and immobilized wreck');
+
+// Isolate the geometry from the surrounding campus for visual regressions.
+const isolatedContext={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), }};
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../campus.js'),'utf8'),isolatedContext);
+const geometryCampus=isolatedContext.window.LPRCampus;
+function setWall(bounds) {geometryCampus.buildingBounds.splice(0,geometryCampus.buildingBounds.length,bounds);}
+setWall({minX:0,maxX:100,minY:-1000,maxY:1000});
+for(const heading of [Math.PI/2,-Math.PI/2]) {
+  const car={x:-10.5,y:50,angle:heading};
+  assert(!geometryCampus.resolveBuildingCollision(car,{x:-10.5,y:-50,angle:heading}),
+    'A visible gap beside the wing must allow driving along the wall');
+  assert.equal(car.y,50,'Clear movement must keep the full destination');
+  const approach={x:-10.2,y:0,angle:heading};
+  assert(geometryCampus.resolveBuildingCollision(approach,{x:-10.5,y:0,angle:heading}),
+    'The wing must collide when it actually reaches the wall');
+  assert(approach.x<=-10.28,'Side contact must stop at the visible wing edge');
+}
+setWall({minX:-100,maxX:100,minY:10.5,maxY:100});
+const rotating={x:0,y:0,angle:Math.PI/2};
+assert(geometryCampus.resolveBuildingCollision(rotating,{x:0,y:0,angle:0}),
+  'Rotation alone must detect the wing sweeping into a wall');
+assert(rotating.angle>0 && rotating.angle<Math.PI/2,'Contact must also stop rotation');
+setWall({minX:10.8,maxX:10.9,minY:5.9,maxY:6});
+const openSpace={x:.05,y:0,angle:0};
+assert(!geometryCampus.resolveBuildingCollision(openSpace,{x:0,y:0,angle:0}),
+  'Empty space between the wheel, nose and wing must not act as solid bodywork');
+console.log('PASS: visible wall clearance, wing contact, rotation sweeps and open bodywork gaps');

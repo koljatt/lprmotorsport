@@ -51,7 +51,7 @@ window.LPRSaunaLife = class LPRSaunaLife {
     if (kind !== 'door' && kind !== 'heat' && this.line?.kind === 'door' && this.time < this.line.until) return;
     this.line = { speaker: guest.index, text, kind, until: this.time + duration };
     this.onLine(`${guest.name}: ${text}`);
-    if (this.sound) {
+    if (this.sound && !this.muted) {
       if (kind === 'sing') this.sing();
       else this.speak(text, guest.index, kind === 'door');
     }
@@ -122,6 +122,7 @@ window.LPRSaunaLife = class LPRSaunaLife {
   }
 
   registerSteam(actor = 'player') {
+    this.onSteam?.();
     this.heat = Math.min(10, this.heat + 1.2);
     if (this.heat < 3 || this.time - this.lastHeatReaction < 3) return;
     const seated = this.guests.filter(guest => {
@@ -219,7 +220,7 @@ window.LPRSaunaLife = class LPRSaunaLife {
 
   setSound(enabled) {
     this.sound = enabled;
-    if (!enabled) { this.stopSound(); return; }
+    if (!enabled || this.muted) { this.stopSound(); return; }
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (AudioContext) {
       if (!this.audio) this.audio = new AudioContext();

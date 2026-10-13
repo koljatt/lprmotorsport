@@ -3,10 +3,25 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const doc={version:1,objects:[{type:'barrier',x:4500,y:4000,angle:Math.PI/2,scale:2}]};
 let stored=JSON.stringify(doc);
-const context={window:{LPRTrackData:doc},console};
+const context={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), LPRTrackData:doc},console};
 vm.createContext(context);
 for(const f of ['campus.js','shared/track-document.js','shared/track-objects.js'])vm.runInContext(fs.readFileSync(f,'utf8'),context);
 const api=context.window.LPRTrackObjects;
+const tyreContext={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), LPRTrackData:{version:1,objects:[
+  {type:'tyreWall',x:4500,y:4000,angle:Math.PI/2,scale:1,length:23}
+]}}};
+vm.createContext(tyreContext);
+for(const f of ['campus.js','shared/track-document.js','shared/track-objects.js'])vm.runInContext(fs.readFileSync(f,'utf8'),tyreContext);
+const tyreQuads=[];tyreContext.window.LPRTrackObjects.build({quad:(...args)=>tyreQuads.push(args)});
+const tyrePoints=tyreQuads.flatMap(q=>q.slice(0,4));
+assert(Math.abs(Math.min(...tyrePoints.map(p=>p[2]))-3988.5)<1e-8);
+assert(Math.abs(Math.max(...tyrePoints.map(p=>p[2]))-4011.5)<1e-8);
+const tyreBound=tyreContext.window.LPRCampus.obstacleBounds.at(-1);
+assert.equal(tyreBound.maxX-tyreBound.minX,23,'Collision footprint must use the saved segment length');
+assert.equal(tyreBound.impactMaterial,'tyres');
+assert.throws(()=>tyreContext.window.LPRTrackObjects.validate({version:1,objects:[
+  {type:'tyreWall',x:100,y:100,angle:0,scale:1,length:0}
+]}));
 assert.equal(context.window.LPRCampus.trackCones,undefined,'No automatic trackside cones should remain');
 assert.equal(api.active,true);
 assert.throws(()=>api.validate({version:2,objects:[]}));
@@ -22,7 +37,7 @@ assert.ok(context.window.LPRCampus.resolveObstacleCollision(car,previous),'swept
 assert.ok(car.y<4000);
 console.log('PASS: document validation, save/load, rotated geometry and swept collision');
 
-const expandedContext={window:{LPRTrackData:{version:1,objects:[
+const expandedContext={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), LPRTrackData:{version:1,objects:[
   {type:'tyreWall',x:2500,y:2200,angle:Math.PI/4,scale:1},
   {type:'building',x:3000,y:2200,angle:Math.PI/6,scale:1},
   {type:'asphalt',x:2000,y:2200,angle:Math.PI/3,scale:1}

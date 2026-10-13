@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-const context = { window: { devicePixelRatio: 2, matchMedia: () => ({ matches: false }) } };
+const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'),  devicePixelRatio: 2, matchMedia: () => ({ matches: false }) } };
 vm.createContext(context);
 vm.runInContext(read('renderer3d.js'), context);
 const renderer = Object.create(context.window.LPRRenderer3D.prototype);
@@ -25,6 +25,7 @@ for (const refresh of [60, 120, 144, 240]) {
   let renders = 0, simulated = 0;
   const frameContext = { document: { hidden: false }, lastFrame: 0, car: {},
     requestAnimationFrame() {}, update(dt) { simulated += dt; }, updateSteamTarget() {},
+    syncAudio() {}, audio: { update() {} },
     renderer: { render() { renders++; } } };
   vm.createContext(frameContext);
   vm.runInContext(frameSource, frameContext);

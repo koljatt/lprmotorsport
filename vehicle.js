@@ -1,17 +1,17 @@
 /* Simplified dynamic bicycle model. Distances and speeds inside this class are SI units. */
 window.VehicleDynamics = class VehicleDynamics {
   constructor() {
+    const spec = window.LPRVehicleSpec;
     this.parameters = {
-      metresPerWorldUnit: 0.1,
-      mass: 275,                 // car and driver, kg; provisional until LPR data is available
-      wheelbase: 1.63,           // m
-      frontAxle: 0.81,           // centre of mass to front axle, m
-      rearAxle: 0.82,            // centre of mass to rear axle, m
-      trackWidth: 1.44,          // m, matches the rendered front wheel centres
-      yawInertia: 120,           // kg m²
-      centreOfMassHeight: 0.29,  // m
-      frontCorneringStiffness: 13000, // N/rad, combined front axle
-      rearCorneringStiffness: 14000,  // N/rad, combined rear axle
+      metresPerWorldUnit: spec.metresPerWorldUnit,
+      mass: spec.mass,           // includes the 80 kg driver
+      wheelbase: spec.wheelbase,
+      frontAxle: spec.frontAxle, rearAxle: spec.rearAxle,
+      trackWidth: spec.trackWidth,
+      yawInertia: 120 * (spec.mass / 275) * (spec.wheelbase / 1.63) ** 2, // estimated
+      centreOfMassHeight: spec.centreOfMassHeight, // unmeasured, retained estimate
+      frontCorneringStiffness: 13000 * (spec.mass / 275) ** .94, // N/rad, combined front axle
+      rearCorneringStiffness: 14000 * (spec.mass / 275) ** .94,  // N/rad, combined rear axle
       roadGrip: 1.55,
       grassGrip: 0.58,
       peakDriveForce: 1850,     // N
@@ -29,7 +29,8 @@ window.VehicleDynamics = class VehicleDynamics {
         bumpDamping: 900, reboundDamping: 1400, // N s/m at the wheel
         tyreRate: 160000, tyreDamping: 120,
         antiRollRate: 4500,     // N/m of left/right travel difference
-        pitchInertia: 65, rollInertia: 38, // kg m²
+        pitchInertia: 65 * (spec.mass / 275) * (spec.wheelbase / 1.63) ** 2,
+        rollInertia: 38 * (spec.mass / 275) * (spec.trackWidth / 1.44) ** 2, // kg m²
         bumpTravel: .035, droopTravel: .040, bumpStopRate: 180000,
         motionRatio: .70
       }
@@ -52,6 +53,7 @@ window.VehicleDynamics = class VehicleDynamics {
     delete state.visualSuspension;
     delete state.suspension;
     delete state.roadHeights;
+    delete state.terrainSlope;
     state.vx = 0;
     state.vy = 0;
     state.yawRate = 0;
@@ -70,11 +72,15 @@ window.VehicleDynamics = class VehicleDynamics {
     const p=this.parameters,s=p.suspension,g=9.81;
     const sprungMass=p.mass-4*s.unsprungMass;
     const heights=state.roadHeights || [0,0,0,0];
-    state.suspension={heave:0,heaveVelocity:0,pitch:0,pitchVelocity:0,roll:0,rollVelocity:0,
+    const front=(heights[0]+heights[1])/2,rear=(heights[2]+heights[3])/2;
+    const pitch=(front-rear)/p.wheelbase;
+    const roll=((heights[1]-heights[0])+(heights[3]-heights[2]))/(2*p.trackWidth);
+    const heave=(front*p.rearAxle+rear*p.frontAxle)/p.wheelbase;
+    state.suspension={heave,heaveVelocity:0,pitch,pitchVelocity:0,roll,rollVelocity:0,
       centreHeight:p.centreOfMassHeight,motionRatio:s.motionRatio,
       wheels:[p.frontAxle,-p.rearAxle].flatMap((x,axle)=>[-1,1].map((side,sideIndex)=>{
         const preload=sprungMass*g*(axle===0?p.rearAxle:p.frontAxle)/p.wheelbase/2;
-        return {x,y:side*p.trackWidth/2,z:0,velocity:0,road:heights[axle*2+sideIndex] || 0,
+        return {x,y:side*p.trackWidth/2,z:heights[axle*2+sideIndex] || 0,velocity:0,road:heights[axle*2+sideIndex] || 0,
           preload,load:preload+s.unsprungMass*g,travel:0};
       }))};
     return state.suspension;
@@ -121,12 +127,12 @@ window.VehicleDynamics = class VehicleDynamics {
     for(const w of body.wheels) w.travel=w.z-body.heave-w.x*body.pitch-w.y*body.roll;
   }
 
-  applyImpact(state, normal, impactMaterial) {
+  applyImpact(state, normal, impactMaterial, contact) {
     const cos=Math.cos(state.angle), sin=Math.sin(state.angle);
     const worldVx=state.vx*cos-state.vy*sin;
     const worldVy=state.vx*sin+state.vy*cos;
     const normalVelocity=worldVx*normal.x+worldVy*normal.y;
-    const impactSpeed=Math.max(0,-normalVelocity);
+    const impactSpeed=contact?.impulse!==undefined?contact.impulse/this.parameters.mass:Math.max(0,-normalVelocity);
     // Game tuning: stacked tyres cushion impacts more than rigid obstacles.
     // Use perpendicular speed; glancing contact keeps its tangential motion.
     const cushioned=impactMaterial==='tyres';
@@ -138,8 +144,15 @@ window.VehicleDynamics = class VehicleDynamics {
     state.impactSpeed=impactSpeed;
     state.impactEnergy=.5*this.parameters.mass*impactSpeed**2;
     state.impactSide=normal.x*(-sin)+normal.y*cos;
-    const vx=(worldVx-normalVelocity*normal.x)*.9;
-    const vy=(worldVy-normalVelocity*normal.y)*.9;
+    // Wall friction follows the impulse into the wall. A constant speed cut
+    // on every contact would brake a grazing slide repeatedly each frame.
+    const tangentVx=worldVx-normalVelocity*normal.x;
+    const tangentVy=worldVy-normalVelocity*normal.y;
+    const tangentSpeed=Math.hypot(tangentVx,tangentVy);
+    const retention=Math.max(0,1-.15*impactSpeed/Math.max(tangentSpeed,1e-12));
+    const remainingNormal=normalVelocity+impactSpeed;
+    const vx=tangentVx*retention+remainingNormal*normal.x;
+    const vy=tangentVy*retention+remainingNormal*normal.y;
     state.vx=state.crashed?0:vx*cos+vy*sin;
     state.vy=state.crashed?0:-vx*sin+vy*cos;
     state.yawRate=0;
@@ -155,6 +168,9 @@ window.VehicleDynamics = class VehicleDynamics {
     const p = this.parameters;
     const dt = Math.min(seconds, 1 / 90);
     const gravity = 9.81;
+    const grade=state.terrainSlope||{forward:0,right:0};
+    const gradeScale=gravity/Math.sqrt(1+grade.forward**2+grade.right**2);
+    const gradeForward=-grade.forward*gradeScale,gradeRight=-grade.right*gradeScale;
     const suspension=state.suspension || this.createSuspension(state);
     const gas = Math.max(0, Math.min(1, input.gas));
     const brake = Math.max(0, Math.min(1, input.brake));
@@ -185,7 +201,7 @@ window.VehicleDynamics = class VehicleDynamics {
     } else {
       const speed = Math.max(state.vx, 1.5);
       const yawLimit = mu * gravity * p.assistedSteeringGrip / speed;
-      // Use the full rack at low speed (about a 4.3 m radius), then reduce
+      // Use the full rack at low speed (about a 4.1 m radius), then reduce
       // steering demand as speed rises to stay within the lateral grip budget.
       const fullLockYawRate = speed * Math.tan(p.maxRoadWheelAngle) / p.wheelbase;
       const targetYawRate = state.steer * Math.min(fullLockYawRate, yawLimit);
@@ -261,7 +277,7 @@ window.VehicleDynamics = class VehicleDynamics {
     let rearFx = Math.max(-rearLimit, Math.min(rearLimit, driveRequest - rearBrakeForce));
 
     if (speed < 1.5) {
-      const ax = (frontFx + rearFx - drag - rolling) / p.mass;
+      const ax = (frontFx + rearFx - drag - rolling) / p.mass+gradeForward;
       state.vx = Math.max(0, Math.min(36, state.vx + ax * dt));
       state.vy *= Math.max(0, 1 - 6 * dt);
       state.yawRate = state.vx * Math.tan(state.steerAngle) / wheelbase;
@@ -285,8 +301,8 @@ window.VehicleDynamics = class VehicleDynamics {
       rearFy *= rearScale;
       const frontBodyFx = frontFx * Math.cos(state.steerAngle) - frontFy * Math.sin(state.steerAngle);
       const frontBodyFy = frontFx * Math.sin(state.steerAngle) + frontFy * Math.cos(state.steerAngle);
-      const vxDot = (frontBodyFx + rearFx - drag - rolling) / p.mass + state.vy * state.yawRate;
-      const vyDot = (frontBodyFy + rearFy) / p.mass - state.vx * state.yawRate;
+      const vxDot = (frontBodyFx + rearFx - drag - rolling) / p.mass + state.vy * state.yawRate+gradeForward;
+      const vyDot = (frontBodyFy + rearFy) / p.mass - state.vx * state.yawRate+gradeRight;
       const yawDot = (p.frontAxle * frontBodyFy - p.rearAxle * rearFy) / p.yawInertia;
       state.vx = Math.max(0, Math.min(36, state.vx + vxDot * dt));
       state.vy = Math.max(-14, Math.min(14, state.vy + vyDot * dt));

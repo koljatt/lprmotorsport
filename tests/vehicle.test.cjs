@@ -3,7 +3,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
-const context = { window: {} };
+const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), } };
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8').replace(
   'const vxDot =', 'state.frontFx = frontFx; state.rearFx = rearFx; const vxDot ='), context);
 
@@ -134,8 +134,8 @@ function liftOffRun({ gas = 0, brake = 0, analog = false, grass = 0, coast = tru
 for (const analog of [false, true]) {
   const lifted = liftOffRun({ analog });
   const rolling = liftOffRun({ analog, coast: false });
-  assert(lifted.vx < 12, 'Lifting from 54 km/h must lose at least 10.8 km/h in two seconds');
-  assert(rolling.vx - lifted.vx > 2.5, 'Lift-off must slow the car appreciably more than drag alone');
+  assert(lifted.vx < 13, 'Lifting must slow the 450 kg car under the retained provisional coast force');
+  assert(rolling.vx - lifted.vx > 1.5, 'Lift-off must slow the car appreciably more than drag alone');
   assert(liftOffRun({ analog, brake: 1 }).vx < lifted.vx,
     'The brake pedal must remain stronger than lift-off braking');
   assert(liftOffRun({ analog, gas: 1 }).vx > 15, 'Full throttle must still accelerate');

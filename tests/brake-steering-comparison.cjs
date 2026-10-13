@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const context = { window: {} };
+const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), } };
 let source = fs.readFileSync(process.argv[2] && process.argv[2] !== '--legacy-tires'
   ? process.argv[2] : path.join(__dirname, '../vehicle.js'), 'utf8');
 // Reconstruct the former longitudinal-priority envelope for reproducible

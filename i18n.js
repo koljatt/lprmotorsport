@@ -2,6 +2,8 @@
 (() => {
   'use strict';
   const english = {
+  "Äänet: päällä": "Sound: on",
+  "Äänet: pois": "Sound: off",
   "Tuloslista": "Leaderboard",
   "Sulje tuloslista": "Close leaderboard",
   "Takaisin peliin": "Back to game",
@@ -36,7 +38,6 @@
   "PARAS": "BEST",
   "NOPEUS": "SPEED",
   "3D-n\u00e4kym\u00e4 kuljettajan paikalta": "3D view from the driver's seat",
-  "Saunapaku on ensimm\u00e4isen mutkan ulkopuolella.": "The sauna van is outside the first corner.",
   "Mene saunaan (E)": "Enter sauna (E)",
   "Vaihda vastakkaiselle lauteelle (F)": "Switch to the opposite bench (F)",
   "Heit\u00e4 l\u00f6yly\u00e4 (v\u00e4lily\u00f6nti)": "Throw water on the stones (Space)",

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const context = { window: {} };
+const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), } };
 const source = fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8');
 vm.runInNewContext(source.replace('const vxDot =',
   'state.frontFx = frontFx; state.frontFy = frontFy; state.rearFx = rearFx; state.rearFy = rearFy; state.frontLimit = frontLimit; state.rearLimit = rearLimit; const vxDot ='), context);

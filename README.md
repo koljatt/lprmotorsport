@@ -1,22 +1,80 @@
 # LPR Lap Challenge
 
+Törmäykset vaikuttavat myös osuman kohteeseen. Pysäköidyt autot, traktori,
+saunapaku ja täysi palju liikkuvat ja kiertyvät massan sekä osumakohdan mukaan.
+Puut taipuvat, seinät halkeilevat ja lohkeilevat, ja ulkona olevat ihmiset
+siirtyvät ja kaatuvat osuman voimakkuuden mukaan. Vauriot ja painaumat säilyvät
+kierroksen aikana; uudelleenkäynnistys palauttaa kohteet. Malli on pelikäyttöön
+tehty yksinkertaistettu impulssi- ja vauriomalli. Fysiikkatestit: `npm run test:physics`.
+
+Pelin äänet käynnistyvät ensimmäisestä näppäimen painalluksesta tai
+kosketuksesta. Moottorin ääni seuraa nopeutta ja kaasua; renkaiden luisto,
+nurmikko, kanttikivet, törmäykset, kierroksen valmistuminen ja löylynheitto
+kuuluvat omina ääninään. Yläpalkin nuottipainike mykistää myös saunan
+puheen ja laulun. Ääniasetus säilyy selaimessa. Äänet hiljenevät
+tuloslistan ajaksi ja pelin menettäessä kohdistuksen. Äänet tuotetaan
+selaimen Web Audio API:lla ilman ladattavia äänitiedostoja.
+Äänten toimintatestit: `npm run test:audio`.
+
 ## Rataeditori
 
 Avaa erillinen rataeditori osoitteessa `http://localhost:8000/tools/track-editor/editor.html`.
+Käynnistä paikallinen palvelin ensin komennolla `npm run dev` tai Windowsissa
+kaksoisnapsauttamalla `Kaynnista-peli.cmd`. HTML-tiedostojen avaaminen suoraan
+`file://`-osoitteina ei tue projektin tallennusta eikä pelin ratadatan latausta.
+Suoraan tiedostona avattu `index.html` ohjaa peliin osoitteeseen
+`http://localhost:8000/`, jotta tallennetut rataelementit tulevat mukaan.
 Valitse kartio, suojakaide, puu tai laatikko, paina **Lisää kartalle** ja napauta
 sijoituspaikkaa. Valitse elementti kartalta tai luettelosta ja siirrä vetämällä.
 Sivupaneelissa voit muuttaa metrisijaintia, kiertoa ja kokoa sekä monistaa tai
 poistaa elementin. Ruudukkoon kohdistus, zoomaus sekä kumoa ja tee uudelleen
 ovat käytettävissä. Tyhjän kartan vetäminen siirtää näkymää.
 Rataelementteihin kuuluvat kartiot, suojakaiteet, rengasvallit, rakennukset,
-asfalttialueet, puut ja laatikot. Valittua elementtiä voi kiertää tarttumalla
-sen kulmassa olevaan kiertokuvakkeeseen ja vetämällä, tai kirjoittamalla tarkan
+asfalttialueet, puut ja laatikot.
+**Rengasvalli** ja **Suojakaide** piirretään vetämällä hiirellä tai sormella.
+Veto seuraa mutkia ja sen päät tarttuvat samanlaisen elementin päihin.
+Kumoa peruu koko vedon; Esc peruu keskeneräisen vedon.
+Sauna, nuotiopaikka, palju ja 22 ulkona olevaa ihmistä näkyvät editorissa
+valmiina elementteinä. Valitse kartalta tai luettelosta ja siirrä vetämällä
+tai X/Y-kentillä. Sauna ja palju siirtyvät omien sisällä istuvien vieraidensa
+kanssa; ulkona olevia numeroituja ihmisiä voi siirtää yksitellen.
+Näiden valmiiden kohteiden koko ja suunta ovat kiinteitä.
+Valitse **Mäki**, säädä siveltimen leveyttä ja mäen korkeutta ja maalaa
+vetämällä. Mäen reuna laskee pehmeästi ympäröivään maastoon. Päällekkäiset
+alueet yhdistyvät korkeimman pinnan mukaan. Valitun mäen korkeutta voi
+muuttaa myös **Korkeus (m)** -kentästä. Mäet nostavat myös tietä, kanttikiviä
+ja tiemerkintöjä; auton renkaat, jousitus ja kamera seuraavat pintaa, ja
+painovoima vaikuttaa nousuissa ja laskuissa. Kumoa, Delete ja tallennus
+toimivat kuten muillekin lisätyille elementeille.
+Valittua elementtiä voi kiertää tarttumalla sen kulmassa olevaan
+kiertokuvakkeeseen ja vetämällä, tai kirjoittamalla tarkan
 kulman asteina. Rengasvallit ja rakennukset
 ovat pelissä törmääviä esteitä; asfalttialue on tasainen ajopinta, joka poistaa
 nurmikon pito- ja ajotuntumavaikutuksen alueella.
+Valitse **Järvi**, säädä siveltimen leveyttä ja maalaa hiirellä tai sormella
+vetämällä. Voit jatkaa nykyistä järveä aloittamalla vedon sen päältä ja
+vetämällä reunan yli. Piirtotila pysyy päällä useiden vetojen ajan.
+**Kumoa** peruu koko viimeisen vedon; Esc peruu keskeneräisen vedon tai
+lopettaa piirtämisen. Hiiren keskipainikkeella voit siirtää karttaa myös
+piirtotilassa.
+**Asfaltti** toimii samalla tavalla neliösiveltimellä.
+**Salli maalaus radan päälle** on oletuksena pois: rata ja kanttikivet
+leikataan maalattavan alueen ulkopuolelle. Valinnalla voi sallia asfaltin
+myös radalle. Jo valitun asfalttialueen asetusta voi muuttaa sen ominaisuuksista.
+Säädä siveltimen leveyttä ja **Kulmien pyöristys** -liukusäädintä: 0 % tekee terävät kulmat,
+100 % täysin pyöristetyt. Pyöristys tallentuu alueen mukana ja vaikuttaa
+myös pelissä näkyvään asfalttiin sekä ajopinnan pitoon. Vanhat suorakulmaiset
+asfalttielementit säilyttävät muotonsa.
 Editorissa lisättävät kartiot tallentuvat rataelementteinä ja toimivat
 törmäävinä esteinä.
 **Tallenna projektiin** tallentaa elementit projektin `data/track-objects.json`-tiedostoon, joka kulkee Gitissä mukana. Peli lukee saman ratadatan 3D-näkymään ja törmäysrajoihin.
+Tallennuksen tila näkyy tallennuspainikkeen vieressä. **Rata tallennettu ja
+tarkistettu** tarkoittaa, että editori on lukenut kirjoitetun tiedoston
+takaisin ja varmistanut sen sisällön. Virheen jälkeen muokkaukset säilyvät
+editorissa, ja **Vie JSON** tekee niistä varmuuskopion.
+Paikallinen peli tarkistaa tallennetun ratadatan, kun palaat pelin välilehdelle.
+Jos rata on muuttunut, sivu latautuu uudelleen ja ajo alkaa alusta uusilla
+elementeillä. Julkaistulle sivulle muutokset tulevat uuden julkaisun mukana.
 **Vie JSON** ja **Tuo JSON** siirtävät elementit selainten välillä. Tuonti korvaa
 editorin nykyiset elementit, ja sen voi kumota. Muokatun radan kierroksia ei
 lähetetä verkkotuloslistaan. Editorilla muokataan lisättyjä elementtejä;
@@ -66,6 +124,10 @@ säilyvät repositoriossa kehitystä varten. Pelin kierrosajat tallentuvat
 käytetyn selaimen omaan tallennustilaan.
 
 ## Ohjaus
+
+Kaupan hyllyjen sivut ja päädyt ovat umpinäisiä tuotteiden takaa. Kassapöytä kulkee pitkittäin paluukäytävän suuntaan: liukuhihna on tulopäässä, sen jälkeen lukija ja maksupääte sekä poistumispäässä pakkausalue. Kassalle kuljetaan paluukäytävältä pöydän oikealle puolelle ja siitä uloskäynnille.
+
+Salen sisätilassa on vaalea akustiikkakatto, loistevalaisimet, laattalattian pintavaihtelu ja kalusteiden pehmeät kontaktivarjot. Kassalla näkyvät liukuhihna, viivakoodinlukija, maksupääte ja pakkausalue; sisäänkäynnillä lasiovien heijastukset, kuramatto ja punaiset ostoskorit. Hyllyjen tuotekohtaiset hintalaput ovat pelin kuvitusta, eivät kaupan ajantasaisia hintoja. Sisätila on edelleen tyylitelty tulkinta Skinnarilan Salesta.
 
 Sale Skinnarilaan pääsee pysähtymällä kaupan ovelle kampusradan eteläpuolella ja valitsemalla **Mene Saleen** tai painamalla **E**. Sisällä näkymän klikkaaminen lukitsee hiiren: katse seuraa hiiren liikettä ilman painikkeen pitämistä. Esc vapauttaa hiiren. Kosketuksella katsellaan vetämällä. W/S tai kaasu/jarru liikuttaa eteen ja taakse; A/D, ohjauspainikkeet tai ohjausalue liikuttavat sivuille. WASD toimii myös saunassa. W+D liikuttaa viistosti samalla nopeudella. Hyllyjen läpi ei voi kävellä. **Palaa autoon** tai **E** palauttaa samaan pysäköintipaikkaan. Kierrosaika pysähtyy kaupassa käynnin ajaksi. Valkoinen paneelijulkisivu, punainen Sale-kyltti, sisäänkäynti ja luiska sekä sisätilan hyllyt, kylmäkaapit ja keltainen yläreunus on mallinnettu käyttäjän kuvien perusteella. Tilat ovat tyylitelty tulkinta. Toteutus on tiedostossa `sale.js`.
 
@@ -195,3 +257,8 @@ kuljettajan näkymässä paikallaan auton suunnan ja G-voimien muuttuessa.
 Yl?palkin ?? avaa suoraan tuloslistan ja nimimerkin valinnan. Ratin ja polkimien kalibrointi on poistettu. K?ytt??notto: [cloudflare/README.md](cloudflare/README.md).
 
 Saunapakun ulkomallissa on referenssivalokuvasta perspektiivikorjattu kylkimaalaus (`assets/sauna-reference.jpg`), py?re? savupiippu, yksityiskohtaiset ter?svanteet, ikkunatiivisteet, peilit, pyyhkij?t ja etus?leikk?. Kylkitekstuuri latautuu paikallisesti; ennen latautumista n?kyy geometrinen varamaalaus. Molemmat kyljet k?ytt?v?t samaa referenssin n?kyv?? kylke?.
+
+
+Auton mitat ja massa ovat yhteisess? `shared/vehicle-spec.js`-tiedostossa: 450 kg sis?lt?? 80 kg kuljettajan (auto ilman kuljettajaa 370 kg), akseliv?li 1525 mm, raideleveys 1472 mm, kokonaispituus 2900 mm ja kokonaiskorkeus 1300 mm. Korin konseptimalli on sovitettu n?ihin ulkomittoihin. Kaikki nelj? py?r?? ja t?rm?yspinnat k?ytt?v?t samoja akselipaikkoja kuin fysiikka. Vanteet ovat nimelliskooltaan OZ Racing 13 ? 7 tuumaa ja renkaat Hoosier 20.5 ? 7?13 tuumaa (nimellinen ulkohalkaisija 520,7 mm, leveys 177,8 mm ja vannehalkaisija 330,2 mm). OZ:n tarkkaa vannemallia eik? Hoosierin seosta ole m??ritetty.
+
+Painojakauma (aiempi l?hes 50/50-arvio), painopisteen korkeus 290 mm, moottoriteho 60 kW, vetovoima 1850 N, jarruvoima 4500 N, pito ja jousitus ovat edelleen pelimallin arvioita. Kokonaiskorkeus ei m??rit? painopisteen korkeutta. Hitausmomentit on suhteutettu uuteen massaan ja akselimittoihin; renkaiden sivuttaisj?ykkyys on suhteutettu kuormaan samalla kuormaherkkyyden eksponentilla kuin pito. Suurempi massa pienent?? kiihtyvyytt? ja pident?? jarrutusmatkaa s?ilytetyill? voima-arvioilla: testiss? 100 km/h pys?htyy noin 36,7 metriss? / 2,67 sekunnissa. Renkaiden koko vastaa annettua nimelliskokoa; tarkat asennetut mitat ja rengasvoimat vaativat rengasdataa. Mittojen ja fysiikan tarkistus: `node tests/vehicle-dimensions.test.cjs`, `node tests/vehicle.test.cjs`, `node tests/suspension.test.cjs`, `node tests/braking.test.cjs` ja `node tests/collision.test.cjs`.

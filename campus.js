@@ -4,7 +4,7 @@ window.LPRCampus = (() => {
   const scale = 5;
   const road = { halfWidth: 33, kerbOuter: 39, shoulderOuter: 41 };
   const world = (x, y) => ({ x: (x - 100) * scale + 200, y: (y - 100) * scale + 200 });
-  const anchors = [[190,180],[310,180],[445,180],[500,225],[550,260],[600,305],[645,340],[645,360],[625,395],[623,435],[600,445],[550,440],[505,445],[512,510],[512,640],[507,745],[496,798],[480,812],[465,800],[450,735],[430,690],[395,650],[365,590],[350,530],[327,492],[285,470],[235,460],[210,445],[200,410],[200,345],[185,275],[182,225]];
+  const anchors = [[190,180],[310,180],[445,180],[500,225],[550,260],[600,305],[645,340],[645,360],[625,395],[623,425],[600,428],[550,428],[505,433],[512,510],[512,640],[507,745],[496,798],[480,812],[465,800],[450,735],[430,690],[395,650],[365,590],[350,530],[327,492],[285,470],[235,460],[210,445],[200,410],[200,345],[185,275],[182,225]];
   const dense = [];
   for (let i = 0; i < anchors.length; i++) {
     const p0 = anchors[(i + anchors.length - 1) % anchors.length], p1 = anchors[i];
@@ -30,6 +30,10 @@ window.LPRCampus = (() => {
     const f = (target-distances[segment])/(distances[segment+1]-distances[segment]);
     return { x:a.x+(b.x-a.x)*f, y:a.y+(b.y-a.y)*f };
   });
+  // Move the shared start/finish onto the straight, about 50 metres forward.
+  // Rotate existing samples so the road geometry stays exactly the same.
+  const startIndex = Math.round(50 / window.LPRVehicleSpec.metresPerWorldUnit / (length / track.length));
+  track.push(...track.splice(0, startIndex));
   const outsideTrackClearance = (x,y,clearance) => {
     const clearanceSquared=clearance*clearance;
     for(let i=0;i<track.length;i++) {
@@ -68,53 +72,178 @@ window.LPRCampus = (() => {
   // Sale's facade is rendered separately in sale.js (300 by 100 world units).
   const saleCenter=world(550,462);
   buildingBounds.push({minX:saleCenter.x-150,maxX:saleCenter.x+150,minY:saleCenter.y-50,maxY:saleCenter.y+50});
+  // Match Sale's two ramps, entrance landing and three street-facing steps.
+  // Facade u is reversed relative to world X, as in sale.js.
+  const saleAccessBounds=[[-147,30,-69,-51.4],[78,148,-69,-51.4],[30,78,-69,-51],
+    ...Array.from({length:3},(_,i)=>[43,65,-76.05+i*2.1,-73.95+i*2.1])]
+    .map(([u0,u1,v0,v1])=>({minX:saleCenter.x-u1,maxX:saleCenter.x-u0,
+      minY:saleCenter.y+v0,maxY:saleCenter.y+v1}));
 
-  function resolveBoundsCollision(state, previous, obstacles) {
-    // A conservative circular footprint includes the nose and wheels at every
-    // heading. Sweep it along the entire step so thin walls cannot be skipped.
-    const radius=14, dx=state.x-previous.x, dy=state.y-previous.y;
-    let firstHit=Infinity, normal={x:0,y:0}, impactMaterial;
-    for(const bounds of obstacles) {
-      // Test rotated vehicle footprints in their own frame, then rotate the
-      // contact normal back so glancing impacts preserve world-space motion.
-      const cx=(bounds.minX+bounds.maxX)/2, cy=(bounds.minY+bounds.maxY)/2;
-      const cos=Math.cos(bounds.angle || 0), sin=Math.sin(bounds.angle || 0);
-      const px=previous.x-cx, py=previous.y-cy;
-      const localX=px*cos+py*sin, localY=-px*sin+py*cos;
-      const localDx=dx*cos+dy*sin, localDy=-dx*sin+dy*cos;
-      let enter=0, exit=1, hitNormal={x:0,y:0};
-      for(const [axis,start,delta,min,max] of [
-        ['x',localX,localDx,bounds.minX-cx-radius,bounds.maxX-cx+radius],
-        ['y',localY,localDy,bounds.minY-cy-radius,bounds.maxY-cy+radius]
-      ]) {
-        if(Math.abs(delta)<1e-12) {
-          if(start<=min || start>=max) { exit=-1; break; }
-        } else {
-          const a=(min-start)/delta, b=(max-start)/delta;
-          const near=Math.min(a,b);
-          if(near>=enter) {
-            enter=near;
-            hitNormal={x:0,y:0};
-            hitNormal[axis]=-Math.sign(delta);
-          }
-          exit=Math.min(exit,Math.max(a,b));
-        }
+  const spec=window.LPRVehicleSpec;
+  const units=1/spec.metresPerWorldUnit;
+  const carGeometry={
+    noseControls:[[-1.2,2.7,4],[3,2.75,2.65],[7.5,2.25,2.5],[10.8,1.65,2.05],[12,1.1,1.55],[12.4,.65,1.1]],
+    wingPanels:[{front:14.1,rear:12.85,sweep:.16,rise:0},{front:12.35,rear:11.78,sweep:.13,rise:.12}],
+    tyreProfile:[[-1.1,2.08],[-1.03,2.18],[-.78,2.28],[-.48,2.3],[.48,2.3],[.78,2.28],[1.03,2.18],[1.1,2.08]],
+    wheelForward:spec.frontAxle*units,wheelRear:-spec.rearAxle*units,
+    wheelSide:spec.trackWidth*units/2,
+    tyreRadius:spec.tyreDiameter*units/2, rimRadius:spec.rimDiameter*units/2,
+    tyreHalfWidth:spec.tyreWidth*units/2, rimHalfWidth:spec.rimWidth*units/2,
+    bodyLengthScale:spec.bodyLengthScale,bodyHeightScale:spec.bodyHeightScale
+  };
+  carGeometry.tyreProfile=carGeometry.tyreProfile.map(([a,r])=>[
+    a*carGeometry.tyreHalfWidth/1.1872,
+    carGeometry.rimRadius+(r-1.12)/1.18*(carGeometry.tyreRadius-carGeometry.rimRadius)]);
+  const controls=carGeometry.noseControls;
+  carGeometry.noseSections=[];
+  const tangent=(i,k)=>{
+    const a=controls[Math.max(0,i-1)],b=controls[Math.min(controls.length-1,i+1)];
+    return (b[k]-a[k])/(b[0]-a[0]);
+  };
+  for(let i=0;i<controls.length-1;i++) for(let j=0;j<5;j++) {
+    const a=controls[i],b=controls[i+1],t=j/5,t2=t*t,t3=t2*t,length=b[0]-a[0];
+    carGeometry.noseSections.push([a[0]+length*t,...[1,2].map(k=>
+      (2*t3-3*t2+1)*a[k]+(t3-2*t2+t)*length*tangent(i,k)
+      +(-2*t3+3*t2)*b[k]+(t3-t2)*length*tangent(i+1,k))]);
+  }
+  carGeometry.noseSections.push(controls.at(-1));
+  // Separate visible parts preserve the open space beside the narrow nose.
+  const bodyParts=[[[-9.64,-3.49],[-9.64,3.49],[-8.36,3.49],[-8.36,-3.49]],
+    [[-9.4,-3.1],[-9.4,3.1],[-1.2,3.1],[-1.2,-3.1]]];
+  for(let i=1;i<carGeometry.noseSections.length;i++) {
+    const [a,w]=carGeometry.noseSections[i-1],[b,v]=carGeometry.noseSections[i];
+    bodyParts.push([[a,-w-.22],[a,w+.22],[b,v+.22],[b,-v-.22]]);
+  }
+  for(const side of [-1,1]) {
+    bodyParts.push([[-7.8,side*3.1],[-7.8,side*5.1],[2.8,side*4.5],[3,side*2.9]]);
+    for(const panel of carGeometry.wingPanels) bodyParts.push(
+      [[panel.front-panel.sweep*1.35,side*1.35],[panel.front-panel.sweep*10.25,side*10.25],
+        [panel.rear-panel.sweep*.72*10.25,side*10.25],[panel.rear-panel.sweep*.72*1.35,side*1.35]]);
+    bodyParts.push([[12.45,side*10.05],[12.4,side*10.28],[11,side*10.28],[11.1,side*10.05]]);
+  }
+  function carCollisionParts(state) {
+    const damage=state.damage || 0,impactSide=state.impactSide || .3;
+    const parts=bodyParts.map(part=>part.map(([f,s])=>{
+      f*=spec.bodyLengthScale;
+      const crush=Math.max(0,f-2)*damage;
+      return [f-crush*.55,s+impactSide*crush*.25];
+    }));
+    for(const axle of [0,1]) for(const side of [-1,1]) {
+      const angle=axle===0?(state.steerAngle || 0)+side*damage*.65:0,c=Math.cos(angle),s=Math.sin(angle);
+      const crush=axle===0?6.1*damage:0;
+      const f=(axle===0?carGeometry.wheelForward:carGeometry.wheelRear)-crush*.55,lateral=side*carGeometry.wheelSide+impactSide*crush*.25;
+      const profile=[...carGeometry.tyreProfile.map(([axial,r])=>[r,axial]),
+        ...carGeometry.tyreProfile.slice().reverse().map(([axial,r])=>[-r,axial])];
+      // Raised sidewall mouldings also belong to the visible wheel.
+      const band=carGeometry.rimRadius+(1.88-1.12)/1.18*(carGeometry.tyreRadius-carGeometry.rimRadius);
+      for(const axial of [-carGeometry.tyreHalfWidth,carGeometry.tyreHalfWidth]) profile.push([band,axial],[-band,axial]);
+      parts.push(convexHull(profile).map(([x,y])=>[f+x*c-y*s,lateral+x*s+y*c]));
+    }
+    return parts;
+  }
+  function convexHull(points) {
+    const sorted=points.slice().sort((a,b)=>a[0]-b[0] || a[1]-b[1]);
+    const half=list=>{const out=[];for(const p of list) {
+      while(out.length>1) {
+        const a=out.at(-2),b=out.at(-1);
+        if((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0])>0) break;
+        out.pop();
       }
-      if(enter<exit && exit>0 && enter<firstHit) {
-        firstHit=enter;
-        impactMaterial=bounds.impactMaterial;
-        normal={x:hitNormal.x*cos-hitNormal.y*sin,y:hitNormal.x*sin+hitNormal.y*cos};
+      out.push(p);
+    }return out;};
+    return [...half(sorted).slice(0,-1),...half(sorted.reverse()).slice(0,-1)];
+  }
+  function resolveBoundsCollision(state, previous, obstacles, onImpact) {
+    let from={...previous},firstContact;
+    // Spend the rest of the step travelling along the contacted surface.
+    // Sweep each slide again so a second wall can stop it at a corner.
+    for(let i=0;i<6;i++) {
+      const target={x:state.x,y:state.y};
+      const contact=sweepBoundsCollision(state,from,obstacles);
+      if(!contact) break;
+      firstContact ||= contact;
+      const tangent={x:-contact.normal.y,y:contact.normal.x};
+      const beforeX=(state.vx || 0)*Math.cos(state.angle)-(state.vy || 0)*Math.sin(state.angle);
+      const beforeY=(state.vx || 0)*Math.sin(state.angle)+(state.vy || 0)*Math.cos(state.angle);
+      impactObstacle(state,contact);
+      onImpact?.(contact);
+      if(state.crashed) break;
+      const afterX=(state.vx || 0)*Math.cos(state.angle)-(state.vy || 0)*Math.sin(state.angle);
+      const afterY=(state.vx || 0)*Math.sin(state.angle)+(state.vy || 0)*Math.cos(state.angle);
+      const tangentSpeed=Math.abs(beforeX*tangent.x+beforeY*tangent.y);
+      const retention=onImpact && tangentSpeed>1e-12
+        ? Math.min(1,Math.abs(afterX*tangent.x+afterY*tangent.y)/tangentSpeed) : 1;
+      const remainingX=target.x-state.x,remainingY=target.y-state.y;
+      const into=Math.min(0,remainingX*contact.normal.x+remainingY*contact.normal.y);
+      const slideX=(remainingX-into*contact.normal.x)*retention;
+      const slideY=(remainingY-into*contact.normal.y)*retention;
+      if(Math.hypot(slideX,slideY)<1e-7) break;
+      // Rotation has already stopped at contact; translate the same footprint.
+      from={x:state.x,y:state.y,angle:state.angle};
+      state.x+=slideX;
+      state.y+=slideY;
+      if(i===5) {state.x=from.x;state.y=from.y;}
+    }
+    return firstContact || false;
+  }
+  function sweepBoundsCollision(state, previous, obstacles) {
+    const dx=state.x-previous.x,dy=state.y-previous.y;
+    const startAngle=previous.angle ?? state.angle ?? 0;
+    const turn=(state.angle ?? startAngle)-startAngle;
+    const parts=carCollisionParts(state);
+    const reach=Math.max(...parts.flat().map(p=>Math.hypot(...p)));
+    const travel=Math.hypot(dx,dy)+Math.abs(turn)*reach;
+    let firstHit=Infinity,normal,impactMaterial,hitBounds;
+    for(const bounds of obstacles) {
+      const cx=(bounds.minX+bounds.maxX)/2,cy=(bounds.minY+bounds.maxY)/2;
+      const halfX=(bounds.maxX-bounds.minX)/2,halfY=(bounds.maxY-bounds.minY)/2;
+      const obstacleReach=Math.hypot(halfX,halfY);
+      if(cx+obstacleReach<Math.min(previous.x,state.x)-reach || cx-obstacleReach>Math.max(previous.x,state.x)+reach ||
+        cy+obstacleReach<Math.min(previous.y,state.y)-reach || cy-obstacleReach>Math.max(previous.y,state.y)+reach) continue;
+      const oc=Math.cos(bounds.angle || 0),os=Math.sin(bounds.angle || 0);
+      const obstacleAxes=[[oc,os],[-os,oc]];
+      for(const part of parts) {
+        // Separating axes give a safe distance to advance along the sweep,
+        // including rotation. Never expand a wall by an enclosing circle.
+        const separation=t=>{
+          const c=Math.cos(startAngle+turn*t),s=Math.sin(startAngle+turn*t);
+          const points=part.map(([x,y])=>[previous.x+dx*t-cx+x*c-y*s,previous.y+dy*t-cy+x*s+y*c]);
+          const axes=obstacleAxes.slice();
+          for(let i=0;i<points.length;i++) {
+            const a=points[i],b=points[(i+1)%points.length],x=b[0]-a[0],y=b[1]-a[1],length=Math.hypot(x,y);
+            if(length>1e-12) axes.push([-y/length,x/length]);
+          }
+          let gap=-Infinity,n;
+          for(const [x,y] of axes) {
+            const extent=halfX*Math.abs(x*oc+y*os)+halfY*Math.abs(-x*os+y*oc);
+            const projections=points.map(p=>p[0]*x+p[1]*y);
+            const low=Math.min(...projections),high=Math.max(...projections);
+            const a=low-extent,b=-extent-high;
+            if(Math.max(a,b)>gap) {gap=Math.max(a,b);n=a>b?{x,y}:{x:-x,y:-y};}
+          }
+          return {gap,normal:n};
+        };
+        let t=0,contact=separation(0);
+        const separating=turn===0
+          ? dx*contact.normal.x+dy*contact.normal.y>=-1e-12
+          : separation(1e-5).gap>=contact.gap-1e-12;
+        if(contact.gap<=1e-7 && separating) continue;
+        for(let i=0;i<200 && t<=1 && t<firstHit;i++) {
+          if(contact.gap<=1e-7) {firstHit=t;normal=contact.normal;impactMaterial=bounds.impactMaterial;hitBounds=bounds;break;}
+          const closingSpeed=-(dx*contact.normal.x+dy*contact.normal.y)+Math.abs(turn)*reach;
+          if(closingSpeed<1e-12) break;
+          t+=contact.gap/closingSpeed;
+          if(t>1 || t>=firstHit) break;
+          contact=separation(t);
+        }
       }
     }
     if(!Number.isFinite(firstHit)) return false;
-    const fraction=Math.max(0,firstHit-.001/Math.max(Math.hypot(dx,dy),.001));
+    const fraction=Math.max(0,firstHit-.00001/Math.max(travel,.00001));
     state.x=previous.x+dx*fraction;
     state.y=previous.y+dy*fraction;
-    if(normal.x===0 && normal.y===0) {
-      const distance=Math.hypot(dx,dy);
-      if(distance>0) normal={x:-dx/distance,y:-dy/distance};
-    }
-    return {normal,impactMaterial};
+    state.angle=startAngle+turn*fraction;
+    return {normal,impactMaterial,body:hitBounds.body};
   }
   const bonfireSite = world(625,228);
   const parkClearing = (x,z) => [saunaSite,bonfireSite].some(p=>Math.hypot(x-p.x,z-p.y)<110);
@@ -257,10 +386,174 @@ window.LPRCampus = (() => {
   const tyreBarrierBounds=tyreBarrier.map(tyre=>({
     ...footprint(tyre.x,tyre.y,tyre.radius*2,tyre.radius*2),impactMaterial:'tyres'
   }));
-  const obstacleBounds=[...buildingBounds,...treeBounds,...vehicleBounds,...tyreBarrierBounds];
-  const resolveBuildingCollision=(state,previous)=>resolveBoundsCollision(state,previous,buildingBounds);
-  const resolveObstacleCollision=(state,previous)=>resolveBoundsCollision(state,previous,obstacleBounds);
-  function build({box,quad,materialBox=box}) {
+  const poolSite={x:saunaSite.x-57*diagonal,y:saunaSite.y-57*diagonal};
+  const poolBounds=footprint(poolSite.x,poolSite.y,28,28);
+  const peopleBounds=[];
+  const obstacleBounds=[...buildingBounds,...saleAccessBounds,...treeBounds,...vehicleBounds,...tyreBarrierBounds,poolBounds];
+  // SI velocities and masses; only positions and mesh coordinates use world units.
+  const bodies=[];
+  function makeBody(bounds,kind,mass=Infinity) {
+    const body={bounds,kind,mass,x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2,
+      angle:bounds.angle||0,vx:0,vy:0,spin:0,damage:0,bend:0,bendVelocity:0,dents:[]};
+    body.origin={x:body.x,y:body.y,angle:body.angle};
+    body.spawn={...body.origin};
+    body.width=bounds.maxX-bounds.minX;body.depth=bounds.maxY-bounds.minY;
+    Object.defineProperty(bounds,'body',{value:body,enumerable:false});bodies.push(body);return body;
+  }
+  buildingBounds.forEach(b=>makeBody(b,'wall'));
+  treeBounds.forEach((b,i)=>{Object.defineProperty(trees[i],'body',{value:makeBody(b,'tree'),enumerable:false});});
+  saleAccessBounds.forEach(b=>makeBody(b,'wall'));
+  vehicleBounds.forEach((b,i)=>makeBody(b,i===vehicleBounds.length-1?'sauna':'car',
+    i===vehicleBounds.length-1?3500:i===vehicleBounds.length-2?4200:1200));
+  const poolBody=makeBody(poolBounds,'pool',2200);
+  function registerPerson(index,x,y) {
+    if(peopleBounds[index]) return peopleBounds[index].body;
+    const bounds=footprint(x,y,5,5);peopleBounds[index]=bounds;obstacleBounds.push(bounds);
+    return makeBody(bounds,'person',80);
+  }
+  function updateBounds(body) {
+    const b=body.bounds;b.minX=body.x-body.width/2;b.maxX=body.x+body.width/2;
+    b.minY=body.y-body.depth/2;b.maxY=body.y+body.depth/2;b.angle=body.angle;
+  }
+  function impactObstacle(car,contact) {
+    const b=contact.body;if(!b) return;
+    const n=contact.normal,c=Math.cos(car.angle),s=Math.sin(car.angle);
+    const speed=Math.max(0,-(((car.vx||0)*c-(car.vy||0)*s-b.vx)*n.x+
+      ((car.vx||0)*s+(car.vy||0)*c-b.vy)*n.y));
+    const inverseMass=Number.isFinite(b.mass)?1/b.mass:0;
+    const impulse=speed/(1/spec.mass+inverseMass);
+    contact.impulse=impulse;contact.relativeSpeed=speed;
+    if(speed<.05) return;
+    b.vx-=n.x*impulse*inverseMass;b.vy-=n.y*impulse*inverseMass;
+    const px=car.x-n.x*12,py=car.y-n.y*12;
+    const energy=.5*impulse*speed;
+    const threshold=b.kind==='wall'?120000:b.kind==='tree'?70000:b.kind==='person'?1800:35000;
+    const severity=Math.max(0,energy-150)/threshold;
+    b.damage=Math.min(1,b.damage+severity);
+    b.direction={x:-n.x,y:-n.y};
+    if(b.kind==='tree') b.bendVelocity+=Math.min(2,impulse/18000);
+    if(inverseMass) {
+      const inertia=b.mass*((b.width*spec.metresPerWorldUnit)**2+(b.depth*spec.metresPerWorldUnit)**2)/12;
+      b.spin+=Math.max(-2,Math.min(2,((px-b.x)*-n.y-(py-b.y)*-n.x)*spec.metresPerWorldUnit*impulse/inertia));
+    }
+    if(severity>0 && b.kind!=='person' && b.kind!=='tree') {
+      // Keep bounded local contact patches; repeated hits deepen the same dent.
+      const co=Math.cos(b.angle),si=Math.sin(b.angle),dx=px-b.x,dy=py-b.y;
+      const dent={x:Math.max(-b.width/2,Math.min(b.width/2,dx*co+dy*si)),
+        y:Math.max(-b.depth/2,Math.min(b.depth/2,-dx*si+dy*co)),
+        nx:-n.x*co-n.y*si,ny:n.x*si-n.y*co,depth:Math.min(5,severity*6)};
+      const old=b.dents.find(d=>Math.hypot(d.x-dent.x,d.y-dent.y)<12);
+      if(old) old.depth=Math.min(6,old.depth+dent.depth);else {b.dents.push(dent);if(b.dents.length>8)b.dents.shift();}
+    }
+  }
+  function overlap(a,b) {
+    const dx=b.x-a.x,dy=b.y-a.y;
+    if(Math.hypot(dx,dy)>Math.hypot(a.width,a.depth)/2+Math.hypot(b.width,b.depth)/2)return false;
+    let depth=Infinity,normal;
+    for(const angle of [a.angle,b.angle]) for(const turn of [0,Math.PI/2]) {
+      const x=Math.cos(angle+turn),y=Math.sin(angle+turn);
+      const extent=p=>Math.abs(Math.cos(p.angle)*x+Math.sin(p.angle)*y)*p.width/2+
+        Math.abs(-Math.sin(p.angle)*x+Math.cos(p.angle)*y)*p.depth/2;
+      const distance=dx*x+dy*y,gap=extent(a)+extent(b)-Math.abs(distance);
+      if(gap<=0)return false;
+      if(gap<depth){depth=gap;normal={x:x*Math.sign(distance||1),y:y*Math.sign(distance||1)};}
+    }
+    return {depth,normal};
+  }
+  function overlapCarPart(body,car,part) {
+    const c=Math.cos(car.angle),s=Math.sin(car.angle);
+    const points=part.map(([x,y])=>[car.x-body.x+x*c-y*s,car.y-body.y+x*s+y*c]);
+    const bc=Math.cos(body.angle),bs=Math.sin(body.angle),axes=[[bc,bs],[-bs,bc]];
+    for(let i=0;i<points.length;i++) {
+      const a=points[i],b=points[(i+1)%points.length],length=Math.hypot(b[0]-a[0],b[1]-a[1]);
+      if(length>1e-8)axes.push([-(b[1]-a[1])/length,(b[0]-a[0])/length]);
+    }
+    let depth=Infinity,normal;
+    for(const [x,y] of axes) {
+      const extent=Math.abs(x*bc+y*bs)*body.width/2+Math.abs(-x*bs+y*bc)*body.depth/2;
+      const values=points.map(p=>p[0]*x+p[1]*y),low=Math.min(...values),high=Math.max(...values);
+      if(low>=extent || high<=-extent)return false;
+      const positive=extent-low,negative=high+extent,penetration=Math.min(positive,negative);
+      if(penetration<depth){depth=penetration;const direction=positive<negative?1:-1;normal={x:x*direction,y:y*direction};}
+    }
+    return {depth,normal};
+  }
+  function stepObstacles(seconds,car,onImpact) {
+    const duration=Math.max(0,Math.min(seconds,.1));
+    const motion=bodies.reduce((max,b)=>Number.isFinite(b.mass)?Math.max(max,
+      Math.hypot(b.vx,b.vy)/spec.metresPerWorldUnit+Math.abs(b.spin)*Math.hypot(b.width,b.depth)/2):max,0);
+    const steps=Math.max(1,Math.ceil(duration*Math.max(90,motion*4))),dt=duration/steps;
+    for(let i=0;i<steps;i++) for(const b of bodies) {
+      if(b.kind==='tree') {
+        const target=b.damage*.65;
+        b.bendVelocity+=((target-b.bend)*14-b.bendVelocity*5)*dt;
+        b.bend=Math.max(0,Math.min(1,b.bend+b.bendVelocity*dt));continue;
+      }
+      if(!Number.isFinite(b.mass)||Math.abs(b.vx)+Math.abs(b.vy)+Math.abs(b.spin)<.001)continue;
+      b.x+=b.vx*dt/spec.metresPerWorldUnit;b.y+=b.vy*dt/spec.metresPerWorldUnit;b.angle+=b.spin*dt;
+      if(car) {
+        // The target can also strike the player while the player is stationary.
+        // Use separate visible car parts so the open nose gaps stay clear.
+        for(const part of carCollisionParts(car)) {
+          if(Math.hypot(b.x-car.x,b.y-car.y)>Math.hypot(b.width,b.depth)/2+30)break;
+          const hit=overlapCarPart(b,car,part);if(!hit)continue;
+          b.x-=hit.normal.x*(hit.depth+.001);b.y-=hit.normal.y*(hit.depth+.001);
+          const normal=hit.normal,contact={body:b,normal,impactMaterial:b.bounds.impactMaterial};
+          impactObstacle(car,contact);onImpact?.(contact);updateBounds(b);break;
+        }
+      }
+      for(const other of bodies) {
+        if(other===b)continue;
+        const hit=overlap(b,other);if(!hit)continue;
+        const n=hit.normal,inv=Number.isFinite(other.mass)?1/other.mass:0;
+        b.x-=n.x*(hit.depth+.001);b.y-=n.y*(hit.depth+.001);
+        const closing=(b.vx-other.vx)*n.x+(b.vy-other.vy)*n.y;
+        if(closing>0) {
+          const impulse=closing/(1/b.mass+inv);
+          b.vx-=n.x*impulse/b.mass;b.vy-=n.y*impulse/b.mass;
+          other.vx+=n.x*impulse*inv;other.vy+=n.y*impulse*inv;
+          const damage=Math.max(0,.5*impulse*closing-150)/35000;
+          b.damage=Math.min(1,b.damage+damage);other.damage=Math.min(1,other.damage+damage);
+        }
+        b.spin*=.4;
+      }
+      const drag=Math.exp(-(b.kind==='person'?3:1.7)*dt);
+      b.vx*=drag;b.vy*=drag;b.spin*=Math.exp(-3*dt);updateBounds(b);
+    }
+  }
+  function resetObstacles() {
+    for(const b of bodies) {
+      b.origin={...b.spawn};b.pose=undefined;
+      Object.assign(b,{...b.origin,vx:0,vy:0,spin:0,damage:0,bend:0,bendVelocity:0,dents:[],direction:undefined});updateBounds(b);
+    }
+  }
+  function movePerson(body,x,y,pose) {
+    if(body.direction)return;
+    body.x=x;body.y=y;body.origin.x=x;body.origin.y=y;body.pose=pose;updateBounds(body);
+  }
+  function placeBody(body,x,y) {
+    body.x=x;body.y=y;body.origin={x,y,angle:body.angle};body.spawn={...body.origin};updateBounds(body);
+  }
+  function deformPoint(body,x,height,y) {
+    const o=body.origin,c=Math.cos(o.angle),s=Math.sin(o.angle);
+    let f=(x-o.x)*c+(y-o.y)*s,l=-(x-o.x)*s+(y-o.y)*c;
+    for(const d of body.dents) {
+      const weight=Math.max(0,1-Math.hypot(f-d.x,l-d.y)/22)*Math.max(0,1-Math.abs(height-6)/22);
+      f+=d.nx*d.depth*weight;l+=d.ny*d.depth*weight;
+    }
+    const co=Math.cos(body.angle),si=Math.sin(body.angle);
+    let wx=body.x+f*co-l*si,wy=body.y+f*si+l*co,h=height;
+    if(body.kind==='tree' || body.kind==='person') {
+      const angle=body.kind==='tree'?body.bend:body.damage*Math.PI*.48;
+      const direction=body.direction||{x:0,y:0};
+      wx+=direction.x*height*Math.sin(angle);wy+=direction.y*height*Math.sin(angle);
+      h=height*Math.cos(angle);
+    }
+    return [wx,h,wy];
+  }
+  const resolveBuildingCollision=(state,previous,onImpact)=>resolveBoundsCollision(state,previous,buildingBounds,onImpact);
+  const resolveObstacleCollision=(state,previous,onImpact)=>resolveBoundsCollision(state,previous,obstacleBounds,onImpact);
+  function build({box,quad,materialBox=box,objectGeometry=(body,draw)=>draw()}) {
     const block = (x,z,w,d,h,color,y=0,material) => { const p=world(x,z); (material ? materialBox : box)(p.x,y,p.y,w*scale,h,d*scale,color,material); };
     const windowPane = (x,y,z,side,shade) => {
       const alongX=side==='z';
@@ -444,8 +737,10 @@ window.LPRCampus = (() => {
         model:studentCarModels[(index+2)%studentCarModels.length],color,worn:index%3===0,steelWheels:index%3!==1
       });
     }
-    for(const [index,[side,forward,color]] of lakesideCars.entries()) parkedCar(side,forward,color,index);
+    for(const [index,[side,forward,color]] of lakesideCars.entries())
+      objectGeometry(vehicleBounds[campusCars.length+index].body,()=>parkedCar(side,forward,color,index));
     // Reference tractor: orange enclosed cab, orange rims and rear safety triangle.
+    objectGeometry(vehicleBounds[vehicleBounds.length-2].body,()=>{
     const tractorOrange=[1,.19,.025], tractorDark=[.12,.13,.12], tractorGlass=[.22,.34,.35];
     prism(-153,24,22,38,8,6,tractorDark);
     prism(-153,34,17,23,14,11,tractorOrange);
@@ -516,6 +811,7 @@ window.LPRCampus = (() => {
       }
     }
     for(const edge of [-15,15]) { tractorWheel(-153+edge,7,13,7); tractorWheel(-153+edge,42,8,5); }
+    });
     for(const side of [-190,180]) {
       prism(side,0,2,2,0,55,[.5,.52,.48]);
       prism(side,0,8,5,55,2,[.38,.4,.35]);
@@ -655,7 +951,8 @@ window.LPRCampus = (() => {
     }
     for(const car of campusCars) {
       const center=world(car.row,car.z),cos=Math.cos(car.angle),sin=Math.sin(car.angle);
-      studentCar((f,s,h)=>[center.x+f*cos-s*sin,h+.16,center.y+f*sin+s*cos],car);
+      objectGeometry(vehicleBounds[campusCars.indexOf(car)].body,()=>
+        studentCar((f,s,h)=>[center.x+f*cos-s*sin,h+.16,center.y+f*sin+s*cos],car));
     }
     // Flagpoles and the disc-headed lamps visible in the supplied street view.
     for(let i=0;i<5;i++) block(483,323+i*5,.45,.45,90,[.77,.78,.74]);
@@ -663,10 +960,6 @@ window.LPRCampus = (() => {
       block(x,z,.6,.6,66,[.33,.35,.32]);
       block(x,z,5,5,1.3,[.43,.45,.39],66);
     }
-    // Low glass bus shelter alongside the southern edge of the forecourt.
-    block(582,423,31,5,1.5,[.4,.43,.41],17);
-    block(582,425,31,.4,16,[.28,.42,.43]);
-    for(const x of [568,582,596]) block(x,423,.5,.5,17,[.38,.4,.38]);
     // Rooftop solar arrays and campus bicycle racks.
     for(let x=390;x<443;x+=13) for(let z=219;z<286;z+=18) block(x,z,10,13,2,[.08,.19,.3],94);
     for(let z=305;z<330;z+=4) block(462,z,5,1,6,[.45,.49,.48]);
@@ -675,5 +968,6 @@ window.LPRCampus = (() => {
   }
   return { track, road, length, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
     campusCars, studentCarModels, lakesideCars, vehicleBounds, buildingBounds, obstacleBounds, resolveBuildingCollision,
-    resolveObstacleCollision, tyreBarrier, tyreBarrierBounds, bounds:{width:5200,height:4400} };
+    resolveObstacleCollision, carGeometry, carCollisionParts, tyreBarrier, tyreBarrierBounds,
+    bodies,poolSite,poolBody,registerPerson,movePerson,placeBody,makeBody,stepObstacles,resetObstacles,deformPoint, bounds:{width:5200,height:4400} };
 })();

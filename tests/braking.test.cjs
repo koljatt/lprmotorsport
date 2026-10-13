@@ -5,7 +5,7 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8');
 
 function stop(code = source, { brake = 1, gas = 0, steer = 0, grass = 0, dt = 1 / 180 } = {}) {
-  const context = { window: {} };
+  const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), } };
   vm.runInNewContext(code, context);
   const dynamics = new context.window.VehicleDynamics();
   const state = { x: 0, y: 0, angle: 0 };
@@ -27,7 +27,7 @@ function stop(code = source, { brake = 1, gas = 0, steer = 0, grass = 0, dt = 1 
 }
 
 const full = stop();
-assert(full.distance < 28 && full.time < 2, 'Full braking from 100 km/h must stop within 28 m and two seconds');
+assert(full.distance > 30 && full.distance < 45 && full.time > 2 && full.time < 3.2, '450 kg with provisional 4500 N brakes must stop from 100 km/h within the expected force-limited range');
 const overlap = stop(source, { gas: 1 });
 assert(Math.abs(overlap.distance - full.distance) < .01, 'Held throttle must not weaken full braking');
 assert(stop(source, { brake: .5 }).distance > full.distance * 1.3, 'Partial braking must retain pedal modulation');

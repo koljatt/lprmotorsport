@@ -174,6 +174,29 @@ window.LPRRenderer3D = class LPRRenderer3D {
           if (artwork.a < 0.1 || (uMaterial != 7 && min(min(artwork.r, artwork.g), artwork.b) > 0.96)) discard;
           color = artwork.rgb;
         }
+        // Sale occupies its own world region. These small surface effects cost
+        // no textures, extra draw calls or moving lights and leave outdoors alone.
+        if (!uOutdoor && vWorld.x > -6100.0 && vWorld.x < -5900.0) {
+          vec2 shop = vec2(vWorld.x + 6000.0, vWorld.z);
+          if (!uTextured && vWorld.y < 0.03) {
+            float grain = fract(sin(dot(floor(shop * 38.0),vec2(7.13,3.71))) * 41.31);
+            color *= 0.985 + grain * 0.03 * (1.0-smoothstep(20.0,100.0,vDepth));
+            vec2 bank = max(abs(shop-vec2(-3.0,-30.0))-vec2(35.0,90.0),0.0);
+            float contact = 1.0-smoothstep(0.0,7.0,length(bank));
+            float wall = 1.0-smoothstep(0.0,7.0,90.0-abs(shop.x));
+            vec2 till = max(abs(shop-vec2(-50.0,115.0))-vec2(9.5,23.0),0.0);
+            contact = max(contact,1.0-smoothstep(0.0,6.0,length(till)));
+            color *= 1.0 - max(contact,wall)*0.22;
+            // Broad, subdued reflections below the two overhead light runs.
+            float light = exp(-pow((shop.x-35.0)/8.0,2.0)) + exp(-pow((shop.x+55.0)/8.0,2.0));
+            color += vec3(0.028,0.029,0.026)*light;
+          } else if (!uTextured && vWorld.y > 44.0) {
+            float grain = fract(sin(dot(floor(shop*24.0),vec2(7.13,3.71))) * 41.31);
+            color *= 0.98+grain*.04*(1.0-smoothstep(30.0,120.0,vDepth));
+          }
+          // Slight falloff under fixtures makes the shop feel enclosed.
+          color *= 0.92+0.08*smoothstep(0.0,30.0,vWorld.y);
+        }
         vec3 sky = vec3(0.76, 0.84, 0.87);
         float fog = clamp((vDepth - 320.0) / 1000.0, 0.0, 0.83);
         gl_FragColor = vec4(mix(color, sky, fog), uOpacity * surfaceAlpha);
@@ -230,9 +253,11 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const shadows = [];
     const materialData = {brick:[],concrete:[],wood:[],glass:[]};
     let outdoorLighting = true;
+    let terrainEnabled=true;
+    const terrain=window.LPRTrackObjects?.terrain;
     // Bake sunlight once, keeping the per-frame cost unchanged on mobile.
     const add = (point, color) => data.push(point[0], point[1], point[2], color[0], color[1], color[2]);
-    const tri = (a, b, c, color) => {
+    const litTri = (a, b, c, color) => {
       if (outdoorLighting) {
         const u=b.map((v,i)=>v-a[i]), v=c.map((value,i)=>value-a[i]);
         let n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
@@ -242,6 +267,13 @@ window.LPRRenderer3D = class LPRRenderer3D {
         color=color.map((value,i)=>Math.min(1,value*(.76+light*.30)*[1.03,1.01,.98][i]));
       }
       add(a, color); add(b, color); add(c, color);
+    };
+    const tri=(a,b,c,color)=>{
+      const lake=color[0]===.12&&color[1]===.36&&color[2]===.45;
+      if(terrainEnabled&&terrain?.active&&!lake){
+        const surface=Math.max(a[1],b[1],c[1])<=.7&&Math.min(a[1],b[1],c[1])>=-1;
+        terrain.triangle(a,b,c,(A,B,C)=>litTri(A,B,C,color),surface);
+      }else litTri(a,b,c,color);
     };
     const groundShadow = (x,z,sx,sz,height) => {
       // Convex hull of the footprint and its sunlight projection.
@@ -331,17 +363,40 @@ window.LPRRenderer3D = class LPRRenderer3D {
     };
 
     // Wide flat terrain and distinct bands make the approaching road readable at speed.
+    terrainEnabled=false;
     quad([-2200,-.4,-2200],[6500,-.4,-2200],[6500,-.4,6500],[-2200,-.4,6500],[.095,.235,.155]);
-    window.LPRCampus.build({ box, quad, materialBox });
-    window.LPRTrackObjects?.build({box,quad});
+    terrainEnabled=true;
+    terrain?.groundTiles((x,z,size)=>quad([x,-.39,z],[x+size,-.39,z],
+      [x+size,-.39,z+size],[x,-.39,z+size],[.095,.235,.155]));
+    this.obstacleMeshes=[];
+    const objectGeometry=(body,draw)=>{
+      const start=data.length;draw();
+      this.obstacleMeshes.push({body,start,end:data.length});
+    };
+    window.LPRCampus.build({ box, quad, materialBox, objectGeometry });
+    let objectStart;
+    window.LPRTrackObjects?.build({box,quad,groundShadow,beginObject:()=>{objectStart=data.length;},
+      endObject:body=>{if(body)this.obstacleMeshes.push({body,start:objectStart,end:data.length});}});
     if(window.LPRSale) {
       const facadeFaces={};
       window.LPRSale.buildExterior({box,quad,materialBox,artwork:(id,points)=>{facadeFaces[id]=points;}});
       this.makeSaleFacade(facadeFaces);
       const interiorStart=data.length;
       outdoorLighting=false;
-      const productFaces = {},detailFaces={};
-      window.LPRSale.buildInterior({box,quad,artwork:(id,points)=>{(detailFaces[id] ||= []).push(points);},productFace:(id,points)=>{
+      terrainEnabled=false;
+      const productFaces = {},detailFaces={},cashierVertices=[];
+      window.LPRSale.buildInterior({box,quad,cashierGeometry:build=>{
+        const start=data.length;
+        build();
+        const vertices=new Float32Array(data.splice(start));
+        this.saleCashierBody={buffer:gl.createBuffer(),count:vertices.length/6,
+          vertices,posedVertices:new Float32Array(vertices)};
+        this.saleCashierYaw=undefined;
+        gl.bindBuffer(gl.ARRAY_BUFFER,this.saleCashierBody.buffer);
+        gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.DYNAMIC_DRAW);
+      },cashierFace:(points,uv)=>{
+        for(const i of [0,1,2,0,2,3]) cashierVertices.push(...points[i],1,1,1,...uv[i]);
+      },artwork:(id,points)=>{(detailFaces[id] ||= []).push(points);},productFace:(id,points)=>{
         const vertices=productFaces[id] ||= [];
         const uv=[[0,1],[1,1],[1,0],[0,0]];
         for(const i of [0,1,2,0,2,3]) vertices.push(...points[i],1,1,1,...uv[i]);
@@ -353,13 +408,15 @@ window.LPRRenderer3D = class LPRRenderer3D {
       gl.bufferData(gl.ARRAY_BUFFER,interior,gl.STATIC_DRAW);
       this.makeSaleProducts(productFaces);
       this.makeSaleInteriorDetails(detailFaces);
+      this.makeSaleCashier(cashierVertices);
       outdoorLighting=true;
+      terrainEnabled=true;
     }
     this.materialMeshes=Object.entries(materialData).map(([name,vertices],index)=>{
       const buffer=gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
       gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
-      return {name,buffer,count:vertices.length/8,material:index+1};
+      return {name,buffer,count:vertices.length/8,material:index+1,source:new Float32Array(vertices)};
     });
     // The shoulder is a continuous strip beneath the asphalt.
     const { halfWidth, kerbOuter, shoulderOuter } = window.LPRCampus.road;
@@ -380,168 +437,14 @@ window.LPRRenderer3D = class LPRRenderer3D {
       quad(square(a,f),square(b,f),square(b,g),square(a,g),(row+col)%2 ? [.94,.94,.86] : [.08,.09,.09]);
     }
 
-    // Faceted trunks and overlapping leaf crowns keep the campus trees legible
-    // at a distance while giving them a rounded, broadleaf silhouette.
+    // Campus woods and editor trees share the same species-specific geometry.
     let seed=window.LPRCampus.treeSeed;
     const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
-    let treeSeed=window.LPRCampus.treeSeed;
-    const treeRandom=()=>{treeSeed=(treeSeed*1664525+1013904223)>>>0;return treeSeed/4294967296;};
-    const treeStem=(start,end,startRadius,endRadius,color,sides=7)=>{
-      const axis=end.map((value,i)=>value-start[i]),length=Math.hypot(...axis)||1;
-      const direction=axis.map(value=>value/length);
-      const reference=Math.abs(direction[1])>.92?[1,0,0]:[0,1,0];
-      const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
-      const normalize=v=>{const n=Math.hypot(...v)||1;return v.map(value=>value/n);};
-      const u=normalize(cross(direction,reference)),v=normalize(cross(direction,u));
-      const ring=(center,radius,phase)=>Array.from({length:sides},(_,i)=>{
-        const angle=i*Math.PI*2/sides+phase;
-        return center.map((value,j)=>value+radius*(u[j]*Math.cos(angle)+v[j]*Math.sin(angle)));
-      });
-      const lower=ring(start,startRadius,.08),upper=ring(end,endRadius,.08);
-      for(let i=0;i<sides;i++) {
-        const next=(i+1)%sides,shade=.78+(i%3)*.10;
-        const face=color.map(value=>value*shade);
-        quad(lower[i],lower[next],upper[next],upper[i],face);
-      }
-      for(let i=1;i<sides-1;i++) tri(start,lower[i],lower[i+1],color.map(value=>value*.72));
-    };
-    const leafCrown=(center,radii,color,phase,segments=9,rings=4)=>{
-      const levels=[];
-      for(let row=0;row<=rings;row++) {
-        const latitude=-Math.PI/2+Math.PI*row/rings;
-        const ring=[];
-        for(let column=0;column<segments;column++) {
-          const angle=column*Math.PI*2/segments+phase;
-          const lobing=1+.10*Math.sin(column*5.1+phase*3)+.045*Math.sin(column*8.7+phase);
-          ring.push([
-            center[0]+Math.cos(latitude)*Math.cos(angle)*radii[0]*lobing,
-            center[1]+Math.sin(latitude)*radii[1],
-            center[2]+Math.cos(latitude)*Math.sin(angle)*radii[2]*lobing
-          ]);
-        }
-        levels.push(ring);
-      }
-      for(let row=0;row<rings;row++) for(let column=0;column<segments;column++) {
-        const next=(column+1)%segments,a=levels[row][column],b=levels[row][next];
-        const c=levels[row+1][next],d=levels[row+1][column];
-        const tint=.78+treeRandom()*.38;
-        const face=color.map(value=>Math.min(.82,value*tint));
-        quad(a,b,c,d,face);
-      }
-      const top=center.map((value,i)=>value+(i===1?radii[1]:0));
-      for(let column=0;column<segments;column++) {
-        const next=(column+1)%segments;
-        tri(top,levels[rings-1][column],levels[rings-1][next],color.map(value=>Math.min(.82,value*1.08)));
-      }
-    };
-    const coniferCrown=(x,z,base,top,radius,color,phase)=>{
-      const segments=10,rings=7,levels=[];
-      for(let row=0;row<=rings;row++) {
-        const t=row/rings;
-        const tier=.82+.18*Math.cos(t*Math.PI*14+phase);
-        const width=radius*Math.pow(1-t,.82)*tier;
-        const leanX=Math.sin(t*4.8+phase)*radius*.035;
-        const leanZ=Math.cos(t*4.1+phase)*radius*.03;
-        const ring=[];
-        for(let column=0;column<segments;column++) {
-          const angle=column*Math.PI*2/segments+phase;
-          const irregular=.84+.12*Math.sin(column*4.7+row*1.9+phase)
-            +.08*Math.sin(column*8.2+phase);
-          ring.push([x+leanX+Math.cos(angle)*width*irregular,
-            base+(top-base)*t,
-            z+leanZ+Math.sin(angle)*width*irregular]);
-        }
-        levels.push(ring);
-      }
-      for(let row=0;row<rings;row++) for(let column=0;column<segments;column++) {
-        const next=(column+1)%segments;
-        const shade=.80+treeRandom()*.34;
-        const face=color.map(value=>Math.min(.82,value*shade));
-        quad(levels[row][column],levels[row][next],levels[row+1][next],
-          levels[row+1][column],face);
-      }
-      const apex=[x,top,z];
-      for(let column=0;column<segments;column++) {
-        const next=(column+1)%segments;
-        tri(apex,levels[rings-1][column],levels[rings-1][next],color);
-      }
-    };
-    for(const tree of window.LPRCampus.trees) {
-      const {x,y,height,canopyRadius,trunkWidth,species}=tree;
-      const foliage=tree.color,wood=[.30,.19,.10];
-      groundShadow(x,y,canopyRadius*2.1,canopyRadius*2.1,height*.82);
-      if(species==='pine') {
-        treeStem([x,0,y],[x+canopyRadius*.045,height,y-canopyRadius*.025],
-          trunkWidth*.55,trunkWidth*.10,[.36,.24,.14],7);
-        for(let tier=0;tier<6;tier++) {
-          const fraction=tier/6,branchHeight=height*(.36+fraction*.58);
-          const radius=canopyRadius*(1-fraction*.82);
-          for(let branch=0;branch<5;branch++) {
-            const count=5;
-            const angle=branch*Math.PI*2/count+tier*.48+treeRandom()*.16;
-            const reach=radius*(.72+treeRandom()*.16);
-            const start=[x,branchHeight,y];
-            const end=[x+Math.cos(angle)*reach,branchHeight-reach*.13,y+Math.sin(angle)*reach];
-            treeStem(start,end,trunkWidth*.12,trunkWidth*.035,wood,5);
-          }
-        }
-        coniferCrown(x,y,height*.34,height*.98,canopyRadius,foliage,treeRandom()*6);
-      } else if(species==='birch') {
-        const bark=[.69,.66,.56];
-        treeStem([x,0,y],[x+canopyRadius*.025,height,y],trunkWidth*.54,trunkWidth*.20,bark,7);
-        for(let mark=0;mark<8;mark++) {
-          const fraction=.16+mark*.095,angle=mark*2.4;
-          const center=[x+Math.cos(angle)*trunkWidth*.30,height*fraction,y+Math.sin(angle)*trunkWidth*.30];
-          const direction=angle+.7;
-          treeStem(center,[center[0]+Math.cos(direction)*trunkWidth*.42,
-            center[1]+.45,center[2]+Math.sin(direction)*trunkWidth*.42],.085,.055,[.16,.14,.12],3);
-        }
-        for(let branch=0;branch<12;branch++) {
-          const fraction=.38+branch*.047,angle=branch*2.399;
-          const reach=canopyRadius*(.46+treeRandom()*.34)*(1-fraction*.42);
-          const start=[x,height*fraction,y];
-          const elbow=[x+Math.cos(angle)*reach*.58,height*(fraction+.09),y+Math.sin(angle)*reach*.58];
-          const tip=[x+Math.cos(angle)*reach,height*(fraction+.16),y+Math.sin(angle)*reach];
-          treeStem(start,elbow,trunkWidth*.15,trunkWidth*.065,[.34,.27,.19],4);
-          treeStem(elbow,tip,trunkWidth*.065,.07,[.34,.27,.19],4);
-          for(const side of [-1,1]) {
-            const twigAngle=angle+side*.48,twigReach=reach*.25;
-            const twig=[tip[0]+Math.cos(twigAngle)*twigReach,tip[1]+twigReach*.28,
-              tip[2]+Math.sin(twigAngle)*twigReach];
-            treeStem(elbow,twig,trunkWidth*.05,.045,[.38,.30,.21],3);
-            if(branch%3===0) leafCrown(twig,[1.8,2.2,1.8],
-              [.27,.34,.16],treeRandom()*6,6,2);
-          }
-        }
-      } else {
-        treeStem([x,0,y],[x+canopyRadius*.025,height*.68,y-canopyRadius*.018],
-          trunkWidth*.66,trunkWidth*.28,[.31,.20,.12],8);
-        for(let branch=0;branch<10;branch++) {
-          const angle=branch*Math.PI/5+treeRandom()*.24;
-          const reach=canopyRadius*(.60+treeRandom()*.24);
-          const start=[x,height*(.26+treeRandom()*.12),y];
-          const end=[x+Math.cos(angle)*reach,height*(.56+treeRandom()*.17),
-            y+Math.sin(angle)*reach];
-          treeStem(start,end,trunkWidth*.25,trunkWidth*.10,wood,5);
-          const twig=[end[0]+Math.cos(angle+.4)*reach*.32,end[1]+reach*.14,
-            end[2]+Math.sin(angle+.4)*reach*.32];
-          treeStem(end,twig,trunkWidth*.13,.10,wood,4);
-          for(const side of [-1,1]) {
-            const twigAngle=angle+side*.42,twigEnd=[twig[0]+Math.cos(twigAngle)*reach*.20,
-              twig[1]+reach*.16,twig[2]+Math.sin(twigAngle)*reach*.20];
-            treeStem(twig,twigEnd,.10,.045,wood,3);
-          }
-        }
-        for(let bud=0;bud<16;bud++) {
-          const angle=bud*2.399,reach=canopyRadius*(.35+treeRandom()*.62);
-          const center=[x+Math.cos(angle)*reach,height*(.48+treeRandom()*.42),
-            y+Math.sin(angle)*reach];
-          const size=1.5+treeRandom()*1.5;
-          leafCrown(center,[size,size*1.1,size],
-            [.31,.30,.13],treeRandom()*6,6,2);
-        }
-      }
-    }
+    let treeStart;
+    window.LPRTreeGeometry.build(window.LPRCampus.trees,{quad,tri,groundShadow,
+      beginTree:()=>{treeStart=data.length;},endTree:tree=>{
+        this.obstacleMeshes.push({body:tree.body,start:treeStart,end:data.length});
+      }},window.LPRCampus.treeSeed);
     for (const side of [-1,1]) {
       const x = first.x + normals[0].x * (shoulderOuter + 5) * side;
       const z = first.y + normals[0].z * (shoulderOuter + 5) * side;
@@ -556,17 +459,19 @@ window.LPRRenderer3D = class LPRRenderer3D {
     }
 
     // Tervahaudanpuisto: the truck, tub and their crowd share this world frame.
+    const saunaMeshStart=data.length;
     const site = window.LPRCampus.saunaSite;
     const stop = [site.x,0,site.y];
     this.saunaStop = { x: stop[0], y: stop[2] };
-    this.poolStop = { x: stop[0] - 32, y: stop[2] + 25 };
+    this.poolStop = window.LPRCampus.poolSite || { x: stop[0]-57*Math.SQRT1_2, y: stop[2]-57*Math.SQRT1_2 };
     const travelAngle = Math.PI / 4;
     const forwardX = -Math.cos(travelAngle), forwardZ = -Math.sin(travelAngle);
     const rightX = -forwardZ, rightZ = forwardX;
+    let sceneOffsetX=0,sceneOffsetZ=0;
     const vanPoint = (forward, side, height) => [
-      stop[0] + forwardX * forward + rightX * side,
+      stop[0] + forwardX * forward + rightX * side + sceneOffsetX,
       height,
-      stop[2] + forwardZ * forward + rightZ * side
+      stop[2] + forwardZ * forward + rightZ * side + sceneOffsetZ
     ];
     const vanPrism = (front, back, left, right, bottom, top, color) => {
       const p = vanPoint;
@@ -793,9 +698,11 @@ window.LPRRenderer3D = class LPRRenderer3D {
     }
 
     // Floor plan reference: rear benches on both sides of a central aisle;
+    this.obstacleMeshes.push({body:window.LPRCampus.vehicleBounds.at(-1).body,start:saunaMeshStart,end:data.length});
     // a lower central walkway, steps to that level and rails at the front;
     // stove front-left, entrance front-right.
     outdoorLighting=false;
+    terrainEnabled=false;
     box(2000,0,0,44,1,28,[.42,.27,.14]);
     box(2000,26,0,44,1,28,[.35,.22,.12]);
     for (let height=1;height<26;height+=2) {
@@ -847,7 +754,11 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const swimColors = [[.08,.36,.68],[.83,.16,.18],[.06,.50,.40],[.63,.22,.63],[.95,.50,.08]];
     const hairColors = [[.12,.08,.05],[.04,.04,.04],[.52,.34,.12],[.24,.12,.06]];
     // Wood-fired hot tub in front of the cab, clear of the road and rear entrance.
+    terrainEnabled=true;
     const tubForward=57, tubSide=0, tubRadius=14, tubInner=12.6;
+    const poolMeshStart=data.length;
+    sceneOffsetX=this.poolStop.x-(stop[0]+forwardX*tubForward);
+    sceneOffsetZ=this.poolStop.y-(stop[2]+forwardZ*tubForward);
     const tubPoint=(angle,radius,height)=>vanPoint(tubForward+Math.cos(angle)*radius,
       tubSide+Math.sin(angle)*radius,height);
     for (let segment=0;segment<32;segment++) {
@@ -904,6 +815,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
         oval(...guestPoint(side*2.5,1.25,9.5),.55,.5,1.2,skin);
       }
     }
+    sceneOffsetX=0;sceneOffsetZ=0;
+    this.obstacleMeshes.push({body:window.LPRCampus.poolBody,start:poolMeshStart,end:data.length});
+    terrainEnabled=false;
     // Trackside students stay outside the shoulder, leaving the cab and door accessible.
     const overallColors = [[1,.36,.035],[1,.94,.025],[.86,.055,.08],[.055,.63,.22]];
     const patchColors = [[.96,.96,.85],[.08,.19,.47],[.94,.24,.56],[.08,.08,.09],[.12,.74,.87]];
@@ -921,6 +835,10 @@ window.LPRRenderer3D = class LPRRenderer3D {
       crowdPositions.push([fireForward+Math.cos(angle)*32,fireSide+Math.sin(angle)*32]);
     }
     this.spectatorCount = crowdPositions.length;
+    for(const person of window.LPRCampus.peopleSites||[]){
+      const dx=person.x-stop[0],dz=person.y-stop[2];
+      crowdPositions[person.personId]=[dx*forwardX+dz*forwardZ,dx*rightX+dz*rightZ];
+    }
     for (let index = 0; index < this.spectatorCount; index++) {
       const meshStart = data.length;
       const armRanges = [];
@@ -998,7 +916,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
         mesh[v] = dx*forwardX+dz*forwardZ-forward;
         mesh[v+2] = dx*rightX+dz*rightZ-side;
       }
-      this.spectatorMeshes.push({ data: mesh, forward, side, activity, height, armRanges });
+      const body=window.LPRCampus.registerPerson(index,stop[0]+forwardX*forward+rightX*side,
+        stop[2]+forwardZ*forward+rightZ*side);
+      this.spectatorMeshes.push({ data: mesh, forward, side, activity, height, armRanges,body });
     }
     let guestIndex = 0;
     this.saunaGuestMeshes = [];
@@ -1092,8 +1012,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
     this.shadowCount = shadows.length / 6;
     this.shadowBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(shadows), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(terrain?.mesh(shadows,6)||shadows), gl.STATIC_DRAW);
     this.buffer = gl.createBuffer();
+    this.worldSource=new Float32Array(data);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
     this.bindMesh(this.buffer);
@@ -1130,7 +1051,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
   }
 
   makeKerbs(points, at, inner, outer) {
-    const gl = this.gl, vertices = [];
+    const gl=this.gl;let vertices=[];
     const lengths = points.map((point,i) => {
       const next=points[(i+1)%points.length];
       return Math.hypot(next.x-point.x,next.y-point.y);
@@ -1160,6 +1081,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
         distance+=lengths[i];
       }
     }
+    vertices=window.LPRTrackObjects?.terrain?.mesh(vertices,8,true)||vertices;
     const buffer=gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
@@ -1185,7 +1107,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
   }
 
   makeRoadPaint(points, at, edgeLine) {
-    const gl=this.gl, vertices=[];
+    const gl=this.gl;let vertices=[];
     const lengths=points.map((p,i)=>Math.hypot(points[(i+1)%points.length].x-p.x,
       points[(i+1)%points.length].y-p.y));
     const total=lengths.reduce((sum,value)=>sum+value,0);
@@ -1219,6 +1141,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
       }
       distance=end;
     }
+    vertices=window.LPRTrackObjects?.terrain?.mesh(vertices,8,true)||vertices;
     const buffer=gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
@@ -1280,7 +1203,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
 
   makeSaunaArtwork(point) {
     if(typeof Image==='undefined') return;
-    const gl=this.gl,vertices=[];
+    const gl=this.gl;let vertices=[];
     // Projective mapping removes the photograph's perspective using its four wall corners.
     const corners=[[540,119],[859,172],[858,397],[528,438]];
     const [a,b,c,d]=corners;
@@ -1299,7 +1222,8 @@ window.LPRRenderer3D = class LPRRenderer3D {
       const c=vertex((x+1)/24,(y+1)/16,side),d=vertex(x/24,(y+1)/16,side);
       vertices.push(...a,...b,...c,...a,...c,...d);
     }
-    const mesh={buffer:gl.createBuffer(),texture:gl.createTexture(),count:vertices.length/8,ready:false};
+    vertices=window.LPRTrackObjects?.terrain?.mesh(vertices,8,false)||vertices;
+    const mesh={buffer:gl.createBuffer(),texture:gl.createTexture(),count:vertices.length/8,ready:false,source:new Float32Array(vertices)};
     this.saunaArtwork=mesh;
     gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
@@ -1319,7 +1243,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
 
   makeSaleFacade(faces) {
     if(typeof document==='undefined') return;
-    const gl=this.gl,vertices=[];
+    const gl=this.gl;let vertices=[];
     const canvas=document.createElement('canvas');
     canvas.width=1024;canvas.height=512;
     const ctx=canvas.getContext('2d');
@@ -1327,6 +1251,29 @@ window.LPRRenderer3D = class LPRRenderer3D {
     ctx.fillStyle='#e00024';ctx.beginPath();ctx.arc(128,128,125,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='white';ctx.font='italic 900 94px Arial';ctx.textAlign='center';
     ctx.fillText('Sale',128,160);
+    ctx.fillStyle='#46514a';ctx.fillRect(256,0,512,128);
+    ctx.fillStyle='#d8d9ce';ctx.font='bold 65px Arial';
+    ctx.fillText('YOLO',512,85);
+    // Muted sky and bare-tree reflections for this building's glass, without
+    // the generic glass material's heavy bevel around every window pane.
+    ctx.save();ctx.beginPath();ctx.rect(768,0,256,256);ctx.clip();
+    const reflection=ctx.createLinearGradient(768,0,768,256);
+    reflection.addColorStop(0,'#61706c');reflection.addColorStop(.45,'#47544c');
+    reflection.addColorStop(1,'#28372e');ctx.fillStyle=reflection;ctx.fillRect(768,0,256,256);
+    ctx.fillStyle='rgba(142,151,131,.16)';
+    ctx.fillRect(792,108,36,148);ctx.fillRect(926,142,48,114);
+    ctx.strokeStyle='rgba(18,29,22,.44)';ctx.lineCap='round';
+    const branch=(x,y,length,angle,width,depth)=>{
+      const ex=x+Math.cos(angle)*length,ey=y+Math.sin(angle)*length;
+      ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(ex,ey);ctx.stroke();
+      if(depth>0) {
+        branch(ex,ey,length*.69,angle-.48,width*.58,depth-1);
+        branch(ex,ey,length*.63,angle+.59,width*.52,depth-1);
+      }
+    };
+    branch(846,280,98,-1.55,5,5);branch(995,275,80,-1.78,4,5);
+    ctx.strokeStyle='rgba(163,174,160,.17)';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(779,210);ctx.lineTo(960,20);ctx.stroke();ctx.restore();
     for(let i=0;i<10;i++) {
       const left=i*100,top=256;
       ctx.fillStyle=i%3===2 ? '#377b42' : '#ffcb29';ctx.fillRect(left,top,100,256);
@@ -1337,10 +1284,21 @@ window.LPRRenderer3D = class LPRRenderer3D {
     }
     for(const [id,points] of Object.entries(faces)) {
       const i=Number(id.replace('poster',''));
-      const bounds=id==='sign' ? [0,0,256,256] : [i*100,256,100,256];
+      const bounds=id==='sign' ? [0,0,256,256] : id==='yolo' ? [256,0,512,128] :
+        id.startsWith('glass') ? [768,0,256,256] : [i*100,256,100,256];
       const [x,y,w,h]=bounds,uv=[[x,y+h],[x+w,y+h],[x+w,y],[x,y]];
+      if(id.startsWith('glass')) {
+        // Reflections span several panes and floors, rather than repeating
+        // a complete miniature tree in each individual pane.
+        const centerX=(points[0][0]+points[1][0])/2,origin=Math.floor(centerX/72)*72;
+        for(let j=0;j<4;j++) {
+          uv[j][0]=x+w*Math.max(0,Math.min(1,(points[j][0]-origin)/72));
+          uv[j][1]=y+h*(1-Math.max(0,Math.min(1,points[j][1]/70)));
+        }
+      }
       for(const index of [0,1,2,0,2,3]) vertices.push(...points[index],1,1,1,uv[index][0]/1024,uv[index][1]/512);
     }
+    vertices=window.LPRTrackObjects?.terrain?.mesh(vertices,8,false)||vertices;
     const mesh={buffer:gl.createBuffer(),texture:gl.createTexture(),count:vertices.length/8};
     gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
     gl.bindTexture(gl.TEXTURE_2D,mesh.texture);
@@ -1354,18 +1312,59 @@ window.LPRRenderer3D = class LPRRenderer3D {
 
   makeSaleInteriorDetails(faces) {
     if(typeof document==='undefined') return;
-    const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=512;
-    const ctx=canvas.getContext('2d'),vertices=[],entries=Object.entries(faces);
+    const entries=Object.entries(faces),vertices=[];
+    const canvas=document.createElement('canvas');canvas.width=1024;
+    canvas.height=2**Math.ceil(Math.log2(Math.max(128,Math.ceil(entries.length/4)*128)));
+    const ctx=canvas.getContext('2d');
+    const departments={dairy:'MAITOTUOTTEET',groceries:'RUOKAKAAPPI',
+      drinks:'JUOMAT',household:'KODIN TARVIKKEET',sweets:'MAKEISET',checkout:'KASSA',
+      returns:'PALAUTA PULLOT',welcome:'TERVETULOA',exit:'ULOS'};
+    // Illustrative shelf prices, never a live store price feed.
+    const prices={riisi:'3,49',pasta:'0,89',kaurahiutaleet:'1,59',kahvi:'6,49',tee:'2,79',
+      tomaattimurska:'1,69',hernekeitto:'1,39',nuudelit:'0,79',maito:'1,19',jogurtti:'0,69',
+      juusto:'5,49',maitorahka:'1,09',kuohukerma:'1,59',ruokakerma:'0,99',smetana:'1,39',
+      kermaviili:'0,79',voi:'4,29','hartwall-vichy':'2,39','coca-cola':'3,19',
+      'ekstroms-vadelma':'2,59','marli-juissi':'1,89',megaforce:'1,29',karjala:'1,69',
+      talouspaperi:'3,99',astianpesuaine:'2,89'};
     entries.forEach(([id,quads],index)=>{
       const x=(index%4)*256,y=Math.floor(index/4)*128;
-      ctx.fillStyle=id==='price' ? '#fffbe9' : '#205257';ctx.fillRect(x,y,256,128);
-      ctx.textAlign='center';ctx.fillStyle=id==='price' ? '#222b29' : '#fff';
-      ctx.font=id==='price' ? 'bold 64px Arial' : 'bold 29px Arial';
-      const title=id==='price' ? '1,89' : id==='dairy' ? 'MAITOTUOTTEET' : window.LPRSale.products.find(p=>p.id===id)?.name.toLocaleUpperCase('fi');
-      ctx.fillText(title || id,x+128,y+76,238);
-      if(id==='price') {ctx.font='18px Arial';ctx.fillText('EUR / KPL',x+128,y+106);}
+      const price=id==='price' || id.startsWith('price-');
+      const product=window.LPRSale.products.find(p=>p.id===(price ? id.slice(6) : id));
+      ctx.fillStyle=price ? '#fffdf4' : id==='sale' ? '#cd1531' : id==='till' ? '#122d25' : '#205257';
+      ctx.fillRect(x,y,256,128);
+      ctx.textAlign='center';ctx.fillStyle=price ? '#222b29' : '#fff';
+      if(price) {
+        ctx.font='19px Arial';ctx.fillText(product?.name || 'Sale',x+128,y+24,236);
+        ctx.font='bold 62px Arial';ctx.fillText(prices[product?.id] || '1,89',x+163,y+87,164);
+        ctx.font='16px Arial';ctx.fillText('€ / kpl',x+182,y+112);
+        for(let bar=0;bar<32;bar++) {
+          const width=bar%3===0 ? 3 : 1;
+          ctx.fillRect(x+12+bar*2,y+44,width,47-(bar%4)*3);
+        }
+        ctx.font='13px Arial';ctx.fillText('S-kaupat',x+47,y+112);
+      } else if(id==='sale') {
+        ctx.font='italic bold 100px Arial';ctx.fillText('Sale',x+128,y+97,230);
+      } else if(id==='till') {
+        ctx.font='20px monospace';ctx.fillText('TERVETULOA',x+128,y+39);
+        ctx.font='bold 42px monospace';ctx.fillText('0,00 €',x+128,y+94);
+      } else if(id==='entrance-glass') {
+        const glass=ctx.createLinearGradient(x,y,x+256,y+128);
+        glass.addColorStop(0,'#94a8a6');glass.addColorStop(.46,'#647b77');
+        glass.addColorStop(1,'#3c5550');ctx.fillStyle=glass;ctx.fillRect(x,y,256,128);
+        ctx.fillStyle='#50685f';ctx.fillRect(x,y+69,256,15);
+        ctx.fillStyle='#7e8780';ctx.fillRect(x,y+84,256,44);
+        ctx.fillStyle='rgba(222,236,228,.16)';
+        ctx.beginPath();ctx.moveTo(x+15,y);ctx.lineTo(x+55,y);
+        ctx.lineTo(x+170,y+128);ctx.lineTo(x+130,y+128);ctx.fill();
+        ctx.fillStyle='rgba(230,239,233,.1)';ctx.fillRect(x+210,y,5,128);
+      } else {
+        ctx.fillStyle='#f2c51b';ctx.fillRect(x,y+118,256,10);
+        ctx.fillStyle='#fff';ctx.font='bold 29px Arial';
+        const title=departments[id] || product?.name.toLocaleUpperCase('fi');
+        ctx.fillText(title || id,x+128,y+76,238);
+      }
       const uv=[[x,y+128],[x+256,y+128],[x+256,y],[x,y]];
-      for(const points of quads) for(const i of [0,1,2,0,2,3]) vertices.push(...points[i],1,1,1,uv[i][0]/1024,uv[i][1]/512);
+      for(const points of quads) for(const i of [0,1,2,0,2,3]) vertices.push(...points[i],1,1,1,uv[i][0]/canvas.width,uv[i][1]/canvas.height);
     });
     const gl=this.gl,mesh={buffer:gl.createBuffer(),texture:gl.createTexture(),count:vertices.length/8};
     gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
@@ -1376,6 +1375,28 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.generateMipmap(gl.TEXTURE_2D);
     this.saleInteriorDetails=mesh;
+  }
+
+  makeSaleCashier(vertices) {
+    if(typeof Image==='undefined' || typeof document==='undefined') return;
+    const gl=this.gl,mesh={buffer:gl.createBuffer(),texture:gl.createTexture(),count:vertices.length/8,ready:false,
+      vertices:new Float32Array(vertices),posedVertices:new Float32Array(vertices)};
+    gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER,mesh.vertices,gl.DYNAMIC_DRAW);
+    const reference=new Image();
+    reference.onload=()=>{
+      const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;
+      canvas.getContext('2d').drawImage(reference,0,0,512,512);
+      gl.bindTexture(gl.TEXTURE_2D,mesh.texture);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,canvas);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.generateMipmap(gl.TEXTURE_2D);mesh.ready=true;
+    };
+    reference.src='assets/sale-cashier-reference.jpg';
+    this.saleCashier=mesh;
   }
 
   makeSaleProducts(faces) {
@@ -1537,13 +1558,15 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const steeredAngle = car.angle + (car.steerAngle || 0);
     const wheelForward = [Math.cos(steeredAngle),Math.sin(steeredAngle)];
     const axleDirection = [-wheelForward[1],wheelForward[0]];
-    const radius = 2.3;
+    const spec=window.LPRVehicleSpec,units=1/spec.metresPerWorldUnit;
+    const geometry=window.LPRCampus?.carGeometry;
+    const radius=spec.tyreDiameter*units/2;
     const segments = 48;
     const tyreBlack = [.075,.085,.09];
     const sidewall = [.11,.12,.125];
     const rim = [.38,.42,.43];
     const frameGreen = [.045,.075,.065];
-    if (this.lastWheelFrame) this.wheelPhase += Math.min((now-this.lastWheelFrame)/1000,.05) * (car.vx || 0) / .23;
+    if (this.lastWheelFrame) this.wheelPhase += Math.min((now-this.lastWheelFrame)/1000,.05) * (car.vx || 0) / (spec.tyreDiameter/2);
     this.lastWheelFrame = now;
 
     const rod = (a,b,width,color) => {
@@ -1564,6 +1587,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     };
     const damage=car.damage || 0;
     const bodyPoint=(forward,side,height)=> {
+      forward*=spec.bodyLengthScale;height*=spec.bodyHeightScale;
       // Crumple the nose and bend the suspension toward the struck side.
       const crush=Math.max(0,forward-2)*damage;
       const damagedForward=forward-crush*.55;
@@ -1583,7 +1607,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     rod(bodyPoint(4.0,-2.4,3.5),bodyPoint(4.0,2.4,3.5),.18,chassisColor);
 
     // Student-built concept: compact fairings leave the front tyre keep-out
-    // zones clear (FS 2027 T2.1). Coordinates use ten units per metre.
+    // zones clear. The supplied dimensions scale this concept body.
     const bodyBlack = [.055,.075,.065];
     const bodyShade = [.028,.042,.035];
     const cockpitBlack = [.035,.055,.055];
@@ -1591,7 +1615,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const liveryAccent = [.16,.9,.44];
     const bodyWhite = [.78,.86,.81];
     // Rounded nose sections, tapering ahead of the front axle; no wheel covers.
-    const controlSections = [[-1.2,2.7,4.0],[3,2.75,2.65],[7.5,2.25,2.5],
+    const controlSections = geometry?.noseControls || [[-1.2,2.7,4.0],[3,2.75,2.65],[7.5,2.25,2.5],
       [10.8,1.65,2.05],[12,1.1,1.55],[12.4,.65,1.1]];
     // Cubic sections remove the angular breaks in the moulded nose.
     const sections=[];
@@ -1609,6 +1633,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
       }
     }
     sections.push(controlSections[controlSections.length-1]);
+    if(geometry) sections.splice(0,sections.length,...geometry.noseSections);
     const crown=.48;
     const slope=index=>{
       const a=sections[Math.max(0,index-1)],b=sections[Math.min(sections.length-1,index+1)];
@@ -1678,6 +1703,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
     // High contrast university lettering on both sides, 56 mm tall (T12.3).
     // Small geometry glyphs keep it readable without another texture upload.
     const glyphs={
+      H:['10001','10001','10001','11111','10001','10001','10001'],
+      O:['01110','10001','10001','10001','10001','10001','01110'],
+      Z:['11111','00001','00010','00100','01000','10000','11111'],
       L:['10000','10000','10000','10000','10000','10000','11111'],
       U:['10001','10001','10001','10001','10001','10001','01110'],
       T:['11111','00100','00100','00100','00100','00100','00100'],
@@ -1710,16 +1738,16 @@ window.LPRRenderer3D = class LPRRenderer3D {
          [b[0],b[1],b[2]+width],[b[0],b[1],b[2]-width],color.map(value => value * .78));
         };
         const rollHoop = frameGreen;
-        upright(bodyPoint(-9.4,-2.7,2.3),bodyPoint(-8.6,-3.25,10.5),.24,rollHoop);
-        upright(bodyPoint(-9.4,2.7,2.3),bodyPoint(-8.6,3.25,10.5),.24,rollHoop);
-        rod(bodyPoint(-8.6,-3.25,10.5),bodyPoint(-8.6,3.25,10.5),.24,rollHoop);
+        upright(bodyPoint(-9.4,-2.7,2.3),bodyPoint(-8.6,-3.25,10.5),.24*spec.bodyLengthScale,rollHoop);
+        upright(bodyPoint(-9.4,2.7,2.3),bodyPoint(-8.6,3.25,10.5),.24*spec.bodyLengthScale,rollHoop);
+        rod(bodyPoint(-8.6,-3.25,10.5),bodyPoint(-8.6,3.25,10.5),.24*spec.bodyHeightScale,rollHoop);
 
     // Split, swept front-wing elements add a clear Formula Student silhouette
     // without filling the open wheel and suspension areas.
     const wingPoint=(side,span,forward,height)=>bodyPoint(forward,side*span,height);
     for(const side of [-1,1]) {
       const stations=[1.35,5.8,10.25];
-      const panels=[
+      const panels=geometry ? geometry.wingPanels.map((panel,i)=>({...panel,color:i?bodyShade:bodyBlack})) : [
         {front:14.1,rear:12.85,sweep:.16,rise:0,color:bodyBlack},
         {front:12.35,rear:11.78,sweep:.13,rise:.12,color:bodyShade}
       ];
@@ -1753,24 +1781,27 @@ window.LPRRenderer3D = class LPRRenderer3D {
       rod(wingPoint(side,1.5,12.0,1.5),wingPoint(side,6.7,11.2,1.45),.075,[.32,.35,.34]);
     }
 
-    for (const side of [-1,1]) {
+    for (const axle of [0,1]) for (const side of [-1,1]) {
       // Wheel centres follow unsprung dynamics rather than chassis rotation.
-      const wheel=car.suspension?.wheels[side<0?0:1];
+      const wheel=car.suspension?.wheels[axle*2+(side<0?0:1)];
       const wheelHeight=(wheel?.z || 0)*10;
-      const crush=6.1*damage,forward=8.1-crush*.55,lateral=side*7.2+(car.impactSide || .3)*crush*.25;
+      const crush=axle===0?6.1*damage:0,forward=(axle===0?spec.frontAxle:-spec.rearAxle)*units-crush*.55,lateral=side*spec.trackWidth*units/2+(car.impactSide || .3)*crush*.25;
       const center=[car.x+bodyForward[0]*forward+bodyRight[0]*lateral,
-        radius+.07+wheelHeight,car.y+bodyForward[1]*forward+bodyRight[1]*lateral];
+        radius+wheelHeight,car.y+bodyForward[1]*forward+bodyRight[1]*lateral];
       const uprightPoint=height=>[center[0]-axleDirection[0]*side*1.2,height+wheelHeight,center[2]-axleDirection[1]*side*1.2];
-      const bentAngle=steeredAngle+side*damage*.65;
+      const bentAngle=axle===0?steeredAngle+side*damage*.65:car.angle;
       wheelForward[0]=Math.cos(bentAngle); wheelForward[1]=Math.sin(bentAngle);
       axleDirection[0]=-wheelForward[1]; axleDirection[1]=wheelForward[0];
       const point=(axial,rad,theta)=>[
         center[0]+axleDirection[0]*axial+wheelForward[0]*rad*Math.cos(theta),
-        Math.max(.07+(wheel?.road || 0)*10,center[1]+rad*Math.sin(theta)),
+        Math.max((wheel?.road || 0)*10,center[1]+rad*Math.sin(theta)),
         center[2]+axleDirection[1]*axial+wheelForward[1]*rad*Math.cos(theta)
       ];
-      const tyreProfile=[[-1.1,2.08],[-1.03,2.18],[-.78,2.28],[-.48,radius],
-        [.48,radius],[.78,2.28],[1.03,2.18],[1.1,2.08]];
+      const radial=r=>r<=1.12?r/1.12*spec.rimDiameter*units/2:
+        spec.rimDiameter*units/2+(r-1.12)/1.18*(radius-spec.rimDiameter*units/2);
+      const detailPoint=(axial,rad,theta)=>point((rad<=1.12?axial/1.12*spec.rimWidth:axial/1.1872*spec.tyreWidth)*units/2,radial(rad),theta);
+      const tyreProfile=geometry?.tyreProfile || [[-1.1,2.08],[-1.03,2.18],[-.78,2.28],[-.48,2.3],
+        [.48,2.3],[.78,2.28],[1.03,2.18],[1.1,2.08]].map(([a,r])=>[a/1.1872*spec.tyreWidth*units/2,radial(r)]);
       const tyreNormal=(ring,theta)=>{
         const a=tyreProfile[Math.max(0,ring-1)],b=tyreProfile[Math.min(tyreProfile.length-1,ring+1)];
         const axial=-(b[1]-a[1])/(b[0]-a[0]),length=Math.hypot(axial,1);
@@ -1787,14 +1818,15 @@ window.LPRRenderer3D = class LPRRenderer3D {
         ];
         triangle(shadowCenter,shadowPoint(a),shadowPoint(b),[.065,.075,.075]);
       }
+      const pickup=(f,s,h)=>bodyPoint(axle===0?f:f-10,s,h);
       // Double wishbone and steering link, anchored at the narrow chassis.
-      rod(bodyPoint(1.0,side*2.4,1.5),uprightPoint(1.7),.17,frameGreen);
-      rod(bodyPoint(3.4,side*2.4,1.5),uprightPoint(1.7),.17,frameGreen);
-      rod(bodyPoint(1.8,side*2.4,3.5),uprightPoint(3.1),.15,[.13,.16,.18]);
-      rod(bodyPoint(4.0,side*2.4,3.5),uprightPoint(3.1),.15,[.13,.16,.18]);
-      rod(bodyPoint(5.2,side*2.2,2.2),uprightPoint(2.2),.11,[.36,.38,.37]);
+      rod(pickup(1.0,side*2.4,1.5),uprightPoint(1.7),.17,frameGreen);
+      rod(pickup(3.4,side*2.4,1.5),uprightPoint(1.7),.17,frameGreen);
+      rod(pickup(1.8,side*2.4,3.5),uprightPoint(3.1),.15,[.13,.16,.18]);
+      rod(pickup(4.0,side*2.4,3.5),uprightPoint(3.1),.15,[.13,.16,.18]);
+      rod(pickup(5.2,side*2.2,2.2),uprightPoint(2.2),.11,[.36,.38,.37]);
       // Pushrod, damper body and helical spring, tucked inside the wishbones.
-      const damperA=bodyPoint(.5,side*2.0,2.35),damperB=bodyPoint(2.8,side*2.3,3.7);
+      const damperA=pickup(.5,side*2.0,2.35),damperB=pickup(2.8,side*2.3,3.7);
       const restLength=Math.hypot(...damperB.map((v,i)=>v-damperA[i]));
       const damperTravel=(wheel?.travel || 0)*10*(car.suspension?.motionRatio || .7);
       for(let axis=0;axis<3;axis++) damperB[axis]+=(damperA[axis]-damperB[axis])*damperTravel/restLength;
@@ -1823,41 +1855,59 @@ window.LPRRenderer3D = class LPRRenderer3D {
           const sideProfile=[[2.08,face],[1.96,face*1.045],[1.68,face*1.055],[1.32,face*1.025],[1.12,face]];
           for(let ring=0;ring<sideProfile.length-1;ring++) {
             const [r,x]=sideProfile[ring],[nr,nx]=sideProfile[ring+1];
-            quad(point(x,r,a),point(x,r,b),point(nx,nr,b),point(nx,nr,a),sidewall,
+            quad(detailPoint(x,r,a),detailPoint(x,r,b),detailPoint(nx,nr,b),detailPoint(nx,nr,a),sidewall,
               [faceNormal,faceNormal,faceNormal,faceNormal]);
           }
           // Subtle raised moulding rings, in rubber rather than silver paint.
-          for(const band of [1.79,1.88]) quad(point(face*1.06,band,a),point(face*1.06,band,b),
-            point(face*1.06,band-.018,b),point(face*1.06,band-.018,a),[.085,.095,.10],
+          for(const band of [1.79,1.88]) quad(detailPoint(face*1.06,band,a),detailPoint(face*1.06,band,b),
+            detailPoint(face*1.06,band-.018,b),detailPoint(face*1.06,band-.018,a),[.085,.095,.10],
             [faceNormal,faceNormal,faceNormal,faceNormal]);
-          triangle(point(face*.65,0,a),point(face*.65,1.08,a),point(face*.65,1.08,b),[.09,.105,.11]);
-          quad(point(face,1.12,a),point(face,1.12,b),point(face,1.03,b),point(face,1.03,a),rim);
-          quad(point(face,1.03,a),point(face,1.03,b),point(face*.79,1.03,b),point(face*.79,1.03,a),[.25,.28,.29]);
+          triangle(detailPoint(face*.65,0,a),detailPoint(face*.65,1.08,a),detailPoint(face*.65,1.08,b),[.09,.105,.11]);
+          quad(detailPoint(face,1.12,a),detailPoint(face,1.12,b),detailPoint(face,1.03,b),detailPoint(face,1.03,a),rim);
+          quad(detailPoint(face,1.03,a),detailPoint(face,1.03,b),detailPoint(face*.79,1.03,b),detailPoint(face*.79,1.03,a),[.25,.28,.29]);
         }
+      }
+      // Nominal Hoosier slick sidewalls; lettering rotates with the tyre.
+      for(const face of [-1.185,1.185]) {
+        [...spec.tyreBrand.toUpperCase()].forEach((letter,index)=>{
+          for(const [row,line] of glyphs[letter].entries()) for(let col=0;col<5;col++) if(line[col]==='1') {
+            const a=this.wheelPhase+Math.PI/2+(index*6+col-20)*.025,b=a+.022;
+            const r=1.96-row*.035;
+            quad(detailPoint(face,r,a),detailPoint(face,r,b),detailPoint(face,r-.03,b),detailPoint(face,r-.03,a),[.75,.73,.60]);
+          }
+        });
       }
       for (const face of [-1.16,1.16]) {
         // Recessed brake rotor behind the spokes and a stationary caliper.
         const rotorFace=face*.78;
         for(let i=0;i<segments;i++) {
           const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
-          quad(point(rotorFace,.38,a),point(rotorFace,.88,a),point(rotorFace,.88,b),point(rotorFace,.38,b),[.30,.32,.33]);
+          quad(detailPoint(rotorFace,.38,a),detailPoint(rotorFace,.88,a),detailPoint(rotorFace,.88,b),detailPoint(rotorFace,.38,b),[.30,.32,.33]);
         }
-        rod(point(rotorFace,.77,.1),point(rotorFace,.77,.75),.14,[.18,.19,.20]);
+        rod(detailPoint(rotorFace,.77,.1),detailPoint(rotorFace,.77,.75),.14,[.18,.19,.20]);
         for (let spoke=0;spoke<6;spoke++) {
           const angle=this.wheelPhase+spoke*Math.PI/3;
           const root=face*.87;
-          quad(point(root,.25,angle-.15),point(face,1.0,angle-.075),point(face,1.0,angle+.075),point(root,.25,angle+.15),[.48,.51,.52]);
-          for(const edge of [-1,1]) quad(point(root,.25,angle+edge*.15),point(face,1,angle+edge*.075),
-            point(face-Math.sign(face)*.09,1,angle+edge*.075),point(root-Math.sign(face)*.09,.25,angle+edge*.15),[.26,.29,.30]);
+          quad(detailPoint(root,.25,angle-.15),detailPoint(face,1.0,angle-.075),detailPoint(face,1.0,angle+.075),detailPoint(root,.25,angle+.15),[.48,.51,.52]);
+          for(const edge of [-1,1]) quad(detailPoint(root,.25,angle+edge*.15),detailPoint(face,1,angle+edge*.075),
+            detailPoint(face-Math.sign(face)*.09,1,angle+edge*.075),detailPoint(root-Math.sign(face)*.09,.25,angle+edge*.15),[.26,.29,.30]);
         }
         for(let bolt=0;bolt<4;bolt++) {
           const angle=this.wheelPhase+bolt*Math.PI/2;
-          rod(point(face+Math.sign(face)*.035,.20,angle),point(face+Math.sign(face)*.085,.20,angle),.045,[.52,.54,.55]);
+          rod(detailPoint(face+Math.sign(face)*.035,.20,angle),detailPoint(face+Math.sign(face)*.085,.20,angle),.045,[.52,.54,.55]);
         }
         for (let i=0;i<segments;i++) {
           const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
-          triangle(point(face+Math.sign(face)*.03,0,a),point(face+Math.sign(face)*.03,.28,a),point(face+Math.sign(face)*.03,.28,b),[.10,.13,.14]);
+          triangle(detailPoint(face+Math.sign(face)*.03,0,a),detailPoint(face+Math.sign(face)*.03,.28,a),detailPoint(face+Math.sign(face)*.03,.28,b),[.10,.13,.14]);
         }
+        // OZ hub badge, without assuming a specific OZ spoke model.
+        const badge=(u,v)=>detailPoint(face+Math.sign(face)*.04,Math.hypot(u,v),Math.atan2(v,u)+this.wheelPhase);
+        [...'OZ'].forEach((letter,index)=>{
+          for(const [row,line] of glyphs[letter].entries()) for(let col=0;col<5;col++) if(line[col]==='1') {
+            const u=(index*6+col-5.5)*.029,v=(3-row)*.029;
+            quad(badge(u,v),badge(u+.023,v),badge(u+.023,v-.023),badge(u,v-.023),[.86,.88,.85]);
+          }
+        });
       }
     }
 
@@ -1909,6 +1959,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
   }
 
   render(car, now = 0) {
+    this.updateObstacleMeshes();
     if (car.sale) { this.renderSale(car); return; }
     if (car.pool) { this.renderPool(car, now); return; }
     if (car.sauna) { this.renderSauna(car, now); return; }
@@ -1958,15 +2009,79 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.depthMask(true);
     gl.disable(gl.BLEND);
     this.drawSpectators(car,now);
+    this.drawImpactDamage();
     this.drawWheels(car,now);
     this.drawCockpit(car);
   }
 
-  drawSpectators(car, now) {
-    const frame = this.spectatorFrame;
-    const vertices = [];
+  updateObstacleMeshes() {
+    const campus=window.LPRCampus,gl=this.gl;
+    if(!this.worldSource)return;
+    const signature=b=>[b.x,b.y,b.angle,b.damage,b.bend,b.dents.map(d=>d.depth).join(',')].join('/');
+    const transform=(source,stride,b)=>{
+      const vertices=new Float32Array(source);
+      const ground=window.LPRTrackObjects?.terrain?.heightAt(b.origin.x,b.origin.y)||0;
+      for(let i=0;i<vertices.length;i+=stride) {
+        const p=campus.deformPoint(b,source[i],source[i+1]-ground,source[i+2]);
+        vertices[i]=p[0];vertices[i+1]=p[1]+ground;vertices[i+2]=p[2];
+      }
+      return vertices;
+    };
+    for(const mesh of this.obstacleMeshes) {
+      const key=signature(mesh.body);
+      if(key===mesh.poseKey)continue;
+      mesh.poseKey=key;
+      if(mesh.body.damage===0 && mesh.body.x===mesh.body.origin.x && mesh.body.y===mesh.body.origin.y &&
+        mesh.body.angle===mesh.body.origin.angle && !mesh.changed)continue;
+      mesh.changed=true;
+      gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER,mesh.start*4,transform(this.worldSource.subarray(mesh.start,mesh.end),6,mesh.body));
+    }
+    const sauna=campus.vehicleBounds.at(-1).body;
+    if(this.saunaArtwork?.source && this.saunaArtwork.poseKey!==signature(sauna)) {
+      this.saunaArtwork.poseKey=signature(sauna);
+      gl.bindBuffer(gl.ARRAY_BUFFER,this.saunaArtwork.buffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER,0,transform(this.saunaArtwork.source,8,sauna));
+    }
+    this.saunaStop={x:sauna.x,y:sauna.y};
+    this.poolStop={x:campus.poolBody.x,y:campus.poolBody.y};
+  }
+
+  drawImpactDamage() {
+    const campus=window.LPRCampus,vertices=[];
+    if(!campus?.bodies)return;
+    const tri=(a,b,c,color)=>{for(const p of [a,b,c])vertices.push(...p,...color);};
+    for(const b of campus.bodies) for(const d of b.dents) {
+      const c=Math.cos(b.angle),s=Math.sin(b.angle);
+      const nx=d.nx*c-d.ny*s,ny=d.nx*s+d.ny*c;
+      const x=b.x+d.x*c-d.y*s-nx*.2,y=b.y+d.x*s+d.y*c-ny*.2;
+      const ground=window.LPRTrackObjects?.terrain?.heightAt(x,y)||0;
+      const point=(u,h)=>[x-ny*u,h+ground,y+nx*u];
+      // Branching cracks and chipped edges stay on the contacted surface.
+      const size=Math.min(9,2+d.depth*1.2);
+      for(let branch=0;branch<5;branch++) {
+        const angle=branch*2.399,dx=Math.cos(angle)*size,dh=Math.sin(angle)*size;
+        const a=point(0,6),m=point(dx*.5+(branch%2?.7:-.7),6+dh*.4),end=point(dx,Math.max(.3,6+dh));
+        const width=.12+d.depth*.055;
+        tri(a,point(dx*.5+width,6+dh*.4),m,[.075,.065,.055]);
+        tri(m,point(dx+width,Math.max(.3,6+dh)),end,[.075,.065,.055]);
+      }
+      if(b.kind==='wall' && d.depth>.3) for(let chip=0;chip<6;chip++) {
+        const u=(chip-2.5)*1.5,base=[x-ny*u-nx*(1+chip%3),ground+.15,y+nx*u-ny*(1+chip%3)];
+        tri(base,[base[0]+1.2,ground+.25,base[2]],[base[0]+.3,ground+.9,base[2]+1],[.42,.34,.28]);
+      }
+    }
+    if(!vertices.length)return;
+    const gl=this.gl;
+    this.impactBuffer ||= gl.createBuffer();
+    this.bindMesh(this.impactBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.DYNAMIC_DRAW);
+    gl.drawArrays(gl.TRIANGLES,0,vertices.length/6);
+  }
+
+  spectatorPose(mesh,index,now) {
+    if(mesh.body.direction && mesh.body.pose)return {...mesh.body.pose,walking:false};
     const time = now / 1000;
-    for (const [index, mesh] of this.spectatorMeshes.entries()) {
       let forward = mesh.forward, side = mesh.side, yaw = side > 0 ? Math.PI : 0;
       let walking = false, elevation = 0;
       const phase = (time + index*3.1) % 36;
@@ -1988,9 +2103,26 @@ window.LPRRenderer3D = class LPRRenderer3D {
           distance-=lengths[segment];
         }
       }
+    return {forward,side,yaw,walking,elevation,phase};
+  }
+
+  updatePeople(now) {
+    const frame=this.spectatorFrame;
+    for(const [index,mesh] of this.spectatorMeshes.entries()) {
+      const pose=this.spectatorPose(mesh,index,now);
+      window.LPRCampus.movePerson(mesh.body,
+        frame.stop[0]+frame.forwardX*pose.forward+frame.rightX*pose.side,
+        frame.stop[2]+frame.forwardZ*pose.forward+frame.rightZ*pose.side,pose);
+    }
+  }
+
+  drawSpectators(car, now) {
+    const frame=this.spectatorFrame,vertices=[],time=now/1000;
+    for(const [index,mesh] of this.spectatorMeshes.entries()) {
+      const {forward,side,yaw,walking,elevation,phase}=this.spectatorPose(mesh,index,now);
       const near = Math.hypot(car.x-frame.stop[0],car.y-frame.stop[2]) < 180 && Math.abs(car.speed || 0) > 3;
-      const cheer = mesh.activity === 'cheer' && (near || phase < 7);
-      const sip = mesh.activity === 'drink' ? Math.max(0,Math.sin((time+index*2.7)%11/11*Math.PI*2)) : 0;
+      const cheer = !mesh.body.damage && mesh.activity === 'cheer' && (near || phase < 7);
+      const sip = !mesh.body.damage && mesh.activity === 'drink' ? Math.max(0,Math.sin((time+index*2.7)%11/11*Math.PI*2)) : 0;
       const cy=Math.cos(yaw),sy=Math.sin(yaw);
       for (let v=0;v<mesh.data.length;v+=6) {
         let x=mesh.data[v],y=mesh.data[v+1],z=mesh.data[v+2];
@@ -2028,8 +2160,11 @@ window.LPRRenderer3D = class LPRRenderer3D {
         if (walking && y<7.5*mesh.height) z+=Math.sin(time*7+(x<0 ? Math.PI : 0))*(1-y/(7.5*mesh.height))*1.7;
         y+=elevation+(cheer ? Math.max(0,Math.sin(time*5+index))*.65 : Math.sin(time*1.8+index)*.06);
         const f=forward+x*cy-z*sy,s=side+x*sy+z*cy;
-        vertices.push(frame.stop[0]+frame.forwardX*f+frame.rightX*s,y,
-          frame.stop[2]+frame.forwardZ*f+frame.rightZ*s,mesh.data[v+3],mesh.data[v+4],mesh.data[v+5]);
+        const worldX=frame.stop[0]+frame.forwardX*f+frame.rightX*s;
+        const worldY=frame.stop[2]+frame.forwardZ*f+frame.rightZ*s;
+        const point=window.LPRCampus.deformPoint(mesh.body,worldX,y,worldY);
+        vertices.push(point[0],point[1]+(window.LPRTrackObjects?.terrain?.heightAt(point[0],point[2])||0),
+          point[2],mesh.data[v+3],mesh.data[v+4],mesh.data[v+5]);
       }
     }
     const gl=this.gl;
@@ -2275,6 +2410,32 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.drawArrays(gl.TRIANGLES,0,vertices.length/6);
   }
 
+  drawSaleCashier(car) {
+    const gl=this.gl,{cashierX,cashierZ}=window.LPRSale.checkout;
+    // The reference pose faces +X. Rotate the entire solid character about its feet.
+    const yaw=Math.atan2(car.saleZ-cashierZ,car.saleX-cashierX);
+    if(yaw!==this.saleCashierYaw) {
+      const cx=-6000+cashierX,cos=Math.cos(yaw),sin=Math.sin(yaw);
+      for(const [mesh,stride] of [[this.saleCashierBody,6],[this.saleCashier,8]]) {
+        if(!mesh) continue;
+        const source=mesh.vertices,target=mesh.posedVertices;
+        for(let i=0;i<source.length;i+=stride) {
+          const x=source[i]-cx,z=source[i+2]-cashierZ;
+          target[i]=cx+x*cos-z*sin;
+          target[i+2]=cashierZ+x*sin+z*cos;
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER,0,target);
+      }
+      this.saleCashierYaw=yaw;
+    }
+    if(this.saleCashierBody) {
+      this.bindMesh(this.saleCashierBody.buffer);
+      gl.drawArrays(gl.TRIANGLES,0,this.saleCashierBody.count);
+    }
+    if(this.saleCashier?.ready) this.drawKerbs(this.saleCashier,6);
+  }
+
   renderSale(car) {
     this.gl.uniform1i(this.locations.outdoor,0);
     const gl=this.gl, yaw=car.saunaYaw||0,pitch=car.saunaPitch||0;
@@ -2290,6 +2451,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.uniform1f(this.locations.focal,1/Math.tan(76*Math.PI/360));
     gl.drawArrays(gl.TRIANGLES,0,this.saleVertexCount);
     this.drawSaleProducts();
+    this.drawSaleCashier(car);
     gl.uniform1i(this.locations.textured,0);
     this.drawKerbs(this.saleInteriorDetails,6);
     this.cockpit.clearRect(0,0,this.width,this.height);
@@ -2314,7 +2476,8 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
     this.bindMesh(this.buffer);
-    gl.uniform3f(this.locations.camera,car.saunaX ?? 1986,18,car.saunaZ ?? (car.saunaSide || -1)*6);
+    const cameraX=car.saunaX??1986,cameraZ=car.saunaZ??(car.saunaSide||-1)*6;
+    gl.uniform3f(this.locations.camera,cameraX,18+(car.pool?window.LPRTrackObjects?.terrain?.heightAt(cameraX,cameraZ)||0:0),cameraZ);
     const yaw = car.saunaYaw || 0, pitch = car.saunaPitch ?? -.12;
     const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
     gl.uniform3f(this.locations.forward,cy*cp,sp,sy*cp);

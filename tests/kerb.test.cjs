@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const context={window:{}};
+const context={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), }};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../vehicle.js'),'utf8'),context);
 const dynamics=new context.window.VehicleDynamics();
@@ -17,7 +17,7 @@ function run(hz,speed) {
   for(let i=0;i<hz*2;i++) {
     const time=i/hz;
     car.roadHeights=[0,1,2,3].map(index=>index%2 && time<1 ?
-      dynamics.kerbHeight(36,(speed*time-(index>1?1.63:0))*10,road):0);
+      dynamics.kerbHeight(36,(speed*time-(index>1?dynamics.parameters.wheelbase:0))*10,road):0);
     dynamics.stepSuspension(car,1/hz);
     assert([car.suspension.heave,car.suspension.pitch,car.suspension.roll].every(Number.isFinite));
     if(time<1) {

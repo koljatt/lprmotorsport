@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const source = name => fs.readFileSync(path.join(root, name), 'utf8');
 const images = [];
-const context = { window: {}, Image: class { constructor() { images.push(this); } } };
+const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), }, Image: class { constructor() { images.push(this); } } };
 vm.createContext(context);
 vm.runInContext(source('sauna.js'), context);
 const captions = [];
@@ -142,10 +142,32 @@ const gl = new Proxy({}, {
     } : () => 0
 });
 vm.runInContext(source('campus.js'), context);
+vm.runInContext(source('shared/track-document.js'), context);
+vm.runInContext(source('shared/terrain.js'), context);
+const initialSauna={...context.window.LPRCampus.saunaSite},initialFire={...context.window.LPRCampus.bonfireSite};
+const saunaFootprint=context.window.LPRCampus.vehicleBounds.at(-1);
+const initialFootprint={...saunaFootprint};
+context.window.LPRTrackData={version:1,objects:[
+  {type:'sauna',x:initialSauna.x+100,y:initialSauna.y+50,angle:-3*Math.PI/4,scale:1},
+  {type:'bonfire',x:initialFire.x-80,y:initialFire.y+30,angle:0,scale:1},
+  {type:'pool',x:3200,y:1500,angle:0,scale:1},
+  {type:'person',personId:0,x:3100,y:1400,angle:0,scale:1}
+]};
+vm.runInContext(source('shared/track-objects.js'), context);
+assert.equal(saunaFootprint.minX,initialFootprint.minX+100);
+assert.equal(saunaFootprint.minY,initialFootprint.minY+50);
+assert.equal(context.window.LPRCampus.bonfireSite.x,initialFire.x-80);
 vm.runInContext(source('sale.js'), context);
 vm.runInContext(source('renderer3d.js'), context);
 const points = context.window.LPRCampus.track;
 const renderer = new context.window.LPRRenderer3D({ getContext: () => gl }, { getContext: () => ({}) }, points);
+assert.equal(renderer.saunaStop.x,initialSauna.x+100);
+assert.equal(renderer.saunaStop.y,initialSauna.y+50);
+assert.equal(renderer.poolStop.x,3200);
+assert.equal(renderer.poolStop.y,1500);
+const frame=renderer.spectatorFrame,person=renderer.spectatorMeshes[0];
+assert(Math.abs(frame.stop[0]+frame.forwardX*person.forward+frame.rightX*person.side-3100)<1e-8);
+assert(Math.abs(frame.stop[2]+frame.forwardZ*person.forward+frame.rightZ*person.side-1400)<1e-8);
 for(const [buffer,data] of uploads) validateMesh(data,renderer.materialMeshes.some(mesh=>mesh.buffer===buffer) || [renderer.saunaArtwork,renderer.kerbMesh,renderer.roadPaintMesh].some(mesh=>mesh?.buffer===buffer) ? 8 : 6);
 assert(renderer.materialMeshes.every(mesh=>mesh.count>0),'Campus must contain brick, concrete, wood and glass surfaces');
 assert(renderer.saunaArtwork.count > 4000, 'Artwork follows both walls with perspective-correct subdivisions');
@@ -195,19 +217,22 @@ const documentEvents = {};
 const element = id => {
   if (!nodes.has(id)) nodes.set(id, {
     tagName: 'DIV', classList: { add() {}, remove() {}, toggle() {} }, style: { setProperty() {} },
-    setAttribute() {}, addEventListener() {}, clientWidth: 800
+    setAttribute() {}, addEventListener() {}, querySelector: element, clientWidth: 800
   });
   return nodes.get(id);
 };
 const gameContext = {
-  window: { matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener() {}, screen: {} }, performance: { now: () => 1000 },
+  URLSearchParams,
+  window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'),  matchMedia: () => ({ matches: false, addEventListener() {} }), addEventListener() {}, screen: {}, location: {search:''} }, performance: { now: () => 1000 },
   document: { querySelector: element, querySelectorAll: () => [], addEventListener(type, handler) { documentEvents[type] = handler; }, exitPointerLock() { this.pointerLockElement = null; } },
   navigator: {}, localStorage: { getItem: () => null }, setTimeout() {}, clearTimeout() {},
   requestAnimationFrame() {}, ResizeObserver: class { observe() {} },
-  LPRRenderer3D: class { constructor() { this.saunaStop = { x: 900, y: 650 }; } resize() {} },
+  LPRRenderer3D: class { constructor() { this.saunaStop = { x: 900, y: 650 }; } resize() {} updatePeople() {} },
   LPRTiltSteering: class { read() { return 0; } }
 };
 vm.createContext(gameContext);
+vm.runInContext(source('audio.js'), gameContext);
+gameContext.LPRGameAudio = gameContext.window.LPRGameAudio;
 vm.runInContext(source('sauna.js'), gameContext);
 vm.runInContext(source('vehicle.js'), gameContext);
 vm.runInContext(source('campus.js'), gameContext);
@@ -217,7 +242,7 @@ gameContext.LPRLapTiming = gameContext.window.LPRLapTiming;
 gameContext.LPRCampus = gameContext.window.LPRCampus;
 gameContext.LPRSaunaLife = gameContext.window.LPRSaunaLife;
 gameContext.VehicleDynamics = gameContext.window.VehicleDynamics;
-vm.runInContext(source('game.js').replace(/  reset\(\);\s+resize\(\);/,
+vm.runInContext(source('game.js').replace(/  reset\(\);\s+(?:openTestScene\([^\n]+\);\s+)?resize\(\);/,
   'reset(); globalThis.test={get car(){return car},saunaLife,toggleSauna,toggleSale,held,update,throwSteam,reset}; resize();'), gameContext);
 const game = gameContext.test;
 game.car.x = 900; game.car.y = 650;

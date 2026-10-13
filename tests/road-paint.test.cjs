@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const context = { window: {} };
+const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), } };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'renderer3d.js'), 'utf8'), context);
 let vertices, pixels, mipmaps = 0;

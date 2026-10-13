@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-const context={window:{}};
+const context={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), }};
 vm.createContext(context);
 for(const file of ['renderer3d.js','vehicle.js']) vm.runInContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
 const makeRenderer=()=>{
@@ -23,11 +23,11 @@ const run=(hz,longitudinalG,lateralG,configure=()=>{})=>{
 };
 const rest=run(90,0,0);
 assert(Math.abs(rest.heave)<1e-10 && Math.abs(rest.pitch)<1e-10);
-assert(Math.abs(rest.wheels.reduce((sum,w)=>sum+w.load,0)-275*9.81)<1e-6,'Static tyre loads must support total mass');
+assert(Math.abs(rest.wheels.reduce((sum,w)=>sum+w.load,0)-450*9.81)<1e-6,'Static tyre loads must support total mass');
 const braking=run(90,-1,0),accelerating=run(90,1,0);
 assert(braking.pitch<0,'Braking must lower the nose');
 assert(accelerating.pitch>0,'Acceleration must raise the nose');
-assert(Math.abs(braking.pitch)<Math.PI/180,'Stiff student car must not pitch several degrees per G');
+assert(Math.abs(braking.pitch)<2*Math.PI/180,'Stiff student car must not pitch several degrees per G');
 assert(Math.abs(braking.pitch+accelerating.pitch)<.0001);
 assert(braking.wheels[0].load>braking.wheels[2].load,'Braking must transfer tyre load forward');
 assert(braking.wheels[0].travel>0 && braking.wheels[2].travel<0,'Front compresses and rear extends under braking');
@@ -73,8 +73,8 @@ for(let i=0;i<renderer.mesh.length;i+=6) {
     tyreXMin=Math.min(tyreXMin,renderer.mesh[i]);tyreXMax=Math.max(tyreXMax,renderer.mesh[i]);
   }
 }
-assert(Math.abs(tyreMin-.07)<.00001,'Loaded tyres must have a contact patch on the road');
-assert(Math.abs((tyreXMin+tyreXMax)/2-108.1)<.00001,'Chassis pitch must not move tyre centres horizontally');
+assert(Math.abs(tyreMin)<.00001,'Loaded tyres must have a contact patch on the road');
+assert(Math.abs((tyreXMin+tyreXMax)/2-(100+(dynamics.parameters.frontAxle-dynamics.parameters.rearAxle)*5))<.00001,'Chassis pitch must not move tyre centres horizontally');
 assert([...renderer.mesh].every(Number.isFinite));
 car.longitudinalG=car.lateralG=0;
 for(let frame=0;frame<270;frame++) dynamics.stepSuspension(car,1/90);

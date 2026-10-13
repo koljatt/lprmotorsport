@@ -53,15 +53,23 @@ assert.equal(sale.canWalk(-3,102),false,'Banana stand must block walking through
 for(const x of [-23,17]) assert(sale.canWalk(x,102),'Banana stand side aisles remain open');
 assert(boxes.some(([x,y,z,w,h])=>x===-6003 && y===13 && z===90 && h===7),
   'Compact banana stand must have a low back sign');
-for(const x of [-72,-50,-28]) for(const z of [110,119,128]) {
+for(const x of [-58,-50,-42]) for(const z of [94,115,136]) {
   assert.equal(sale.canWalk(x,z),false,'Checkout must block walking across its footprint');
 }
-assert.equal(sale.canWalk(-50,136),false,'Cashier must block walking through their body');
-for(const [x,z] of [[-50,103],[-20,119],[35,135],[-70,99]]) {
+assert.equal(sale.canWalk(-64,115),false,'Cashier must block walking through their body');
+for(const [x,z] of [[-52,85],[-30,99],[-30,119],[-20,119],[35,135]]) {
   assert(sale.canWalk(x,z),'Customer approach and routes around checkout must remain open');
 }
-assert(boxes.some(([x,y,z,w,h])=>x===-6050 && y===26 && z===133 && h===8),
-  'Cashier head must be visible above the checkout');
+const cashierFaces=[];
+sale.buildInterior({box(){},cashierFace(points,uv){
+  cashierFaces.push(points);
+  assert(points.flat().every(Number.isFinite));
+  assert(uv.flat().every(value=>value>=0 && value<=1),'Reference UVs must stay within the photograph');
+  assert(points[1][2]<points[0][2] && uv[1][0]>uv[0][0],
+    'Cashier reference must read correctly from the customer aisle, without mirroring');
+}});
+assert(cashierFaces.some(points=>points.every(p=>p[1]>=26) && points.some(p=>p[1]>=34)),
+  'The detailed cashier head must be visible above the checkout');
 console.log('PASS: visible cashier, solid checkout and accessible customer routes');
 
 // Moving inward decreases Z: each department follows the requested sequence.
@@ -85,7 +93,7 @@ console.log('PASS: compact entrance produce display, department order and clear 
 for(const id of ['hartwall-vichy','coca-cola','ekstroms-vadelma','marli-juissi'])
   assert(counts.get(id)>=6,'New drinks must fill shelves: '+id);
 // Only the exposed ends carry endcaps; middle sections join directly.
-for(const endZ of [-121.32,61.32]) {
+for(const endZ of [-121.42,61.42]) {
   let endStock=0;
   sale.buildInterior({box(){},productFace(id,points){
     if(points.every(p=>p[2]===points[0][2]) && Math.abs(points[0][2]-endZ)<.01) endStock++;
@@ -100,9 +108,11 @@ console.log('PASS: four new drinks, filled endcaps, wall stock, staff door and b
 // A single central shelf bank makes two continuous lanes and a turn at the rear.
 assert(sale.shelves.every(shelf=>shelf.x===-3),'Shelves must form one central bank');
 for(let z=135;z>=-130;z-=5) assert(sale.canWalk(45,z),'Right entry aisle must be continuous');
-for(let z=100;z>=-130;z-=5) assert(sale.canWalk(-52,z),'Left return aisle must be continuous');
+for(let z=85;z>=-130;z-=5) assert(sale.canWalk(-52,z),'Left return aisle must reach the start of the conveyor');
 for(let x=-52;x<=45;x+=5) assert(sale.canWalk(x,-130),'Rear crossover must connect both aisles');
-for(let x=-52;x<=-20;x+=5) assert(sale.canWalk(x,100),'Return aisle must reach checkout');
+for(let x=-52;x<=-20;x+=5) assert(sale.canWalk(x,85),'Return aisle must reach the customer side of checkout');
+for(let z=85;z<=133;z+=3) assert(sale.canWalk(-30,z),'Customer lane must connect the conveyor to the packing area');
+for(let x=-30;x<=-20;x+=2) assert(sale.canWalk(x,133),'Packing area must connect to the exit opening');
 for(let z=100;z<=139;z+=3) assert(sale.canWalk(-20,z),'Checkout approach must connect to left exit');
 assert(boxes.some(([x,y,z,w,h])=>x===-6008 && y===0 && z===149 && w===24 && h===34),'Left exit must be separate from the right entry');
 console.log('PASS: two aisles, rear crossover, checkout route and separate exit');
@@ -203,7 +213,11 @@ sale.buildInterior({box(){},productFace(id,points){
   assert(sale.canWalk(x,-130),'All dairy bays must have a reachable cross-aisle');
   dairyCounts.set(id,(dairyCounts.get(id)||0)+1);
 }});
-for(const id of dairyIds) assert.equal(dairyCounts.get(id),32,'Four stocked shelves and two rows in dairy bay: '+id);
+for(const id of dairyIds) {
+  const product=sale.products.find(p=>p.id===id);
+  assert.equal(dairyCounts.get(id),8*Math.floor(13/(product.width+.35)),
+    'Four shelves and two rows with spacing fitted to package width: '+id);
+}
 assert.equal(sale.dairyBays.length,9);
 console.log('PASS: nine refrigerated dairy bays, fully stocked and accessible from the back cross-aisle');
 
@@ -221,5 +235,5 @@ sale.buildInterior({box(){},productFace(id,points){
   assert.equal(blockers.length,0,'Solid cabinet geometry must not obscure dairy: '+id);
   visibleDairy++;
 }});
-assert.equal(visibleDairy,144);
-console.log('PASS: all 144 front-row dairy labels are outside their packages and have unobstructed sight lines');
+assert.equal(visibleDairy,dairyIds.reduce((sum,id)=>sum+dairyCounts.get(id)/2,0));
+console.log('PASS: all front-row dairy labels are outside their packages and have unobstructed sight lines');

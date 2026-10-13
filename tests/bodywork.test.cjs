@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-const context={window:{}};
+const context={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), }};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../renderer3d.js'),'utf8'),context);
 const renderer=Object.create(context.window.LPRRenderer3D.prototype);
@@ -48,7 +48,8 @@ for(const angle of [-2.5,.8,2.9]) {
 }
 renderer.render(car,0);
 for(const side of [-1,1]) {
-  const joint=[98.8,4,200+side*2.7];
+  const spec=context.window.LPRVehicleSpec;
+  const joint=[100-1.2*spec.bodyLengthScale,4*spec.bodyHeightScale,200+side*2.7];
   const matches=bodyVertices(mesh).filter(vertex=>vertex.every((v,i)=>Math.abs(v-joint[i])<1e-4));
   assert(matches.length>=2,'Nose and cockpit walls must share their attachment edge');
 }

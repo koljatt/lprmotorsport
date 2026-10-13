@@ -6,7 +6,7 @@ const source=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
 
 const labels=[];
 const handDraws=[];
-const context={window:{}};
+const context={window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), }};
 vm.createContext(context);
 vm.runInContext(source('renderer3d.js'),context);
 const Renderer=context.window.LPRRenderer3D;
@@ -78,12 +78,12 @@ for(const side of [-1,1]) {
 const nodes=new Map(), events=new Map();
 const element=id=>{
   if(!nodes.has(id)) nodes.set(id,{tagName:'DIV',classList:{add(){},remove(){},toggle(){}},
-    style:{setProperty(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},
-    addEventListener(type,handler){this[type]=handler;},showModal(){this.open=true;},close(){this.open=false;},clientWidth:800});
+    style:{setProperty(){}},attributes:{},setAttribute(k,v){this.attributes[k]=v;},querySelector:element,
+    addEventListener(type,handler){this[type==='close'?'onclose':type]=handler;},showModal(){this.open=true;},close(){this.open=false;this.onclose?.();},clientWidth:800});
   return nodes.get(id);
 };
 const gameContext={
-  window:{matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(type,handler){if(!events.has(type)) events.set(type,[]);events.get(type).push(handler);},screen:{}},
+  window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(type,handler){if(!events.has(type)) events.set(type,[]);events.get(type).push(handler);},screen:{}},
   performance:{now:()=>1000},document:{querySelector:element,querySelectorAll:()=>[],addEventListener(){}},
   navigator:{},localStorage:{getItem:()=>null},setTimeout(){},clearTimeout(){},requestAnimationFrame(){},
   ResizeObserver:class{observe(){}},
@@ -91,8 +91,8 @@ const gameContext={
   LPRTiltSteering:class{read(){return 0;}}
 };
 vm.createContext(gameContext);
-for(const file of ['sauna.js','vehicle.js','campus.js','sale.js','timing.js']) vm.runInContext(source(file),gameContext);
-for(const name of ['LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming']) gameContext[name]=gameContext.window[name];
+for(const file of ['audio.js','sauna.js','vehicle.js','campus.js','sale.js','timing.js']) vm.runInContext(source(file),gameContext);
+for(const name of ['LPRGameAudio','LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming']) gameContext[name]=gameContext.window[name];
 vm.runInContext(source('game.js').replace(/  reset\(\);\s+resize\(\);/,
   'reset(); globalThis.test={get car(){return car},operateWheel,dynamics,update,reset,held}; resize();'),gameContext);
 const game=gameContext.test;

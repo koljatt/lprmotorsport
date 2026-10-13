@@ -24,6 +24,22 @@
     track[(i+1)%POINTS].x-track[i].x,track[(i+1)%POINTS].y-track[i].y));
   const renderer = new LPRRenderer3D(canvas, document.querySelector('#cockpit'), track);
   const dynamics = new VehicleDynamics();
+  const audio = new LPRGameAudio();
+  const soundButton = document.querySelector('#sound-button');
+  let audioFocused = true;
+  function updateSoundButton() {
+    const label = t(audio.enabled ? 'Äänet: päällä' : 'Äänet: pois');
+    soundButton.querySelector('span').textContent = label;
+    soundButton.setAttribute('aria-label', label);
+    soundButton.setAttribute('aria-pressed', String(audio.enabled));
+  }
+  function syncAudio() {
+    const paused = document.hidden || !audioFocused || ui.dialog.open;
+    if (audio.paused !== paused) audio.setPaused(paused);
+    const muted = paused || !audio.enabled;
+    if (muted && !saunaLife.muted) saunaLife.stopSound();
+    saunaLife.muted = muted;
+  }
   const startAngle = Math.atan2(track[1].y - track[0].y, track[1].x - track[0].x);
   const held = { left: false, right: false, gas: false, brake: false };
   const keyboard = new Set();
@@ -64,6 +80,20 @@
     saunaDialogue.textContent = t(text);
     saunaDialogue.hidden = !text;
   });
+  saunaLife.onSteam = () => audio.steam();
+  soundButton.addEventListener('click', () => {
+    audio.setEnabled(!audio.enabled);
+    syncAudio();
+    if (audio.enabled && saunaLife.sound) saunaLife.setSound(true);
+    updateSoundButton();
+  });
+  for (const event of ['pointerdown', 'keydown']) {
+    document.addEventListener(event, () => { syncAudio(); audio.unlock(); }, { capture: true });
+  }
+  window.addEventListener('blur', () => { audioFocused = false; syncAudio(); });
+  window.addEventListener('focus', () => { audioFocused = true; syncAudio(); audio.unlock(); });
+  updateSoundButton();
+  syncAudio();
   let saunaLookPointer = null;
   let saunaHoverPosition = null;
   let saunaSteamSelected = false;
@@ -225,8 +255,8 @@
       car.saunaYaw = 0;
       car.saunaPitch = -.12;
       car.saunaSide = -1;
-      car.poolX = (renderer.poolStop?.x ?? renderer.saunaStop.x) - 18;
-      car.poolZ = (renderer.poolStop?.y ?? renderer.saunaStop.y) + 12;
+      car.poolX = renderer.poolStop?.x ?? renderer.saunaStop.x;
+      car.poolZ = renderer.poolStop?.y ?? renderer.saunaStop.y;
       ui.speed.textContent = '0';
       ui.lateralG.textContent = '0.0 G';
       ui.grip.textContent = t('PALJUTAUKO');
@@ -288,6 +318,8 @@
   }
 
   function reset() {
+    window.LPRCampus.resetObstacles();
+    audio.stopEffects();
     timing.reset();
     sectorUI.hidden = true;
     clearInput();
@@ -390,7 +422,8 @@
         const distance = contact.distance;
         const loop=trackDistances[POINTS];
         const ribAlong=contact.along*(Math.round(loop*p.metresPerWorldUnit/.45)*.45)/(loop*p.metresPerWorldUnit);
-        heights.push(dynamics.kerbHeight(distance,ribAlong,LPRCampus.road));
+        heights.push((window.LPRTrackObjects?.terrain?.heightAt(x,y)||0)*p.metresPerWorldUnit+
+          dynamics.kerbHeight(distance,ribAlong,LPRCampus.road));
         if (distance >= ROAD_HALF && distance <= KERB_OUTER) kerbTires++;
         const blend = window.LPRTrackObjects?.onAsphalt(x,y) ? 0 :
           Math.max(0, Math.min(1, (distance - KERB_OUTER) / (SHOULDER_OUTER - KERB_OUTER)));
@@ -399,10 +432,20 @@
     }
     state.kerbFraction = kerbTires / 4;
     state.roadHeights = heights;
+    const slope=window.LPRTrackObjects?.terrain?.sample(state.x,state.y);
+    state.terrainSlope={forward:slope?slope.dx*forwardX+slope.dy*forwardY:0,
+      right:slope?-slope.dx*forwardY+slope.dy*forwardX:0};
     return total / 4;
   }
 
   function update(dt, now) {
+    if(!ui.dialog.open) {
+      renderer.updatePeople(now);
+      window.LPRCampus.stepObstacles(dt,car,contact=>{
+        dynamics.applyImpact(car,contact.normal,contact.impactMaterial,contact);
+        audio.impact(car.impactSpeed);
+      });
+    }
     const input = readInput();
     if(car.crashed) {
       car.throttleInput=0;
@@ -445,17 +488,17 @@
     const steps = Math.max(1, Math.ceil(dt * 90));
     for (let i = 0; i < steps; i++) {
       car.grassFraction = grassContact(car);
-      const previous = { x:car.x, y:car.y };
+      const previous = { x:car.x, y:car.y, angle:car.angle };
       dynamics.step(car, input, dt / steps, car.grassFraction);
-      const collision=window.LPRCampus.resolveObstacleCollision(car, previous);
-      if(collision) {
-        const damage=dynamics.applyImpact(car,collision.normal,collision.impactMaterial);
+      const collision=window.LPRCampus.resolveObstacleCollision(car, previous, contact=>{
+        const damage=dynamics.applyImpact(car,contact.normal,contact.impactMaterial,contact);
+        audio.impact(car.impactSpeed);
         if(damage>0) showNotice(t("Auto vaurioitui."),2500);
-        if(car.crashed) {
-          car.crashedAt=now;
-          showNotice(t("Auto hajosi! Aloita uudelleen."),0);
-          break;
-        }
+      });
+      if(collision && car.crashed) {
+        car.crashedAt=now;
+        showNotice(t("Auto hajosi! Aloita uudelleen."),0);
+        break;
       }
     }
     const boundedX = Math.max(12, Math.min(WORLD.width - 12, car.x));
@@ -480,6 +523,7 @@
       else if (car.stage === 3 && (nearest.index < 5 || nearest.index > 235)) {
         const lapTime = now - car.lapStart;
         if (lapTime > 5000) {
+          audio.lap(!best || lapTime < best);
           showSector(lapTime);
           if (!car.onlineInvalid && !window.LPRTrackObjects?.active && timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
           if (!best || lapTime < best) {
@@ -522,6 +566,8 @@
     const dt = Math.min((now - lastFrame) / 1000, .05);
     lastFrame = now;
     if (!document.hidden) update(dt, now);
+    syncAudio();
+    audio.update(car);
     if (!document.hidden) updateSteamTarget();
     renderer.render(car, now);
   }
@@ -650,6 +696,7 @@
   steeringPad.addEventListener('keyup', () => setSteer(0));
   steeringPad.addEventListener('blur', () => { if (steeringPointer === null) setSteer(0); });
   document.addEventListener('visibilitychange', () => {
+    syncAudio();
     if (document.hidden && car.started) car.onlineInvalid = true;
     clearInput();
     if(document.hidden) saunaLife.stopSound();
@@ -674,8 +721,9 @@
   });
   function openLeaderboard() {
     if (car.started) car.onlineInvalid = true;
-    clearInput(); saunaLife.stopSound(); ui.dialog.showModal();
+    clearInput(); saunaLife.stopSound(); ui.dialog.showModal(); syncAudio();
   }
+  ui.dialog.addEventListener('close', () => { syncAudio(); audio.unlock(); });
   document.querySelector('#leaderboard-button').addEventListener('click', () => {
     openLeaderboard();
     ui.dialog.scrollTop = 0;
@@ -695,6 +743,20 @@
 
   ui.best.textContent = best ? formatTime(best) : '--:--.---';
   reset();
+  openTestScene(window.location.search);
   resize();
   requestAnimationFrame(frame);
+
+  function openTestScene(search) {
+    const scene = new URLSearchParams(search).get('test-scene');
+    const stop = scene === 'sale' ? window.LPRSale?.entrance
+      : scene === 'sauna' ? renderer.saunaStop
+      : scene === 'pool' ? renderer.poolStop : null;
+    if (!stop) return;
+    car.x = stop.x;
+    car.y = stop.y;
+    if (scene === 'sale') toggleSale(true);
+    else if (scene === 'sauna') toggleSauna();
+    else togglePool();
+  }
 })();
