@@ -7,9 +7,10 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'renderer3d.js'), 'utf8'), context);
 let vertices, pixels, mipmaps = 0;
 const gl = {
+  ARRAY_BUFFER:34962, ELEMENT_ARRAY_BUFFER:34963,
   createBuffer: () => ({}), createTexture: () => ({}),
   bindBuffer() {}, bindTexture() {}, texParameteri() {},
-  bufferData: (_, data) => { vertices = data; },
+  bufferData: (target, data) => { if(target===gl.ARRAY_BUFFER) vertices = data; },
   texImage2D: (...args) => { pixels = args.at(-1); },
   generateMipmap: () => { mipmaps++; }, getExtension: () => null
 };

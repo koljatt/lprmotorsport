@@ -135,8 +135,10 @@ const gl = new Proxy({}, {
     : key === 'createBuffer' ? () => ({})
     : key === 'bindBuffer' ? (_,buffer) => {boundBuffer=buffer;}
     : key === 'bufferData' ? (_, data) => {
-      mesh = data;
       assert([...data].every(Number.isFinite));
+      // Index buffers are validated separately by view-culling.test.cjs.
+      if(data.constructor.name!=='Float32Array') return;
+      mesh = data;
       uploads.set(boundBuffer,data);
       if(rendererReady) validateMesh(data,6);
     } : () => 0

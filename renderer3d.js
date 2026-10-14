@@ -435,7 +435,8 @@ window.LPRRenderer3D = class LPRRenderer3D {
       const buffer=gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
       gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
-      return {name,buffer,count:vertices.length/8,material:index+1,source:new Float32Array(vertices)};
+      return {name,buffer,count:vertices.length/8,material:index+1,source:new Float32Array(vertices),
+        spatial:this.makeSpatialMesh(vertices,8)};
     });
     // The shoulder is a continuous strip beneath the asphalt.
     const { halfWidth, kerbOuter, shoulderOuter } = window.LPRCampus.road;
@@ -1028,15 +1029,103 @@ window.LPRRenderer3D = class LPRRenderer3D {
     box(2015.5,-3,19,8,2,3,railWood);
     box(1999,19,-13.3,5,4,.3,[1,.73,.32]);
     this.vertexCount = data.length / 6;
-    this.shadowCount = shadows.length / 6;
+    const shadowSource=new Float32Array(terrain?.mesh(shadows,6)||shadows);
+    this.shadowCount = shadowSource.length / 6;
+    this.shadowSpatial=this.makeSpatialMesh(shadowSource);
     this.shadowBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(terrain?.mesh(shadows,6)||shadows), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, shadowSource, gl.STATIC_DRAW);
     this.buffer = gl.createBuffer();
     this.worldSource=new Float32Array(data);
+    this.worldSpatial=this.makeSpatialMesh(this.worldSource);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
     this.bindMesh(this.buffer);
+  }
+
+  makeSpatialMesh(source, stride=6) {
+    const gl=this.gl,count=source.length/stride;
+    if(count>65535) {
+      this.indexUint32 ??= !!gl.getExtension?.('OES_element_index_uint');
+      if(!this.indexUint32) return null; // Safe whole-mesh fallback on older GPUs.
+    }
+    const cells=new Map(),triangleChunks=new Int32Array(count/3);
+    const include=(bounds,x,y,z)=>{
+      bounds[0]=Math.min(bounds[0],x);bounds[1]=Math.min(bounds[1],y);bounds[2]=Math.min(bounds[2],z);
+      bounds[3]=Math.max(bounds[3],x);bounds[4]=Math.max(bounds[4],y);bounds[5]=Math.max(bounds[5],z);
+    };
+    for(let start=0;start<count;start+=3) {
+      const bounds=[Infinity,Infinity,Infinity,-Infinity,-Infinity,-Infinity];
+      for(let v=start;v<start+3;v++) include(bounds,source[v*stride],source[v*stride+1],source[v*stride+2]);
+      // Large ground/road triangles keep their complete bounds and never hide
+      // a small cell merely because their centre lies outside the view.
+      const wide=bounds[3]-bounds[0]>800 || bounds[5]-bounds[2]>800;
+      const key=wide?'large':`${Math.floor((bounds[0]+bounds[3])/800)},${Math.floor((bounds[2]+bounds[5])/800)}`;
+      let chunk=cells.get(key);
+      if(!chunk) {
+        chunk={id:cells.size,indices:[],bounds:[Infinity,Infinity,Infinity,-Infinity,-Infinity,-Infinity]};
+        cells.set(key,chunk);
+      }
+      chunk.indices.push(start,start+1,start+2);triangleChunks[start/3]=chunk.id;
+      include(chunk.bounds,...bounds.slice(0,3));include(chunk.bounds,...bounds.slice(3));
+    }
+    const type=count>65535?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT;
+    const chunks=[...cells.values()];
+    for(const chunk of chunks) {
+      const indices=count>65535?new Uint32Array(chunk.indices):new Uint16Array(chunk.indices);
+      chunk.buffer=gl.createBuffer();chunk.count=indices.length;
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,chunk.buffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,indices,gl.STATIC_DRAW);
+      delete chunk.indices;
+    }
+    return {chunks,triangleChunks,type,stride};
+  }
+
+  makeViewFrustum(camera,forward,right,up,focal,aspect) {
+    const plane=(normal,offset=0)=>({normal,constant:offset-normal.reduce((sum,n,i)=>sum+n*camera[i],0),
+      // A small guard band avoids edge flicker from floating point rounding.
+      margin:2*Math.hypot(...normal)});
+    const side=(axis,tangent,sign)=>forward.map((n,i)=>n*tangent+axis[i]*sign);
+    return [plane(forward,-1),plane(forward.map(n=>-n),2000),
+      plane(side(right,aspect/focal,1)),plane(side(right,aspect/focal,-1)),
+      plane(side(up,1/focal,1)),plane(side(up,1/focal,-1))];
+  }
+
+  boundsVisible(bounds) {
+    if(!this.viewFrustum) return true;
+    return this.viewFrustum.every(({normal,constant,margin})=>{
+      // AABB support point furthest into the plane. Reject only if the
+      // complete box is outside, including tall crowns and crossing triangles.
+      let maximum=constant;
+      for(let axis=0;axis<3;axis++) maximum+=normal[axis]*bounds[axis+(normal[axis]>=0?3:0)];
+      return maximum>=-margin;
+    });
+  }
+
+  drawSpatialMesh(spatial,count) {
+    const gl=this.gl;
+    if(!spatial || !this.viewFrustum) {gl.drawArrays(gl.TRIANGLES,0,count);return;}
+    for(const chunk of spatial.chunks) {
+      if(!this.boundsVisible(chunk.bounds)) continue;
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,chunk.buffer);
+      gl.drawElements(gl.TRIANGLES,chunk.count,spatial.type,0);
+    }
+  }
+
+  expandSpatialBounds(spatial,sourceStart,vertices) {
+    if(!spatial) return;
+    // Indices keep referring to the original vertex buffer after an impact.
+    // Extend affected cells to include moved/deformed vertices. Keeping the
+    // original extent is conservative and also covers an obstacle reset.
+    const stride=spatial.stride;
+    for(let i=0;i<vertices.length;i+=stride) {
+      const triangle=Math.floor((sourceStart+i)/(stride*3));
+      const bounds=spatial.chunks[spatial.triangleChunks[triangle]].bounds;
+      for(let axis=0;axis<3;axis++) {
+        bounds[axis]=Math.min(bounds[axis],vertices[i+axis]);
+        bounds[axis+3]=Math.max(bounds[axis+3],vertices[i+axis]);
+      }
+    }
   }
 
   bindMesh(buffer) {
@@ -1064,7 +1153,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
       gl.enableVertexAttribArray(this.locations.uv);
       gl.vertexAttribPointer(this.locations.uv,2,gl.FLOAT,false,32,24);
       gl.uniform1i(this.locations.material,mesh.material);
-      gl.drawArrays(gl.TRIANGLES,0,mesh.count);
+      this.drawSpatialMesh(mesh.spatial,mesh.count);
     }
     gl.uniform1i(this.locations.material,0);
   }
@@ -1122,7 +1211,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const anisotropy=gl.getExtension('EXT_texture_filter_anisotropic');
     if(anisotropy) gl.texParameterf(gl.TEXTURE_2D,anisotropy.TEXTURE_MAX_ANISOTROPY_EXT,
       Math.min(8,gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
-    this.kerbMesh={buffer,texture,count:vertices.length/8};
+    this.kerbMesh={buffer,texture,count:vertices.length/8,spatial:this.makeSpatialMesh(vertices,8)};
   }
 
   makeRoadPaint(points, at, edgeLine) {
@@ -1190,7 +1279,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const anisotropy=gl.getExtension('EXT_texture_filter_anisotropic');
     if(anisotropy) gl.texParameterf(gl.TEXTURE_2D,anisotropy.TEXTURE_MAX_ANISOTROPY_EXT,
       Math.min(8,gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
-    this.roadPaintMesh={buffer,texture,count:vertices.length/8};
+    this.roadPaintMesh={buffer,texture,count:vertices.length/8,spatial:this.makeSpatialMesh(vertices,8)};
   }
 
   drawRoadPaint() {
@@ -1216,7 +1305,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.bindTexture(gl.TEXTURE_2D,mesh.texture);
     gl.uniform1i(this.locations.texture,0);
     gl.uniform1i(this.locations.material,material);
-    gl.drawArrays(gl.TRIANGLES,0,mesh.count);
+    this.drawSpatialMesh(mesh.spatial,mesh.count);
     gl.uniform1i(this.locations.material,0);
   }
 
@@ -2047,6 +2136,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
   }
 
   render(car, now = 0) {
+    this.viewFrustum=null;
     this.updateObstacleMeshes();
     if (car.sale) { this.renderSale(car); return; }
     if (car.pool) { this.renderPool(car, now); return; }
@@ -2070,7 +2160,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.uniform3f(this.locations.up,up[0],up[1],up[2]);
     gl.uniform1f(this.locations.aspect,this.width / this.height);
     const verticalFov = this.width < 650 ? 84 : 72;
-    gl.uniform1f(this.locations.focal,1 / Math.tan(verticalFov * Math.PI / 360));
+    const focal=1 / Math.tan(verticalFov * Math.PI / 360);
+    gl.uniform1f(this.locations.focal,focal);
+    this.viewFrustum=this.makeViewFrustum(camera,forward,right,up,focal,this.width/this.height);
     gl.uniform1i(this.locations.outdoor,1);
     this.bindMesh(this.skyBuffer);
     gl.uniform1i(this.locations.sky,1);
@@ -2081,7 +2173,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.enable(gl.DEPTH_TEST);
     gl.uniform1i(this.locations.sky,0);
     this.bindMesh(this.buffer);
-    gl.drawArrays(gl.TRIANGLES,0,this.vertexCount);
+    this.drawSpatialMesh(this.worldSpatial,this.vertexCount);
     this.drawCampusMaterials();
     if(this.saunaArtwork?.ready) this.drawKerbs(this.saunaArtwork);
     this.drawKerbs();
@@ -2092,7 +2184,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
     gl.uniform1f(this.locations.opacity,.22);
-    gl.drawArrays(gl.TRIANGLES,0,this.shadowCount);
+    this.drawSpatialMesh(this.shadowSpatial,this.shadowCount);
     gl.uniform1f(this.locations.opacity,1);
     gl.depthMask(true);
     gl.disable(gl.BLEND);
@@ -2123,7 +2215,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
         mesh.body.angle===mesh.body.origin.angle && !mesh.changed)continue;
       mesh.changed=true;
       gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);
-      gl.bufferSubData(gl.ARRAY_BUFFER,mesh.start*4,transform(this.worldSource.subarray(mesh.start,mesh.end),6,mesh.body));
+      const vertices=transform(this.worldSource.subarray(mesh.start,mesh.end),6,mesh.body);
+      gl.bufferSubData(gl.ARRAY_BUFFER,mesh.start*4,vertices);
+      this.expandSpatialBounds(this.worldSpatial,mesh.start,vertices);
     }
     const sauna=campus.vehicleBounds.at(-1).body;
     if(this.saunaArtwork?.source && this.saunaArtwork.poseKey!==signature(sauna)) {

@@ -7,6 +7,12 @@ piirtoresoluutiota ei vähennetä. Vauriot ja uudelleenkäynnistys päivittävä
 valmiit osat tarvittaessa. Välimuistin, ohjauksen, pyörimisen ja maastokosketuksen
 tarkistukset: `npm run test:performance`.
 
+Ajonäkymän ympäristö, rakennusmateriaalit, kanttikivet, tiemerkinnät ja
+varjot jaetaan alueisiin. Vain kameran näkymään osuvat alueet lähetetään
+piirrettäviksi; näkyvien kohteiden kolmiot ja tekstuurit säilyvät ennallaan.
+Liikkuvien ja vaurioituvien esteiden alueet laajenevat niiden mukana.
+Sisänäkymät ja vanhat näytönohjaimet käyttävät tarvittaessa koko mallin piirtoa.
+
 Törmäykset vaikuttavat myös osuman kohteeseen. Pysäköidyt autot, traktori,
 saunapaku ja täysi palju liikkuvat ja kiertyvät massan sekä osumakohdan mukaan.
 Puut taipuvat, seinät halkeilevat ja lohkeilevat, ja ulkona olevat ihmiset
