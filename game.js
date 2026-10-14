@@ -729,11 +729,13 @@
     ui.dialog.scrollTop = 0;
     window.LPRLeaderboard?.refresh();
   });
-  document.querySelector('#close-settings').addEventListener('click', () => ui.dialog.close());
+  document.querySelector('#close-settings').addEventListener('click', () => {
+    if (!window.LPRLeaderboard?.requiresName) ui.dialog.close();
+  });
   window.addEventListener('resize', resize);
   const landscapeDriving = window.matchMedia('(pointer:coarse) and (orientation:landscape), (max-width:900px) and (max-height:500px) and (orientation:landscape)');
   landscapeDriving.addEventListener('change', event => {
-    if (event.matches && ui.dialog.open) ui.dialog.close();
+    if (event.matches && ui.dialog.open && !window.LPRLeaderboard?.requiresName) ui.dialog.close();
   });
   new ResizeObserver(resize).observe(document.querySelector('.game-shell'));
   window.addEventListener('gamepadconnected', event => {
@@ -745,6 +747,7 @@
   reset();
   openTestScene(window.location.search);
   resize();
+  window.LPRLeaderboard?.beginSession();
   requestAnimationFrame(frame);
 
   function openTestScene(search) {

@@ -85,3 +85,15 @@ dialog { touch-action: pan-y pinch-zoom; }
   .sauna-actions span, #sauna-sound { display:none; }
   .sauna-actions button { min-height:44px; padding:8px 12px; font-size:12px; }
 }
+
+/* Entry screen: the top times are visible before choosing a driving name. */
+#settings-dialog [hidden] { display:none; }
+#leaderboard-list { padding-left:30px; margin:14px 0; }
+#leaderboard-list li { padding:9px 8px; border-bottom:1px solid #28483a; font-variant-numeric:tabular-nums; }
+#leaderboard-list li:first-child { color:#e7cc72; font-weight:800; background:#e7cc720b; border-radius:8px; }
+.leaderboard-start-form { margin-top:20px; padding-top:18px; border-top:1px solid #355347; }
+.leaderboard-start-form label { font-weight:800; }
+.leaderboard-panel .leaderboard-start { width:100%; min-height:48px; margin-top:8px; background:#087c57; border-color:#00b47c; font-weight:800; }
+.leaderboard-panel input[readonly] { color:#a9cbbb; }
+#settings-dialog.session-start { max-height:92dvh; }
+@media(max-width:650px) { #settings-dialog.session-start { padding:18px; } #leaderboard-list li { padding:7px 4px; font-size:14px; } }

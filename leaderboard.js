@@ -2,34 +2,73 @@
   'use strict';
   const endpoint = 'https://lpr-leaderboard.panu-musakka.workers.dev';
   const version = 'lut-20261011-v3';
-  const t = text => window.LPRI18n?.t(text) ?? text;
+  const t = (text, values) => window.LPRI18n?.t(text, values) ?? text;
   const nickname = document.querySelector('#leaderboard-name');
   const status = document.querySelector('#leaderboard-status');
   const list = document.querySelector('#leaderboard-list');
   const format = ms => `${Math.floor(ms / 60000)}:${((ms % 60000) / 1000).toFixed(3).padStart(6, '0')}`;
-  let token;
+  const dialog = document.querySelector('#settings-dialog');
+  const startForm = document.querySelector('#leaderboard-start-form');
+  const startButton = document.querySelector('#leaderboard-start');
+  const closeButton = document.querySelector('#close-settings');
+  const nameHelp = document.querySelector('#leaderboard-name-help');
+  const validName = name => /^[\p{L}\p{N} _.-]{1,24}$/u.test(name);
+  const validToken = value => /^[a-f0-9]{64}$/.test(value ?? '');
+  const newToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
+  let token, activeName = '', rememberedName = '', legacyToken;
   try {
-    nickname.value = localStorage.getItem('lpr-nickname') ?? '';
-    token = localStorage.getItem('lpr-player-token');
-    if (!/^[a-f0-9]{64}$/.test(token ?? '')) {
-      token = [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
-      localStorage.setItem('lpr-player-token', token);
+    rememberedName = localStorage.getItem('lpr-nickname') ?? '';
+    nickname.value = rememberedName;
+    legacyToken = localStorage.getItem('lpr-player-token');
+  } catch {}
+  function chooseIdentity(name) {
+    // A shared phone can have several drivers; changing names must not submit
+    // one person's lap under another person's persistent best-time identity.
+    const key = `lpr-player-token:${name.normalize('NFC').toLowerCase()}`;
+    let saved;
+    try { saved = localStorage.getItem(key); } catch {}
+    const identity = validToken(saved) ? saved
+      : name === rememberedName && validToken(legacyToken) ? legacyToken : newToken();
+    try {
+      localStorage.setItem(key, identity);
+      localStorage.setItem('lpr-player-token', identity);
+      localStorage.setItem('lpr-nickname', name);
+    } catch {}
+    return identity;
+  }
+  nickname.addEventListener('input', () => nickname.setCustomValidity(''));
+  startForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (activeName) return;
+    const name = nickname.value.trim().normalize('NFC');
+    if (!validName(name)) {
+      nickname.setCustomValidity(t('Kirjoita 1–24 merkin nimimerkki. Käytä kirjaimia, numeroita, välilyöntiä, pistettä, viivaa tai alaviivaa.'));
+      nickname.reportValidity();
+      return;
     }
-  } catch { status.textContent = t('Verkkotulokset tarvitsevat selaimen tallennustilan.'); }
-  nickname.addEventListener('change', () => {
-    try { localStorage.setItem('lpr-nickname', nickname.value.trim()); } catch {}
+    token = chooseIdentity(name);
+    activeName = name;
+    nickname.value = name;
+    nickname.readOnly = true;
+    startButton.hidden = true;
+    closeButton.hidden = false;
+    nameHelp.textContent = t('Nimimerkki pysyy samana tämän pelikerran ajan.');
+    dialog.classList.remove('session-start');
+    dialog.close();
   });
+  dialog.addEventListener('cancel', event => { if (!activeName) event.preventDefault(); });
   async function api(path, options) {
     const response = await fetch(endpoint + path, { ...options, signal: AbortSignal.timeout(10000) });
     if (!response.ok) throw new Error(`Leaderboard HTTP ${response.status}`);
     return response.json();
   }
   async function refresh() {
-    list.textContent = '';
+    list.textContent = t('Ladataan tuloslistaa…');
     try {
       const data = await api('/api/leaderboard');
       if (data.version !== version || !Array.isArray(data.results)) throw new Error('Invalid leaderboard');
-      for (const row of data.results) {
+      list.textContent = '';
+      for (const row of data.results.slice(0, 10)) {
         const item = document.createElement('li');
         item.textContent = `${row.nickname} · ${format(row.lap_ms)}`;
         list.append(item);
@@ -44,9 +83,20 @@
   document.querySelector('#leaderboard-refresh').addEventListener('click', refresh);
   window.LPRLeaderboard = {
     refresh,
+    get requiresName() { return !activeName; },
+    beginSession() {
+      if (activeName) return;
+      // The last name is a suggestion, never an automatic login: each page
+      // load requires an explicit confirmation before any driving can start.
+      dialog.classList.add('session-start');
+      closeButton.hidden = true;
+      startButton.hidden = false;
+      if (!dialog.open) dialog.showModal();
+      refresh();
+    },
     async submit(lapMs, sectors) {
-      const name = nickname.value.trim();
-      if (!token || !/^[\p{L}\p{N} _.-]{1,24}$/u.test(name)) {
+      const name = activeName;
+      if (!token || !validName(name)) {
         status.textContent = t('Valitse nimimerkki tuloslistasta ennen seuraavaa kierrosta.');
         return;
       }
