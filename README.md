@@ -4,7 +4,7 @@ Peli avaa aluksi TOP 10 -tuloslistan. Vahvista julkinen nimimerkki ja paina
 **Aloita ajo** ennen ajamista. Edellinen nimi on ehdotuksena, mutta se
 vahvistetaan jokaisella sivun avauksella. Ensimmäinenkin kelvollinen kierros
 lähetetään automaattisesti tulospalveluun. Listalla näytetään kymmenen
-parasta pelaajaennätystä; tauko tai vierailu mitätöi kyseisen verkkokierroksen.
+parasta pelaajaennätystä; tauko mitätöi kyseisen verkkokierroksen. Vierailut ovat sallittuja ja niiden aika lasketaan mukaan kierrokseen.
 Samalla selaimella käytetyt eri nimimerkit saavat erilliset pelaajatunnisteet.
 Tarkistukset: `npm run test:leaderboard`.
 

@@ -11,7 +11,7 @@
   const startForm = document.querySelector('#leaderboard-start-form');
   const startButton = document.querySelector('#leaderboard-start');
   const closeButton = document.querySelector('#close-settings');
-  const nameHelp = document.querySelector('#leaderboard-name-help');
+  const podium = document.querySelector('#leaderboard-podium');
   const validName = name => /^[\p{L}\p{N} _.-]{1,24}$/u.test(name);
   const validToken = value => /^[a-f0-9]{64}$/.test(value ?? '');
   const newToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
@@ -52,7 +52,6 @@
     nickname.readOnly = true;
     startButton.hidden = true;
     closeButton.hidden = false;
-    nameHelp.textContent = t('Nimimerkki pysyy samana tämän pelikerran ajan.');
     dialog.classList.remove('session-start');
     dialog.close();
   });
@@ -64,11 +63,20 @@
   }
   async function refresh() {
     list.textContent = t('Ladataan tuloslistaa…');
+    podium.setAttribute('aria-busy', 'true');
     try {
       const data = await api('/api/leaderboard');
       if (data.version !== version || !Array.isArray(data.results)) throw new Error('Invalid leaderboard');
       list.textContent = '';
-      for (const row of data.results.slice(0, 10)) {
+      const results = data.results.slice(0, 10);
+      for (let rank = 1; rank <= 3; rank++) {
+        const row = results[rank - 1];
+        const name = document.querySelector(`#podium-name-${rank}`);
+        name.textContent = row ? row.nickname : '—';
+        name.title = row ? row.nickname : '';
+        document.querySelector(`#podium-time-${rank}`).textContent = row ? format(row.lap_ms) : '—';
+      }
+      for (const row of results) {
         const item = document.createElement('li');
         item.textContent = `${row.nickname} · ${format(row.lap_ms)}`;
         list.append(item);
@@ -78,7 +86,7 @@
     } catch {
       list.textContent = t('Tuloslista ei ole juuri nyt saatavilla.');
       return false;
-    }
+    } finally { podium.setAttribute('aria-busy', 'false'); }
   }
   document.querySelector('#leaderboard-refresh').addEventListener('click', refresh);
   window.LPRLeaderboard = {

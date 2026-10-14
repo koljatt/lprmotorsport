@@ -16,7 +16,7 @@ vm.createContext(ctx);
 for(const file of ['audio.js','sauna.js','vehicle.js','campus.js','sale.js','timing.js'])vm.runInContext(read(file),ctx);
 for(const name of ['LPRGameAudio','LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming'])ctx[name]=ctx.window[name];
 const source=read('game.js').replace('  reset();\n  openTestScene',
- '  globalThis.test={get car(){return car},held,update,dynamics};\n  reset();\n  openTestScene');
+ '  globalThis.test={get car(){return car},held,update,dynamics,reset,toggleSauna,toggleSale,togglePool};\n  reset();\n  openTestScene');
 ctx.window.LPRLeaderboard.beginSession(); // leaderboard.js runs before game.js.
 vm.runInContext(source,ctx);const game=ctx.test,dialog=element('#settings-dialog');
 assert.equal(startedSessions,1);assert(dialog.open);
@@ -36,4 +36,22 @@ assert.equal(submissions.length,1,'The very first complete valid lap is submitte
 assert.equal(submissions[0].ms,40000);
 assert.deepEqual(Array.from(submissions[0].sectors),[10000,10000,20000]);
 assert.equal(game.car.lap,2);
+// A complete lap with sauna, pool and shop visits remains eligible.
+game.reset();game.held.gas=true;game.update(0,50000);
+for(const [toggle,position,time] of [
+  ['toggleSauna',{x:900,y:650},55000],
+  ['togglePool',{x:864,y:668},60000],
+  ['toggleSale',ctx.window.LPRSale.entrance,65000]
+]) {
+  game.car.x=position.x;game.car.y=position.y;game.car.speed=0;
+  game[toggle]();assert(!game.car.onlineInvalid,`${toggle} does not invalidate the lap`);
+  game.update(.05,time);assert.equal(game.car.lapStart,50000,'Visit time is not subtracted');
+  assert.equal(game.car.lapElapsedMs,time-50000);
+  game[toggle]();
+}
+for(const [index,time] of [[65,75000],[125,85000],[185,90000],[0,105000]]) {
+  game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;game.update(0,time);
+}
+assert.equal(submissions.length,2,'Visited lap submits normally');
+assert.equal(submissions[1].ms,55000,'Full wall-clock time, including visits, is submitted');
 console.log('PASS: mandatory startup pauses racing, orientation/close cannot skip naming, and the first lap submits through real scoring');

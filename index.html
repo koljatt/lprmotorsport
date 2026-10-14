@@ -12,8 +12,8 @@
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>LPR Lap Challenge</title>
     <link rel="stylesheet" href="styles.css?v=mobile-20261008" />
-    <link rel="stylesheet" href="3d.css?v=leaderboard-start-20261014" />
-    <script src="i18n.js?v=leaderboard-start-20261014" defer></script>
+    <link rel="stylesheet" href="3d.css?v=podium-20261014" />
+    <script src="i18n.js?v=podium-20261014" defer></script>
     <script src="shared/vehicle-spec.js?v=vehicle-dimensions-20261013" defer></script>
     <script src="campus.js?v=roadside-trees-20261014" defer></script>
     <script src="shared/track-document.js?v=asphalt-small-brush-20261013" defer></script>
@@ -26,9 +26,9 @@
     <script src="vehicle.js?v=vehicle-dimensions-20261013" defer></script>
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
-    <script src="leaderboard.js?v=leaderboard-entry-20261014" defer></script>
+    <script src="leaderboard.js?v=podium-20261014" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
-    <script src="game.js?v=leaderboard-entry-20261014" defer></script>
+    <script src="game.js?v=podium-visits-20261014" defer></script>
   </head>
   <body>
     <main class="app">
@@ -72,19 +72,37 @@
     </main>
 
     <dialog id="settings-dialog" aria-labelledby="leaderboard-title">
-      <div class="dialog-head"><h2 id="leaderboard-title">Tuloslista · TOP 10</h2><button id="close-settings" class="icon-button close" type="button" aria-label="Sulje tuloslista" hidden><span aria-hidden="true">×</span> Takaisin peliin</button></div>
+      <div class="dialog-head">
+        <div><p class="race-eyebrow">LPR MOTORSPORT · TIME ATTACK</p><h2 id="leaderboard-title">Haasta kärki.</h2></div>
+        <button id="close-settings" class="icon-button close" type="button" aria-label="Sulje tuloslista" hidden><span aria-hidden="true">×</span> Takaisin peliin</button>
+      </div>
       <section id="leaderboard-panel" class="leaderboard-panel" aria-label="Tuloslista">
-        <p class="leaderboard-caption">Kymmenen parasta pelaajaennätystä. Ensimmäinenkin kelvollinen kierros voi päästä listalle.</p>
-        <ol id="leaderboard-list" aria-live="polite"><li>Ladataan tuloslistaa…</li></ol>
-        <button id="leaderboard-refresh" type="button">Päivitä tuloslista</button>
-        <form id="leaderboard-start-form" class="leaderboard-start-form">
-          <label for="leaderboard-name">Nimimerkki (julkinen)</label>
-          <input id="leaderboard-name" required maxlength="24" autocomplete="nickname" autocapitalize="off" enterkeyhint="go" aria-describedby="leaderboard-name-help" placeholder="Nimimerkki" />
-          <p id="leaderboard-name-help">Valitse nimimerkki ennen ajoa. Vahvista se uudelleen aina kun avaat pelin.</p>
-          <button id="leaderboard-start" class="leaderboard-start" type="submit">Aloita ajo</button>
-        </form>
-        <p class="leaderboard-rules">Kirjaimet, numerot, välilyönti, piste, viiva ja alaviiva. Tulokset tallentuvat automaattisesti. Tauko tai vierailu mitätöi verkkokierroksen.</p>
-        <p id="leaderboard-status" role="status"></p>
+        <div id="leaderboard-podium" class="leaderboard-podium" aria-label="Kolme parasta">
+          <div class="podium-place podium-second">
+            <div class="podium-step"><span class="podium-rank">2</span><strong id="podium-name-2">—</strong><span id="podium-time-2" class="podium-time">—</span></div>
+          </div>
+          <div class="podium-place podium-first">
+            <svg class="podium-trophy" viewBox="0 0 64 64" aria-hidden="true"><path d="M20 10h24v15c0 11-5 18-12 18s-12-7-12-18V10Z" fill="#f5ce72"/><path d="M20 14H10v8c0 9 5 14 15 14M44 14h10v8c0 9-5 14-15 14" fill="none" stroke="#e9b64d" stroke-width="5"/><path d="M32 42v10M22 55h20" stroke="#f5ce72" stroke-width="6" stroke-linecap="round"/><path d="m26 17 2 12" stroke="#fff0b8" stroke-width="3" stroke-linecap="round"/></svg>
+            <div class="podium-step"><span class="podium-rank">1</span><strong id="podium-name-1">—</strong><span id="podium-time-1" class="podium-time">—</span></div>
+          </div>
+          <div class="podium-place podium-third">
+            <div class="podium-step"><span class="podium-rank">3</span><strong id="podium-name-3">—</strong><span id="podium-time-3" class="podium-time">—</span></div>
+          </div>
+        </div>
+        <div class="leaderboard-entry-grid">
+          <div class="leaderboard-standings">
+            <div class="standings-heading"><h3>TOP 10</h3><button id="leaderboard-refresh" type="button" aria-label="Päivitä tuloslista"><span aria-hidden="true">↻</span></button></div>
+            <ol id="leaderboard-list" aria-live="polite"><li>Ladataan tuloslistaa…</li></ol>
+          </div>
+          <form id="leaderboard-start-form" class="leaderboard-start-form">
+            <p class="race-eyebrow">OMA KIERROKSESI</p>
+            <h3>Sinun vuorosi.</h3>
+            <label for="leaderboard-name">Nimimerkki</label>
+            <input id="leaderboard-name" required maxlength="24" autocomplete="nickname" autocapitalize="off" enterkeyhint="go" placeholder="Nimimerkki" />
+            <button id="leaderboard-start" class="leaderboard-start" type="submit">Aja kärkeen <span aria-hidden="true">→</span></button>
+            <p id="leaderboard-status" role="status"></p>
+          </form>
+        </div>
       </section>
     </dialog>
   </body>

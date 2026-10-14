@@ -86,14 +86,59 @@ dialog { touch-action: pan-y pinch-zoom; }
   .sauna-actions button { min-height:44px; padding:8px 12px; font-size:12px; }
 }
 
-/* Entry screen: the top times are visible before choosing a driving name. */
+/* Competition entry: real podium results, compact standings and one action. */
+#settings-dialog { width:min(780px,calc(100% - 32px)); max-height:92dvh; padding:28px; border:1px solid #34564e; border-radius:22px; background:radial-gradient(ellipse at 50% 0%,#19352d 0%,#0b1916 58%); box-shadow:0 32px 100px #000c; }
 #settings-dialog [hidden] { display:none; }
-#leaderboard-list { padding-left:30px; margin:14px 0; }
-#leaderboard-list li { padding:9px 8px; border-bottom:1px solid #28483a; font-variant-numeric:tabular-nums; }
-#leaderboard-list li:first-child { color:#e7cc72; font-weight:800; background:#e7cc720b; border-radius:8px; }
-.leaderboard-start-form { margin-top:20px; padding-top:18px; border-top:1px solid #355347; }
-.leaderboard-start-form label { font-weight:800; }
-.leaderboard-panel .leaderboard-start { width:100%; min-height:48px; margin-top:8px; background:#087c57; border-color:#00b47c; font-weight:800; }
-.leaderboard-panel input[readonly] { color:#a9cbbb; }
-#settings-dialog.session-start { max-height:92dvh; }
-@media(max-width:650px) { #settings-dialog.session-start { padding:18px; } #leaderboard-list li { padding:7px 4px; font-size:14px; } }
+#settings-dialog::backdrop { background:#020807d9; backdrop-filter:blur(8px); }
+#settings-dialog .dialog-head { position:static; margin:0; padding:0; background:none; border:0; align-items:center; justify-content:space-between; }
+#settings-dialog .dialog-head h2 { margin:7px 0 0; font-size:clamp(32px,5vw,46px); line-height:1.05; letter-spacing:.01em; }
+.race-eyebrow { margin:0; color:#63cda7; font-size:10px; font-weight:800; letter-spacing:.18em; }
+#settings-dialog .close { background:#10251e; border-color:#35574c; }
+.leaderboard-panel { margin-top:0; }
+.leaderboard-podium { display:grid; grid-template-columns:1fr 1.15fr 1fr; align-items:end; gap:12px; max-width:560px; margin:22px auto 26px; padding:0 8px; }
+.podium-place { min-width:0; text-align:center; }
+.podium-trophy { width:62px; height:62px; display:block; margin:0 auto 6px; filter:drop-shadow(0 0 18px #f5ce7233); }
+.podium-step { display:flex; flex-direction:column; justify-content:center; align-items:center; min-height:104px; padding:14px 10px; border:1px solid #526d66; border-bottom:3px solid #9bada7; border-radius:12px 12px 4px 4px; background:linear-gradient(145deg,#2c433b,#152720); }
+.podium-first .podium-step { min-height:148px; border-color:#b99a50; border-bottom-color:#f5ce72; background:linear-gradient(150deg,#584b27,#252d1c 80%); box-shadow:0 0 30px #e8be5510; }
+.podium-third .podium-step { min-height:86px; border-color:#785845; border-bottom-color:#b8825c; background:linear-gradient(145deg,#3e3027,#1a241c); }
+.podium-rank { font:800 34px/1 'Barlow Condensed',Impact,sans-serif; color:#a8beb4; margin-bottom:7px; }
+.podium-first .podium-rank { color:#f5ce72; font-size:44px; }
+.podium-third .podium-rank { color:#d5a381; }
+.podium-step strong { display:block; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#f2fff7; font-size:16px; }
+.podium-first .podium-step strong { font-size:20px; }
+.podium-time { display:block; margin-top:5px; color:#abc7b7; font:600 12px/1.4 monospace; font-variant-numeric:tabular-nums; }
+.podium-first .podium-time { color:#f5ce72; font-size:15px; }
+.leaderboard-entry-grid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:24px; border-top:1px solid #304a3f; padding-top:20px; }
+.standings-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.standings-heading h3 { margin:0; color:#9fbeb0; font-size:11px; letter-spacing:.18em; }
+.leaderboard-panel #leaderboard-refresh { width:32px; height:32px; min-height:32px; padding:0; background:none; color:#a9cbbb; font-size:22px; border:0; border-radius:7px; }
+#leaderboard-list { margin:8px 0 0; padding:0 0 0 26px; max-height:248px; overflow:auto; scrollbar-width:thin; scrollbar-color:#355b49 transparent; }
+#leaderboard-list li { padding:8px 7px; border-bottom:1px solid #233d31; font-size:13px; font-variant-numeric:tabular-nums; }
+#leaderboard-list li::marker { color:#769989; font-weight:700; }
+#leaderboard-list li:first-child { color:#f5ce72; font-weight:800; }
+.leaderboard-start-form { align-self:start; margin:0; padding:20px; border:1px solid #35584a; border-radius:14px; background:#16342666; }
+.leaderboard-start-form .race-eyebrow { margin:0; font-size:9px; }
+.leaderboard-start-form h3 { margin:8px 0 20px; font-size:23px; color:#f2fff7; }
+.leaderboard-start-form label { color:#aec9bb; font-size:12px; font-weight:700; }
+.leaderboard-panel input { margin:7px 0 12px; min-height:46px; width:100%; box-sizing:border-box; border-color:#4a7662; background:#081a13; font-size:16px; }
+.leaderboard-panel input:focus { outline:2px solid #63d6a3; outline-offset:2px; }
+.leaderboard-panel .leaderboard-start { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:48px; padding:12px 16px; background:#78e4ac; color:#082115; border:0; border-radius:9px; font-weight:900; }
+.leaderboard-panel .leaderboard-start:hover { background:#9cefc2; }
+.leaderboard-start span { font-size:22px; }
+#leaderboard-status { margin:12px 0 0; color:#9cb9aa; font-size:12px; line-height:1.5; }
+#leaderboard-status:empty { display:none; }
+@media(max-width:600px) {
+  #settings-dialog { width:calc(100% - 20px); padding:20px 16px; border-radius:16px; }
+  #settings-dialog .dialog-head h2 { font-size:32px; }
+  #settings-dialog .close { padding:8px; font-size:11px; }
+  .race-eyebrow { font-size:8px; letter-spacing:.12em; }
+  .leaderboard-podium { gap:6px; padding:0; margin:18px auto; }
+  .podium-step { padding:12px 5px; }
+  .podium-step strong { font-size:13px; }
+  .podium-first .podium-step strong { font-size:16px; }
+  .podium-time { font-size:11px; }
+  .podium-first .podium-time { font-size:12px; }
+  .leaderboard-entry-grid { grid-template-columns:1fr; gap:18px; }
+  .leaderboard-start-form { grid-row:1; padding:16px; }
+  .leaderboard-start-form h3 { margin-bottom:14px; }
+}

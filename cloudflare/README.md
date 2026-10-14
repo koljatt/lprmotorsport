@@ -6,7 +6,7 @@
 4. Korvaa Hello World -koodi kokonaan `worker.mjs`-tiedoston sisällöllä ja paina **Deploy**.
 5. Varmista, että Workerissa on D1-binding **DB → lpr-times**.
 6. Avaa https://lpr-leaderboard.panu-musakka.workers.dev/api/leaderboard . Aluksi vastauksen tulee olla `{"version":"lut-20261011-v3","results":[]}`.
-7. Julkaise päivitetyt pelitiedostot GitHub Pagesiin normaalilla julkaisumenetelmällä. Vahvista pelin aloitusnäkymässä nimimerkki ja paina **Aloita ajo**. Aja kokonainen kierros ilman taukoja tai vierailuja ja avaa tuloslista 🏆-painikkeesta. Ensimmäinenkin kelvollinen kierros lähetetään. Peli näyttää palvelimen tuloksista TOP 10:n.
+7. Julkaise päivitetyt pelitiedostot GitHub Pagesiin normaalilla julkaisumenetelmällä. Vahvista pelin aloitusnäkymässä nimimerkki ja paina **Aloita ajo**. Aja kokonainen kierros ilman taukoja ja avaa tuloslista 🏆-painikkeesta. Ensimmäinenkin kelvollinen kierros lähetetään. Peli näyttää palvelimen tuloksista TOP 10:n.
 
 Pelin alkuperäksi on asetettu Git-remoten perusteella `https://panulut.github.io`. Jos pelillä on oma verkkotunnus, lisää sen alkuperä (protokolla ja verkkotunnus ilman polkua) `worker.mjs`-tiedoston ORIGINS-listaan. localhost:8000 toimii myös. Muilla lähiverkon osoitteilla verkkotulokset eivät ole käytössä.
 

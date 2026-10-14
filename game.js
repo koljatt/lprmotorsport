@@ -201,7 +201,6 @@
     car.pool = false;
     car.sale=!car.sale;
     if(car.sale) {
-      car.onlineInvalid = true;
       dynamics.reset(car);
       car.saleX=35; car.saleZ=130;
       car.saunaYaw=-Math.PI/2; car.saunaPitch=0;
@@ -250,7 +249,6 @@
     car.sauna = false;
     car.pool = !car.pool;
     if (car.pool) {
-      car.onlineInvalid = true;
       dynamics.reset(car);
       car.saunaYaw = 0;
       car.saunaPitch = -.12;
@@ -273,7 +271,6 @@
     car.pool = false;
     car.sauna = !car.sauna;
     if (car.sauna) {
-      car.onlineInvalid = true;
       dynamics.reset(car);
       car.steamAt = -10000;
       car.saunaYaw = 0;
@@ -457,8 +454,12 @@
       ui.input.textContent = activePad ? activePad.mapping === 'standard' ? t("PELIOHJAIN") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6");
       lastDeviceUpdate = now;
     }
-    if (ui.dialog.open || car.sauna || car.sale) {
-      if (car.started) car.lapStart += dt * 1000;
+    if (ui.dialog.open || car.sauna || car.sale || car.pool) {
+      if (car.started) {
+        if (ui.dialog.open) car.lapStart += dt * 1000;
+        car.lapElapsedMs = Math.max(0, now - car.lapStart);
+        ui.time.textContent = formatTime(car.lapElapsedMs);
+      }
       if (car.sauna && !ui.dialog.open) {
         saunaLife.update(dt,car,now);
       }

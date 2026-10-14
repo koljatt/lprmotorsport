@@ -9,7 +9,7 @@ function setup(storage=new Map(),offline=false) {
         get textContent(){return text},set textContent(value){text=value;this.children=[]},
         classList:{add(){},remove(){}},addEventListener:(type,fn)=>handlers.set(type,fn),
         trigger(type,event={preventDefault(){}}){handlers.get(type)?.(event)},
-        append(item){this.children.push(item)},setCustomValidity(message){this.validationMessage=message},
+        append(item){this.children.push(item)},setAttribute(){},setCustomValidity(message){this.validationMessage=message},
         reportValidity(){this.reported=true},showModal(){this.open=true},close(){this.open=false}});
     }
     return nodes.get(id);
@@ -30,6 +30,10 @@ function setup(storage=new Map(),offline=false) {
   assert(node('#settings-dialog').open,'Leaderboard opens independently of 3D initialization');
   assert(board.requiresName);
   assert.equal(node('#leaderboard-list').children.length,10,'Only the top ten are shown');
+  assert.equal(node('#podium-name-1').textContent,'<script>','Leader is rendered safely on the podium');
+  assert.equal(node('#podium-time-1').textContent,'0:12.346');
+  assert.equal(node('#podium-name-2').textContent,'Driver 1');
+  assert.equal(node('#podium-name-3').textContent,'Driver 2');
   assert.equal(node('#leaderboard-list').children[0].textContent,'<script> · 0:12.346','Names render as plain text');
   let prevented=false;node('#settings-dialog').trigger('cancel',{preventDefault(){prevented=true}});
   assert(prevented,'Escape cannot bypass naming');
