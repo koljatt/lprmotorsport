@@ -313,6 +313,23 @@ window.LPRCampus = (() => {
       added++;
     }
   }
+  // Keep the closest 428 of the original 2,428 trees: remove 2,000 trees
+  // from the distant woods, preserving the dense margin along the circuit.
+  // Filter after generation so surviving positions, species and sizes stay fixed.
+  const distanceToTrack = tree => {
+    let distanceSquared=Infinity;
+    for(let i=0;i<track.length;i++) {
+      const a=track[i],b=track[(i+1)%track.length],dx=b.x-a.x,dy=b.y-a.y;
+      const t=Math.max(0,Math.min(1,((tree.x-a.x)*dx+(tree.y-a.y)*dy)/(dx*dx+dy*dy)));
+      const x=tree.x-a.x-dx*t,y=tree.y-a.y-dy*t;
+      distanceSquared=Math.min(distanceSquared,x*x+y*y);
+    }
+    return distanceSquared;
+  };
+  const nearTrees=new Set(trees.map(tree=>({tree,distance:distanceToTrack(tree)}))
+    .sort((a,b)=>a.distance-b.distance).slice(0,428).map(entry=>entry.tree));
+  for(let i=trees.length-1;i>=0;i--)
+    if(!nearTrees.has(trees[i])) trees.splice(i,1);
   const treeBounds=trees.map(tree=>({minX:tree.x-tree.trunkWidth/2,maxX:tree.x+tree.trunkWidth/2,
     minY:tree.y-tree.trunkWidth/2,maxY:tree.y+tree.trunkWidth/2}));
   // Approximate older everyday cars: dimensions are world units (10 per metre).
