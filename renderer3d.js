@@ -30,6 +30,12 @@ window.LPRRenderer3D = class LPRRenderer3D {
       attribute vec3 aColor;
       attribute vec2 aUV;
       attribute vec3 aNormal;
+      uniform bool uMeshTransform;
+      uniform vec3 uMeshOrigin;
+      uniform vec3 uMeshForward;
+      uniform vec3 uMeshUp;
+      uniform vec3 uMeshRight;
+      uniform float uMeshFloor;
       uniform vec3 uCamera;
       uniform vec3 uForward;
       uniform vec3 uRight;
@@ -45,16 +51,23 @@ window.LPRRenderer3D = class LPRRenderer3D {
       varying vec3 vView;
       varying vec3 vNormal;
       void main() {
-        vWorld = aPosition;
-        vView = uCamera-aPosition;
-        vNormal = aNormal;
+        vec3 position = aPosition;
+        vec3 normal = aNormal;
+        if (uMeshTransform) {
+          position = uMeshOrigin + uMeshForward*aPosition.x + uMeshUp*aPosition.y + uMeshRight*aPosition.z;
+          position.y = max(position.y, uMeshFloor);
+          normal = uMeshForward*aNormal.x + uMeshUp*aNormal.y + uMeshRight*aNormal.z;
+        }
+        vWorld = position;
+        vView = uCamera-position;
+        vNormal = normal;
         vRay = uForward + uRight * aPosition.x * uAspect / uFocal + uUp * aPosition.y / uFocal;
         if (uSky) {
           gl_Position = vec4(aPosition.xy, 0.9999, 1.0);
           vColor = aColor; vDepth = 0.0; vUV = aUV;
           return;
         }
-        vec3 relative = aPosition - uCamera;
+        vec3 relative = position - uCamera;
         float depth = dot(relative, uForward);
         float clipZ = depth * 1.0010005 - 2.0010005;
         gl_Position = vec4(dot(relative, uRight) * uFocal / uAspect,
@@ -217,6 +230,12 @@ window.LPRRenderer3D = class LPRRenderer3D {
     gl.useProgram(program);
     this.program = program;
     this.locations = {
+      meshTransform: gl.getUniformLocation(program, 'uMeshTransform'),
+      meshOrigin: gl.getUniformLocation(program, 'uMeshOrigin'),
+      meshForward: gl.getUniformLocation(program, 'uMeshForward'),
+      meshUp: gl.getUniformLocation(program, 'uMeshUp'),
+      meshRight: gl.getUniformLocation(program, 'uMeshRight'),
+      meshFloor: gl.getUniformLocation(program, 'uMeshFloor'),
       position: gl.getAttribLocation(program, 'aPosition'),
       color: gl.getAttribLocation(program, 'aColor'),
       uv: gl.getAttribLocation(program, 'aUV'),
@@ -1537,8 +1556,60 @@ window.LPRRenderer3D = class LPRRenderer3D {
 
   drawWheels(car, now) {
     const gl = this.gl;
-    const vertices = [];
-    const normals=[];
+    let vertices = [];
+    let normals=[];
+    // The untransformed path also supports geometry inspection without WebGL.
+    const cached = this.locations.meshTransform != null;
+    const spec=window.LPRVehicleSpec;
+    const geometry=window.LPRCampus?.carGeometry;
+    const damage=car.damage || 0;
+    const revision=`${damage}/${car.impactSide || .3}/${!!car.crashed}`;
+    if(cached && (this.vehicleRevision!==revision || this.vehicleSpec!==spec || this.vehicleGeometry!==geometry)) {
+      for(const part of this.vehicleParts?.values() || []) {
+        gl.deleteBuffer(part.buffer);gl.deleteBuffer(part.normalBuffer);
+      }
+      this.vehicleParts=new Map();this.vehicleRevision=revision;
+      this.vehicleSpec=spec;this.vehicleGeometry=geometry;
+    }
+    const part=(key,origin,forward,up,right,floor,build)=>{
+      if(!cached) {build();return;}
+      let mesh=this.vehicleParts.get(key);
+      if(!mesh) {
+        const dynamicVertices=vertices,dynamicNormals=normals;
+        vertices=[];normals=[];build();
+        // Store in local space once. Subsequent frames change only uniforms.
+        const local=new Float32Array(vertices.length),localNormals=new Float32Array(normals.length);
+        for(let i=0,n=0;i<vertices.length;i+=6,n+=3) {
+          const x=vertices[i]-origin[0],y=vertices[i+1]-origin[1],z=vertices[i+2]-origin[2];
+          local[i]=x*forward[0]+y*forward[1]+z*forward[2];
+          local[i+1]=x*up[0]+y*up[1]+z*up[2];
+          local[i+2]=x*right[0]+y*right[1]+z*right[2];
+          local[i+3]=vertices[i+3];local[i+4]=vertices[i+4];local[i+5]=vertices[i+5];
+          for(const [axis,basis] of [forward,up,right].entries())
+            localNormals[n+axis]=normals[n]*basis[0]+normals[n+1]*basis[1]+normals[n+2]*basis[2];
+        }
+        mesh={buffer:gl.createBuffer(),normalBuffer:gl.createBuffer(),count:local.length/6};
+        gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);gl.bufferData(gl.ARRAY_BUFFER,local,gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER,mesh.normalBuffer);gl.bufferData(gl.ARRAY_BUFFER,localNormals,gl.STATIC_DRAW);
+        this.vehicleParts.set(key,mesh);vertices=dynamicVertices;normals=dynamicNormals;
+      }
+      this.bindMesh(mesh.buffer);
+      gl.bindBuffer(gl.ARRAY_BUFFER,mesh.normalBuffer);
+      gl.enableVertexAttribArray(this.locations.normal);
+      gl.vertexAttribPointer(this.locations.normal,3,gl.FLOAT,false,12,0);
+      gl.uniform1i(this.locations.vehicle,1);
+      gl.uniform3f(this.locations.carOrigin,car.x,0,car.y);
+      gl.uniform3f(this.locations.carForward,Math.cos(car.angle),0,Math.sin(car.angle));
+      gl.uniform3f(this.locations.carRight,-Math.sin(car.angle),0,Math.cos(car.angle));
+      gl.uniform1i(this.locations.meshTransform,1);
+      gl.uniform3f(this.locations.meshOrigin,...origin);
+      gl.uniform3f(this.locations.meshForward,...forward);
+      gl.uniform3f(this.locations.meshUp,...up);
+      gl.uniform3f(this.locations.meshRight,...right);
+      gl.uniform1f(this.locations.meshFloor,floor);
+      gl.drawArrays(gl.TRIANGLES,0,mesh.count);
+      gl.uniform1i(this.locations.meshTransform,0);
+    };
     const vertex = (p,color,normal) => {
       vertices.push(p[0],p[1],p[2],color[0],color[1],color[2]);normals.push(...normal);
     };
@@ -1558,8 +1629,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const steeredAngle = car.angle + (car.steerAngle || 0);
     const wheelForward = [Math.cos(steeredAngle),Math.sin(steeredAngle)];
     const axleDirection = [-wheelForward[1],wheelForward[0]];
-    const spec=window.LPRVehicleSpec,units=1/spec.metresPerWorldUnit;
-    const geometry=window.LPRCampus?.carGeometry;
+    const units=1/spec.metresPerWorldUnit;
     const radius=spec.tyreDiameter*units/2;
     const segments = 48;
     const tyreBlack = [.075,.085,.09];
@@ -1585,7 +1655,6 @@ window.LPRRenderer3D = class LPRRenderer3D {
         quad(point(a,n),point(b,n),point(b,next),point(a,next),color,[n,n,next,next]);
       }
     };
-    const damage=car.damage || 0;
     const bodyPoint=(forward,side,height)=> {
       forward*=spec.bodyLengthScale;height*=spec.bodyHeightScale;
       // Crumple the nose and bend the suspension toward the struck side.
@@ -1599,109 +1668,12 @@ window.LPRRenderer3D = class LPRRenderer3D {
       ];
     };
 
-    // Make the suspension pickup points visibly part of the open chassis.
-    const chassisColor = [.045,.065,.055];
-    rod(bodyPoint(1.0,-2.4,1.5),bodyPoint(1.0,2.4,1.5),.22,chassisColor);
-    rod(bodyPoint(3.4,-2.4,1.5),bodyPoint(3.4,2.4,1.5),.22,chassisColor);
-    rod(bodyPoint(1.8,-2.4,3.5),bodyPoint(1.8,2.4,3.5),.18,chassisColor);
-    rod(bodyPoint(4.0,-2.4,3.5),bodyPoint(4.0,2.4,3.5),.18,chassisColor);
-
-    // Student-built concept: compact fairings leave the front tyre keep-out
-    // zones clear. The supplied dimensions scale this concept body.
     const bodyBlack = [.055,.075,.065];
     const bodyShade = [.028,.042,.035];
     const cockpitBlack = [.035,.055,.055];
     const teamGreen = [.035,.62,.23];
     const liveryAccent = [.16,.9,.44];
     const bodyWhite = [.78,.86,.81];
-    // Rounded nose sections, tapering ahead of the front axle; no wheel covers.
-    const controlSections = geometry?.noseControls || [[-1.2,2.7,4.0],[3,2.75,2.65],[7.5,2.25,2.5],
-      [10.8,1.65,2.05],[12,1.1,1.55],[12.4,.65,1.1]];
-    // Cubic sections remove the angular breaks in the moulded nose.
-    const sections=[];
-    const tangent=(index,axis)=>{
-      const a=controlSections[Math.max(0,index-1)],b=controlSections[Math.min(controlSections.length-1,index+1)];
-      return (b[axis]-a[axis])/(b[0]-a[0]);
-    };
-    for(let i=0;i<controlSections.length-1;i++) {
-      const a=controlSections[i],b=controlSections[i+1],length=b[0]-a[0];
-      for(let step=0;step<5;step++) {
-        const t=step/5,t2=t*t,t3=t2*t;
-        sections.push([a[0]+length*t,...[1,2].map(axis=>
-          (2*t3-3*t2+1)*a[axis]+(t3-2*t2+t)*length*tangent(i,axis)
-          +(-2*t3+3*t2)*b[axis]+(t3-t2)*length*tangent(i+1,axis))]);
-      }
-    }
-    sections.push(controlSections[controlSections.length-1]);
-    if(geometry) sections.splice(0,sections.length,...geometry.noseSections);
-    const crown=.48;
-    const slope=index=>{
-      const a=sections[Math.max(0,index-1)],b=sections[Math.min(sections.length-1,index+1)];
-      return (b[2]-a[2])/(b[0]-a[0]);
-    };
-    const surfacePoint=(f,w,h,t)=>bodyPoint(f,w*t,h+crown*(1-t*t));
-    const surfaceNormal=(index,w,t)=>{
-      const forward=-slope(index),side=2*crown*t/w;
-      const n=pose.up.map((value,i)=>value+pose.forward[i]*forward+pose.right[i]*side);
-      const length=Math.hypot(...n);return n.map(value=>value/length);
-    };
-    const bands=[-1,-.86,-.66,-.54,-.50,-.46,-.10,0,.10,.46,.50,.54,.66,.86,1];
-    for(let i=0;i<sections.length-1;i++) {
-      const [f,w,h]=sections[i], [nf,nw,nh]=sections[i+1];
-      for(let band=0;band<bands.length-1;band++) {
-        const a=bands[band],b=bands[band+1],mid=Math.abs((a+b)/2);
-        const color=mid<.10 ? bodyWhite : mid>.46 && mid<.54 ? liveryAccent
-          : mid>.54 && mid<.86 ? teamGreen : bodyBlack;
-        quad(surfacePoint(f,w,h,a),surfacePoint(f,w,h,b),surfacePoint(nf,nw,nh,b),surfacePoint(nf,nw,nh,a),color,
-          [surfaceNormal(i,w,a),surfaceNormal(i,w,b),surfaceNormal(i+1,nw,b),surfaceNormal(i+1,nw,a)]);
-      }
-      for(const side of [-1,1]) {
-        // Rounded shoulder blends the crown into the vertical lower shell.
-        const shoulder=(forward,width,height,t)=>bodyPoint(forward,
-          side*(width+.22*Math.sin(t*Math.PI/2)),height-.38*(1-Math.cos(t*Math.PI/2)));
-        const shoulderNormal=t=>{
-          const lateral=side*Math.sin(t*Math.PI/2),up=Math.cos(t*Math.PI/2);
-          return pose.up.map((value,i)=>value*up+pose.right[i]*lateral);
-        };
-        for(let edge=0;edge<6;edge++) {
-          const a=edge/6,b=(edge+1)/6;
-          quad(shoulder(f,w,h,a),shoulder(nf,nw,nh,a),shoulder(nf,nw,nh,b),shoulder(f,w,h,b),bodyBlack,
-            [shoulderNormal(a),shoulderNormal(a),shoulderNormal(b),shoulderNormal(b)]);
-        }
-        quad(shoulder(f,w,h,1),shoulder(nf,nw,nh,1),
-          bodyPoint(nf,side*(nw+.22),.85),bodyPoint(f,side*(w+.22),.85),bodyShade);
-      }
-    }
-    quad(bodyPoint(12.4,-.65,1.1),bodyPoint(12.4,.65,1.1),
-      bodyPoint(12.4,.87,.85),bodyPoint(12.4,-.87,.85),bodyShade);
-    // Flush panel fasteners follow the curved body rather than floating above it.
-    for(const index of [3,10,17]) {
-      const [f,w,h]=sections[index];
-      for(const side of [-1,1]) {
-        const center=surfacePoint(f,w,h,side*.92);
-        const normal=surfaceNormal(index,w,side*.92);
-        rod(center,center.map((value,i)=>value+normal[i]*.025),.065,[.42,.44,.43]);
-      }
-    }
-    // Low side fairings sit inside the tyres and below the cockpit rim.
-    for(const side of [-1,1]) {
-      quad(bodyPoint(-7.8,side*3.1,2.2),bodyPoint(-7.8,side*5.1,1.7),
-        bodyPoint(2.8,side*4.5,1.6),bodyPoint(3,side*2.9,2.25),cockpitBlack);
-      quad(bodyPoint(-7.8,side*5.1,1.7),bodyPoint(-7.8,side*5.1,.8),
-        bodyPoint(2.8,side*4.5,.8),bodyPoint(2.8,side*4.5,1.6),bodyBlack);
-      quad(bodyPoint(-6.8,side*5.12,.87),bodyPoint(-6.8,side*5.12,1.0),
-        bodyPoint(1.8,side*4.58,1.0),bodyPoint(1.8,side*4.58,.87),teamGreen);
-      // Cockpit walls meet the rear section of the nose along a shared edge.
-      // The driver opening stays clear between the two longitudinal rails.
-      quad(bodyPoint(-9.4,side*2.7,.85),bodyPoint(-1.2,side*2.7,.85),
-        bodyPoint(-1.2,side*2.7,4),bodyPoint(-9.4,side*2.7,4),bodyBlack);
-      quad(bodyPoint(-9.4,side*2.7,4),bodyPoint(-1.2,side*2.7,4),
-        bodyPoint(-1.2,side*3.1,3.8),bodyPoint(-9.4,side*3.1,3.8),bodyShade);
-      rod(bodyPoint(-9.4,side*2.7,4.04),bodyPoint(-1.2,side*2.7,4.04),.13,cockpitBlack);
-      rod(bodyPoint(-9.4,side*2.7,4.15),bodyPoint(-1.2,side*2.7,4.15),.035,teamGreen);
-    }
-    // High contrast university lettering on both sides, 56 mm tall (T12.3).
-    // Small geometry glyphs keep it readable without another texture upload.
     const glyphs={
       H:['10001','10001','10001','11111','10001','10001','10001'],
       O:['01110','10001','10001','10001','10001','10001','01110'],
@@ -1717,20 +1689,121 @@ window.LPRRenderer3D = class LPRRenderer3D {
       S:['01111','10000','10000','01110','00001','00001','11110'],
       Y:['10001','10001','01010','00100','00100','00100','00100']
     };
-    for(const side of [-1,1]) {
-      const labelPoint=(f,h)=>bodyPoint(f,side*(5.1-(f+7.8)*.6/10.6+.025),h);
-      [...'LUT UNIVERSITY'].forEach((letter,index)=>{
-        for(const [row,line] of (glyphs[letter] || []).entries()) {
-          for(let column=0;column<5;column++) if(line[column]==='1') {
-            const f=side===1 ? 1.8-index*.57-column*.08 : -6.3+index*.57+column*.08;
-            const next=f+(side===1 ? -.08 : .08);
-            const h=1.7-(f+7.8)*.1/10.6-.05-row*.08;
-            quad(labelPoint(f,h),labelPoint(next,h),labelPoint(next,h-.08),labelPoint(f,h-.08),[.87,.96,.9]);
-          }
-        }
-      });
-    }
+    const bodyPart=(key,build)=>part(key,bodyPoint(0,0,0),pose.forward,pose.up,pose.right,-100000,build);
+    bodyPart('body',()=>{
+      // Make the suspension pickup points visibly part of the open chassis.
+      const chassisColor = [.045,.065,.055];
+      rod(bodyPoint(1.0,-2.4,1.5),bodyPoint(1.0,2.4,1.5),.22,chassisColor);
+      rod(bodyPoint(3.4,-2.4,1.5),bodyPoint(3.4,2.4,1.5),.22,chassisColor);
+      rod(bodyPoint(1.8,-2.4,3.5),bodyPoint(1.8,2.4,3.5),.18,chassisColor);
+      rod(bodyPoint(4.0,-2.4,3.5),bodyPoint(4.0,2.4,3.5),.18,chassisColor);
 
+      // Student-built concept: compact fairings leave the front tyre keep-out
+      // zones clear. The supplied dimensions scale this concept body.
+      // Rounded nose sections, tapering ahead of the front axle; no wheel covers.
+      const controlSections = geometry?.noseControls || [[-1.2,2.7,4.0],[3,2.75,2.65],[7.5,2.25,2.5],
+        [10.8,1.65,2.05],[12,1.1,1.55],[12.4,.65,1.1]];
+      // Cubic sections remove the angular breaks in the moulded nose.
+      const sections=[];
+      const tangent=(index,axis)=>{
+        const a=controlSections[Math.max(0,index-1)],b=controlSections[Math.min(controlSections.length-1,index+1)];
+        return (b[axis]-a[axis])/(b[0]-a[0]);
+      };
+      for(let i=0;i<controlSections.length-1;i++) {
+        const a=controlSections[i],b=controlSections[i+1],length=b[0]-a[0];
+        for(let step=0;step<5;step++) {
+          const t=step/5,t2=t*t,t3=t2*t;
+          sections.push([a[0]+length*t,...[1,2].map(axis=>
+            (2*t3-3*t2+1)*a[axis]+(t3-2*t2+t)*length*tangent(i,axis)
+            +(-2*t3+3*t2)*b[axis]+(t3-t2)*length*tangent(i+1,axis))]);
+        }
+      }
+      sections.push(controlSections[controlSections.length-1]);
+      if(geometry) sections.splice(0,sections.length,...geometry.noseSections);
+      const crown=.48;
+      const slope=index=>{
+        const a=sections[Math.max(0,index-1)],b=sections[Math.min(sections.length-1,index+1)];
+        return (b[2]-a[2])/(b[0]-a[0]);
+      };
+      const surfacePoint=(f,w,h,t)=>bodyPoint(f,w*t,h+crown*(1-t*t));
+      const surfaceNormal=(index,w,t)=>{
+        const forward=-slope(index),side=2*crown*t/w;
+        const n=pose.up.map((value,i)=>value+pose.forward[i]*forward+pose.right[i]*side);
+        const length=Math.hypot(...n);return n.map(value=>value/length);
+      };
+      const bands=[-1,-.86,-.66,-.54,-.50,-.46,-.10,0,.10,.46,.50,.54,.66,.86,1];
+      for(let i=0;i<sections.length-1;i++) {
+        const [f,w,h]=sections[i], [nf,nw,nh]=sections[i+1];
+        for(let band=0;band<bands.length-1;band++) {
+          const a=bands[band],b=bands[band+1],mid=Math.abs((a+b)/2);
+          const color=mid<.10 ? bodyWhite : mid>.46 && mid<.54 ? liveryAccent
+            : mid>.54 && mid<.86 ? teamGreen : bodyBlack;
+          quad(surfacePoint(f,w,h,a),surfacePoint(f,w,h,b),surfacePoint(nf,nw,nh,b),surfacePoint(nf,nw,nh,a),color,
+            [surfaceNormal(i,w,a),surfaceNormal(i,w,b),surfaceNormal(i+1,nw,b),surfaceNormal(i+1,nw,a)]);
+        }
+        for(const side of [-1,1]) {
+          // Rounded shoulder blends the crown into the vertical lower shell.
+          const shoulder=(forward,width,height,t)=>bodyPoint(forward,
+            side*(width+.22*Math.sin(t*Math.PI/2)),height-.38*(1-Math.cos(t*Math.PI/2)));
+          const shoulderNormal=t=>{
+            const lateral=side*Math.sin(t*Math.PI/2),up=Math.cos(t*Math.PI/2);
+            return pose.up.map((value,i)=>value*up+pose.right[i]*lateral);
+          };
+          for(let edge=0;edge<6;edge++) {
+            const a=edge/6,b=(edge+1)/6;
+            quad(shoulder(f,w,h,a),shoulder(nf,nw,nh,a),shoulder(nf,nw,nh,b),shoulder(f,w,h,b),bodyBlack,
+              [shoulderNormal(a),shoulderNormal(a),shoulderNormal(b),shoulderNormal(b)]);
+          }
+          quad(shoulder(f,w,h,1),shoulder(nf,nw,nh,1),
+            bodyPoint(nf,side*(nw+.22),.85),bodyPoint(f,side*(w+.22),.85),bodyShade);
+        }
+      }
+      quad(bodyPoint(12.4,-.65,1.1),bodyPoint(12.4,.65,1.1),
+        bodyPoint(12.4,.87,.85),bodyPoint(12.4,-.87,.85),bodyShade);
+      // Flush panel fasteners follow the curved body rather than floating above it.
+      for(const index of [3,10,17]) {
+        const [f,w,h]=sections[index];
+        for(const side of [-1,1]) {
+          const center=surfacePoint(f,w,h,side*.92);
+          const normal=surfaceNormal(index,w,side*.92);
+          rod(center,center.map((value,i)=>value+normal[i]*.025),.065,[.42,.44,.43]);
+        }
+      }
+      // Low side fairings sit inside the tyres and below the cockpit rim.
+      for(const side of [-1,1]) {
+        quad(bodyPoint(-7.8,side*3.1,2.2),bodyPoint(-7.8,side*5.1,1.7),
+          bodyPoint(2.8,side*4.5,1.6),bodyPoint(3,side*2.9,2.25),cockpitBlack);
+        quad(bodyPoint(-7.8,side*5.1,1.7),bodyPoint(-7.8,side*5.1,.8),
+          bodyPoint(2.8,side*4.5,.8),bodyPoint(2.8,side*4.5,1.6),bodyBlack);
+        quad(bodyPoint(-6.8,side*5.12,.87),bodyPoint(-6.8,side*5.12,1.0),
+          bodyPoint(1.8,side*4.58,1.0),bodyPoint(1.8,side*4.58,.87),teamGreen);
+        // Cockpit walls meet the rear section of the nose along a shared edge.
+        // The driver opening stays clear between the two longitudinal rails.
+        quad(bodyPoint(-9.4,side*2.7,.85),bodyPoint(-1.2,side*2.7,.85),
+          bodyPoint(-1.2,side*2.7,4),bodyPoint(-9.4,side*2.7,4),bodyBlack);
+        quad(bodyPoint(-9.4,side*2.7,4),bodyPoint(-1.2,side*2.7,4),
+          bodyPoint(-1.2,side*3.1,3.8),bodyPoint(-9.4,side*3.1,3.8),bodyShade);
+        rod(bodyPoint(-9.4,side*2.7,4.04),bodyPoint(-1.2,side*2.7,4.04),.13,cockpitBlack);
+        rod(bodyPoint(-9.4,side*2.7,4.15),bodyPoint(-1.2,side*2.7,4.15),.035,teamGreen);
+      }
+      // High contrast university lettering on both sides, 56 mm tall (T12.3).
+      // Small geometry glyphs keep it readable without another texture upload.
+
+      for(const side of [-1,1]) {
+        const labelPoint=(f,h)=>bodyPoint(f,side*(5.1-(f+7.8)*.6/10.6+.025),h);
+        [...'LUT UNIVERSITY'].forEach((letter,index)=>{
+          for(const [row,line] of (glyphs[letter] || []).entries()) {
+            for(let column=0;column<5;column++) if(line[column]==='1') {
+              const f=side===1 ? 1.8-index*.57-column*.08 : -6.3+index*.57+column*.08;
+              const next=f+(side===1 ? -.08 : .08);
+              const h=1.7-(f+7.8)*.1/10.6-.05-row*.08;
+              quad(labelPoint(f,h),labelPoint(next,h),labelPoint(next,h-.08),labelPoint(f,h-.08),[.87,.96,.9]);
+            }
+          }
+        });
+      }
+
+    });
         const upright = (a,b,width,color) => {
        quad([a[0]-width,a[1],a[2]],[a[0]+width,a[1],a[2]],
          [b[0]+width,b[1],b[2]],[b[0]-width,b[1],b[2]],color);
@@ -1742,44 +1815,47 @@ window.LPRRenderer3D = class LPRRenderer3D {
         upright(bodyPoint(-9.4,2.7,2.3),bodyPoint(-8.6,3.25,10.5),.24*spec.bodyLengthScale,rollHoop);
         rod(bodyPoint(-8.6,-3.25,10.5),bodyPoint(-8.6,3.25,10.5),.24*spec.bodyHeightScale,rollHoop);
 
-    // Split, swept front-wing elements add a clear Formula Student silhouette
-    // without filling the open wheel and suspension areas.
-    const wingPoint=(side,span,forward,height)=>bodyPoint(forward,side*span,height);
-    for(const side of [-1,1]) {
-      const stations=[1.35,5.8,10.25];
-      const panels=geometry ? geometry.wingPanels.map((panel,i)=>({...panel,color:i?bodyShade:bodyBlack})) : [
-        {front:14.1,rear:12.85,sweep:.16,rise:0,color:bodyBlack},
-        {front:12.35,rear:11.78,sweep:.13,rise:.12,color:bodyShade}
-      ];
-      for(const panel of panels) {
-        for(let i=0;i<stations.length-1;i++) {
-          const a=stations[i],b=stations[i+1];
-          const front=(span)=>panel.front-panel.sweep*span;
-          const rear=(span)=>panel.rear-panel.sweep*.72*span;
-          const height=(span)=>1.62-.055*span+panel.rise;
-          // Closed airfoil section gives the wing a rounded leading edge
-          // and a tapered trailing edge instead of a single paper-thin quad.
-          const foil=(span,t,upper)=>wingPoint(side,span,
-            front(span)+(rear(span)-front(span))*t,
-            height(span)+(upper ? .13 : -.07)*Math.sin(Math.PI*t));
-          for(let chord=0;chord<8;chord++) {
-            const t=chord/8,next=(chord+1)/8;
-            for(const upper of [true,false]) quad(foil(a,t,upper),foil(a,next,upper),
-              foil(b,next,upper),foil(b,t,upper),panel.color);
-            for(const span of [a,b]) quad(foil(span,t,true),foil(span,next,true),
-              foil(span,next,false),foil(span,t,false),bodyShade);
+    bodyPart('wing',()=>{
+      // Split, swept front-wing elements add a clear Formula Student silhouette
+      // without filling the open wheel and suspension areas.
+      const wingPoint=(side,span,forward,height)=>bodyPoint(forward,side*span,height);
+      for(const side of [-1,1]) {
+        const stations=[1.35,5.8,10.25];
+        const panels=geometry ? geometry.wingPanels.map((panel,i)=>({...panel,color:i?bodyShade:bodyBlack})) : [
+          {front:14.1,rear:12.85,sweep:.16,rise:0,color:bodyBlack},
+          {front:12.35,rear:11.78,sweep:.13,rise:.12,color:bodyShade}
+        ];
+        for(const panel of panels) {
+          for(let i=0;i<stations.length-1;i++) {
+            const a=stations[i],b=stations[i+1];
+            const front=(span)=>panel.front-panel.sweep*span;
+            const rear=(span)=>panel.rear-panel.sweep*.72*span;
+            const height=(span)=>1.62-.055*span+panel.rise;
+            // Closed airfoil section gives the wing a rounded leading edge
+            // and a tapered trailing edge instead of a single paper-thin quad.
+            const foil=(span,t,upper)=>wingPoint(side,span,
+              front(span)+(rear(span)-front(span))*t,
+              height(span)+(upper ? .13 : -.07)*Math.sin(Math.PI*t));
+            for(let chord=0;chord<8;chord++) {
+              const t=chord/8,next=(chord+1)/8;
+              for(const upper of [true,false]) quad(foil(a,t,upper),foil(a,next,upper),
+                foil(b,next,upper),foil(b,t,upper),panel.color);
+              for(const span of [a,b]) quad(foil(span,t,true),foil(span,next,true),
+                foil(span,next,false),foil(span,t,false),bodyShade);
+            }
+            const stripeStart=front(a)-.16,stripeEnd=front(b)-.16;
+            quad(wingPoint(side,a,stripeStart,height(a)+.035),wingPoint(side,b,stripeEnd,height(b)+.035),
+              wingPoint(side,b,stripeEnd-.12,height(b)+.035),wingPoint(side,a,stripeStart-.12,height(a)+.035),teamGreen);
           }
-          const stripeStart=front(a)-.16,stripeEnd=front(b)-.16;
-          quad(wingPoint(side,a,stripeStart,height(a)+.035),wingPoint(side,b,stripeEnd,height(b)+.035),
-            wingPoint(side,b,stripeEnd-.12,height(b)+.035),wingPoint(side,a,stripeStart-.12,height(a)+.035),teamGreen);
         }
+        quad(wingPoint(side,10.05,12.45,.78),wingPoint(side,10.25,12.4,.78),
+          wingPoint(side,10.25,11.0,2.05),wingPoint(side,10.05,11.1,2.05),bodyBlack);
+        quad(wingPoint(side,10.26,12.24,.82),wingPoint(side,10.28,12.2,.82),
+          wingPoint(side,10.28,11.25,1.95),wingPoint(side,10.26,11.3,1.95),teamGreen);
+        rod(wingPoint(side,1.5,12.0,1.5),wingPoint(side,6.7,11.2,1.45),.075,[.32,.35,.34]);
       }
-      quad(wingPoint(side,10.05,12.45,.78),wingPoint(side,10.25,12.4,.78),
-        wingPoint(side,10.25,11.0,2.05),wingPoint(side,10.05,11.1,2.05),bodyBlack);
-      quad(wingPoint(side,10.26,12.24,.82),wingPoint(side,10.28,12.2,.82),
-        wingPoint(side,10.28,11.25,1.95),wingPoint(side,10.26,11.3,1.95),teamGreen);
-      rod(wingPoint(side,1.5,12.0,1.5),wingPoint(side,6.7,11.2,1.45),.075,[.32,.35,.34]);
-    }
+
+    });
 
     for (const axle of [0,1]) for (const side of [-1,1]) {
       // Wheel centres follow unsprung dynamics rather than chassis rotation.
@@ -1794,12 +1870,18 @@ window.LPRRenderer3D = class LPRRenderer3D {
       axleDirection[0]=-wheelForward[1]; axleDirection[1]=wheelForward[0];
       const point=(axial,rad,theta)=>[
         center[0]+axleDirection[0]*axial+wheelForward[0]*rad*Math.cos(theta),
-        Math.max((wheel?.road || 0)*10,center[1]+rad*Math.sin(theta)),
+        cached ? center[1]+rad*Math.sin(theta) : Math.max((wheel?.road || 0)*10,center[1]+rad*Math.sin(theta)),
         center[2]+axleDirection[1]*axial+wheelForward[1]*rad*Math.cos(theta)
       ];
       const radial=r=>r<=1.12?r/1.12*spec.rimDiameter*units/2:
         spec.rimDiameter*units/2+(r-1.12)/1.18*(radius-spec.rimDiameter*units/2);
       const detailPoint=(axial,rad,theta)=>point((rad<=1.12?axial/1.12*spec.rimWidth:axial/1.1872*spec.tyreWidth)*units/2,radial(rad),theta);
+      const wheelF=[wheelForward[0],0,wheelForward[1]],wheelU=[0,1,0],wheelR=[axleDirection[0],0,axleDirection[1]];
+      const phaseCos=Math.cos(this.wheelPhase),phaseSin=Math.sin(this.wheelPhase);
+      const spinF=wheelF.map((v,i)=>v*phaseCos+wheelU[i]*phaseSin);
+      const spinU=wheelU.map((v,i)=>v*phaseCos-wheelF[i]*phaseSin);
+      const wheelPart=(name,spinning,build)=>part(`${axle}/${side}/${name}`,center,
+        spinning?spinF:wheelF,spinning?spinU:wheelU,wheelR,(wheel?.road || 0)*10,build);
       const tyreProfile=geometry?.tyreProfile || [[-1.1,2.08],[-1.03,2.18],[-.78,2.28],[-.48,2.3],
         [.48,2.3],[.78,2.28],[1.03,2.18],[1.1,2.08]].map(([a,r])=>[a/1.1872*spec.tyreWidth*units/2,radial(r)]);
       const tyreNormal=(ring,theta)=>{
@@ -1843,72 +1925,78 @@ window.LPRRenderer3D = class LPRRenderer3D {
       const springPoint=t=>damperA.map((v,i)=>v+springAxis[i]*t+.25*(springU[i]*Math.cos(t*Math.PI*14)+springV[i]*Math.sin(t*Math.PI*14)));
       for(let coil=0;coil<56;coil++) rod(springPoint(coil/56),springPoint((coil+1)/56),.045,[.28,.30,.31]);
 
-      for (let i=0;i<segments;i++) {
-        const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
-        for(let ring=0;ring<tyreProfile.length-1;ring++) {
-          const [x,rad]=tyreProfile[ring],[nx,nrad]=tyreProfile[ring+1];
-          quad(point(x,rad,a),point(nx,nrad,a),point(nx,nrad,b),point(x,rad,b),tyreBlack,
-            [tyreNormal(ring,a),tyreNormal(ring+1,a),tyreNormal(ring+1,b),tyreNormal(ring,b)]);
-        }
-        for (const face of [-1.12,1.12]) {
-          const faceNormal=[axleDirection[0]*Math.sign(face),0,axleDirection[1]*Math.sign(face)];
-          const sideProfile=[[2.08,face],[1.96,face*1.045],[1.68,face*1.055],[1.32,face*1.025],[1.12,face]];
-          for(let ring=0;ring<sideProfile.length-1;ring++) {
-            const [r,x]=sideProfile[ring],[nr,nx]=sideProfile[ring+1];
-            quad(detailPoint(x,r,a),detailPoint(x,r,b),detailPoint(nx,nr,b),detailPoint(nx,nr,a),sidewall,
-              [faceNormal,faceNormal,faceNormal,faceNormal]);
-          }
-          // Subtle raised moulding rings, in rubber rather than silver paint.
-          for(const band of [1.79,1.88]) quad(detailPoint(face*1.06,band,a),detailPoint(face*1.06,band,b),
-            detailPoint(face*1.06,band-.018,b),detailPoint(face*1.06,band-.018,a),[.085,.095,.10],
-            [faceNormal,faceNormal,faceNormal,faceNormal]);
-          triangle(detailPoint(face*.65,0,a),detailPoint(face*.65,1.08,a),detailPoint(face*.65,1.08,b),[.09,.105,.11]);
-          quad(detailPoint(face,1.12,a),detailPoint(face,1.12,b),detailPoint(face,1.03,b),detailPoint(face,1.03,a),rim);
-          quad(detailPoint(face,1.03,a),detailPoint(face,1.03,b),detailPoint(face*.79,1.03,b),detailPoint(face*.79,1.03,a),[.25,.28,.29]);
-        }
-      }
-      // Nominal Hoosier slick sidewalls; lettering rotates with the tyre.
-      for(const face of [-1.185,1.185]) {
-        [...spec.tyreBrand.toUpperCase()].forEach((letter,index)=>{
-          for(const [row,line] of glyphs[letter].entries()) for(let col=0;col<5;col++) if(line[col]==='1') {
-            const a=this.wheelPhase+Math.PI/2+(index*6+col-20)*.025,b=a+.022;
-            const r=1.96-row*.035;
-            quad(detailPoint(face,r,a),detailPoint(face,r,b),detailPoint(face,r-.03,b),detailPoint(face,r-.03,a),[.75,.73,.60]);
-          }
-        });
-      }
-      for (const face of [-1.16,1.16]) {
-        // Recessed brake rotor behind the spokes and a stationary caliper.
-        const rotorFace=face*.78;
-        for(let i=0;i<segments;i++) {
-          const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
-          quad(detailPoint(rotorFace,.38,a),detailPoint(rotorFace,.88,a),detailPoint(rotorFace,.88,b),detailPoint(rotorFace,.38,b),[.30,.32,.33]);
-        }
-        rod(detailPoint(rotorFace,.77,.1),detailPoint(rotorFace,.77,.75),.14,[.18,.19,.20]);
-        for (let spoke=0;spoke<6;spoke++) {
-          const angle=this.wheelPhase+spoke*Math.PI/3;
-          const root=face*.87;
-          quad(detailPoint(root,.25,angle-.15),detailPoint(face,1.0,angle-.075),detailPoint(face,1.0,angle+.075),detailPoint(root,.25,angle+.15),[.48,.51,.52]);
-          for(const edge of [-1,1]) quad(detailPoint(root,.25,angle+edge*.15),detailPoint(face,1,angle+edge*.075),
-            detailPoint(face-Math.sign(face)*.09,1,angle+edge*.075),detailPoint(root-Math.sign(face)*.09,.25,angle+edge*.15),[.26,.29,.30]);
-        }
-        for(let bolt=0;bolt<4;bolt++) {
-          const angle=this.wheelPhase+bolt*Math.PI/2;
-          rod(detailPoint(face+Math.sign(face)*.035,.20,angle),detailPoint(face+Math.sign(face)*.085,.20,angle),.045,[.52,.54,.55]);
-        }
+      wheelPart('fixed',false,()=>{
         for (let i=0;i<segments;i++) {
           const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
-          triangle(detailPoint(face+Math.sign(face)*.03,0,a),detailPoint(face+Math.sign(face)*.03,.28,a),detailPoint(face+Math.sign(face)*.03,.28,b),[.10,.13,.14]);
-        }
-        // OZ hub badge, without assuming a specific OZ spoke model.
-        const badge=(u,v)=>detailPoint(face+Math.sign(face)*.04,Math.hypot(u,v),Math.atan2(v,u)+this.wheelPhase);
-        [...'OZ'].forEach((letter,index)=>{
-          for(const [row,line] of glyphs[letter].entries()) for(let col=0;col<5;col++) if(line[col]==='1') {
-            const u=(index*6+col-5.5)*.029,v=(3-row)*.029;
-            quad(badge(u,v),badge(u+.023,v),badge(u+.023,v-.023),badge(u,v-.023),[.86,.88,.85]);
+          for(let ring=0;ring<tyreProfile.length-1;ring++) {
+            const [x,rad]=tyreProfile[ring],[nx,nrad]=tyreProfile[ring+1];
+            quad(point(x,rad,a),point(nx,nrad,a),point(nx,nrad,b),point(x,rad,b),tyreBlack,
+              [tyreNormal(ring,a),tyreNormal(ring+1,a),tyreNormal(ring+1,b),tyreNormal(ring,b)]);
           }
-        });
-      }
+          for (const face of [-1.12,1.12]) {
+            const faceNormal=[axleDirection[0]*Math.sign(face),0,axleDirection[1]*Math.sign(face)];
+            const sideProfile=[[2.08,face],[1.96,face*1.045],[1.68,face*1.055],[1.32,face*1.025],[1.12,face]];
+            for(let ring=0;ring<sideProfile.length-1;ring++) {
+              const [r,x]=sideProfile[ring],[nr,nx]=sideProfile[ring+1];
+              quad(detailPoint(x,r,a),detailPoint(x,r,b),detailPoint(nx,nr,b),detailPoint(nx,nr,a),sidewall,
+                [faceNormal,faceNormal,faceNormal,faceNormal]);
+            }
+            // Subtle raised moulding rings, in rubber rather than silver paint.
+            for(const band of [1.79,1.88]) quad(detailPoint(face*1.06,band,a),detailPoint(face*1.06,band,b),
+              detailPoint(face*1.06,band-.018,b),detailPoint(face*1.06,band-.018,a),[.085,.095,.10],
+              [faceNormal,faceNormal,faceNormal,faceNormal]);
+            triangle(detailPoint(face*.65,0,a),detailPoint(face*.65,1.08,a),detailPoint(face*.65,1.08,b),[.09,.105,.11]);
+            quad(detailPoint(face,1.12,a),detailPoint(face,1.12,b),detailPoint(face,1.03,b),detailPoint(face,1.03,a),rim);
+            quad(detailPoint(face,1.03,a),detailPoint(face,1.03,b),detailPoint(face*.79,1.03,b),detailPoint(face*.79,1.03,a),[.25,.28,.29]);
+          }
+        }
+        for (const face of [-1.16,1.16]) {
+          // Recessed brake rotor behind the spokes and a stationary caliper.
+          const rotorFace=face*.78;
+          for(let i=0;i<segments;i++) {
+            const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
+            quad(detailPoint(rotorFace,.38,a),detailPoint(rotorFace,.88,a),detailPoint(rotorFace,.88,b),detailPoint(rotorFace,.38,b),[.30,.32,.33]);
+          }
+          rod(detailPoint(rotorFace,.77,.1),detailPoint(rotorFace,.77,.75),.14,[.18,.19,.20]);
+        }
+      });
+      wheelPart('spin',true,()=>{
+        // Nominal Hoosier slick sidewalls; lettering rotates with the tyre.
+        for(const face of [-1.185,1.185]) {
+          [...spec.tyreBrand.toUpperCase()].forEach((letter,index)=>{
+            for(const [row,line] of glyphs[letter].entries()) for(let col=0;col<5;col++) if(line[col]==='1') {
+              const a=this.wheelPhase+Math.PI/2+(index*6+col-20)*.025,b=a+.022;
+              const r=1.96-row*.035;
+              quad(detailPoint(face,r,a),detailPoint(face,r,b),detailPoint(face,r-.03,b),detailPoint(face,r-.03,a),[.75,.73,.60]);
+            }
+          });
+        }
+        for (const face of [-1.16,1.16]) {
+          for (let spoke=0;spoke<6;spoke++) {
+            const angle=this.wheelPhase+spoke*Math.PI/3;
+            const root=face*.87;
+            quad(detailPoint(root,.25,angle-.15),detailPoint(face,1.0,angle-.075),detailPoint(face,1.0,angle+.075),detailPoint(root,.25,angle+.15),[.48,.51,.52]);
+            for(const edge of [-1,1]) quad(detailPoint(root,.25,angle+edge*.15),detailPoint(face,1,angle+edge*.075),
+              detailPoint(face-Math.sign(face)*.09,1,angle+edge*.075),detailPoint(root-Math.sign(face)*.09,.25,angle+edge*.15),[.26,.29,.30]);
+          }
+          for(let bolt=0;bolt<4;bolt++) {
+            const angle=this.wheelPhase+bolt*Math.PI/2;
+            rod(detailPoint(face+Math.sign(face)*.035,.20,angle),detailPoint(face+Math.sign(face)*.085,.20,angle),.045,[.52,.54,.55]);
+          }
+          for (let i=0;i<segments;i++) {
+            const a=i*Math.PI*2/segments,b=(i+1)*Math.PI*2/segments;
+            triangle(detailPoint(face+Math.sign(face)*.03,0,a),detailPoint(face+Math.sign(face)*.03,.28,a),detailPoint(face+Math.sign(face)*.03,.28,b),[.10,.13,.14]);
+          }
+          // OZ hub badge, without assuming a specific OZ spoke model.
+          const badge=(u,v)=>detailPoint(face+Math.sign(face)*.04,Math.hypot(u,v),Math.atan2(v,u)+this.wheelPhase);
+          [...'OZ'].forEach((letter,index)=>{
+            for(const [row,line] of glyphs[letter].entries()) for(let col=0;col<5;col++) if(line[col]==='1') {
+              const u=(index*6+col-5.5)*.029,v=(3-row)*.029;
+              quad(badge(u,v),badge(u+.023,v),badge(u+.023,v-.023),badge(u,v-.023),[.86,.88,.85]);
+            }
+          });
+        }
+      });
     }
 
     if(car.crashed) {

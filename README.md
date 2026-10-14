@@ -1,5 +1,12 @@
 # LPR Lap Challenge
 
+Auton kori, etusiipi ja renkaiden kiinteät sekä pyörivät osat säilytetään
+näytönohjaimen muistissa. Ajon aikana päivitetään niiden asennot; jousituksen
+muuttuva geometria lasketaan edelleen joka ruudulle. Yksityiskohtia tai
+piirtoresoluutiota ei vähennetä. Vauriot ja uudelleenkäynnistys päivittävät
+valmiit osat tarvittaessa. Välimuistin, ohjauksen, pyörimisen ja maastokosketuksen
+tarkistukset: `npm run test:performance`.
+
 Törmäykset vaikuttavat myös osuman kohteeseen. Pysäköidyt autot, traktori,
 saunapaku ja täysi palju liikkuvat ja kiertyvät massan sekä osumakohdan mukaan.
 Puut taipuvat, seinät halkeilevat ja lohkeilevat, ja ulkona olevat ihmiset
