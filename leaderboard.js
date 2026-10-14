@@ -114,4 +114,5 @@
       } catch { status.textContent = t('Tuloksen lähetys epäonnistui. Oma aika säilyy selaimessa.'); }
     }
   };
+  window.LPRLeaderboard.beginSession();
 })();

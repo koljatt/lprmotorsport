@@ -747,7 +747,6 @@
   reset();
   openTestScene(window.location.search);
   resize();
-  window.LPRLeaderboard?.beginSession();
   requestAnimationFrame(frame);
 
   function openTestScene(search) {

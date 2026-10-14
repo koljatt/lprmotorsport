@@ -27,7 +27,7 @@ function setup(storage=new Map(),offline=false) {
 (async()=>{
   const app=setup(),{board,node,calls,storage}=app;
   board.beginSession();await board.refresh();
-  assert(node('#settings-dialog').open);
+  assert(node('#settings-dialog').open,'Leaderboard opens independently of 3D initialization');
   assert(board.requiresName);
   assert.equal(node('#leaderboard-list').children.length,10,'Only the top ten are shown');
   assert.equal(node('#leaderboard-list').children[0].textContent,'<script> · 0:12.346','Names render as plain text');

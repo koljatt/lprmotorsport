@@ -17,6 +17,7 @@ for(const file of ['audio.js','sauna.js','vehicle.js','campus.js','sale.js','tim
 for(const name of ['LPRGameAudio','LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming'])ctx[name]=ctx.window[name];
 const source=read('game.js').replace('  reset();\n  openTestScene',
  '  globalThis.test={get car(){return car},held,update,dynamics};\n  reset();\n  openTestScene');
+ctx.window.LPRLeaderboard.beginSession(); // leaderboard.js runs before game.js.
 vm.runInContext(source,ctx);const game=ctx.test,dialog=element('#settings-dialog');
 assert.equal(startedSessions,1);assert(dialog.open);
 game.held.gas=true;game.update(0,1500);assert.equal(game.car.started,false,'Startup dialog prevents the first lap from starting');
