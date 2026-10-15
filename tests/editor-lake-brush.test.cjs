@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const documentApi=require('../shared/track-document.js');
-const {types,validate,onAsphaltObject,asphaltOutline}=documentApi;
+const {maxObjects,types,validate,onAsphaltObject,asphaltOutline}=documentApi;
 
 // Exercise the real editor event handlers with a small DOM/canvas adapter.
 function editor(objects=[],withSale=false,protocol='http:',withSites=false,withRoad=false){
@@ -242,10 +242,14 @@ function editor(objects=[],withSale=false,protocol='http:',withSites=false,withR
   joined.pointer('pointerdown',1020,1000);joined.pointer('pointerup',1077,1000);
   const joinedObjects=(await joined.document()).objects;
   samePoint(endpoint(joinedObjects.at(-1),1),endpoint(joinTarget,-1),'Snap the stroke end to another barrier');
-  const nearLimit=Array.from({length:999},()=>({type:'cone',x:20,y:20,angle:0,scale:1}));
+  const oldLimit=editor(Array.from({length:1000},()=>({type:'cone',x:20,y:20,angle:0,scale:1})));oldLimit.barrier();
+  oldLimit.pointer('pointerdown',1000,1000);oldLimit.pointer('pointerup',1160,1000);
+  const extended=await oldLimit.document();assert(extended.objects.length>1000);validate(extended);
+  assert.throws(()=>validate({version:1,objects:Array.from({length:maxObjects+1},()=>({type:'cone',x:20,y:20,angle:0,scale:1}))}));
+  const nearLimit=Array.from({length:maxObjects-1},()=>({type:'cone',x:20,y:20,angle:0,scale:1}));
   const limited=editor(nearLimit);limited.barrier();
   limited.pointer('pointerdown',1000,1000);limited.pointer('pointerup',1600,1000);
-  const limitedDoc=await limited.document();validate(limitedDoc);assert.equal(limitedDoc.objects.length,1000);
+  const limitedDoc=await limited.document();validate(limitedDoc);assert.equal(limitedDoc.objects.length,maxObjects);
   limited.nodes.get('undo').onclick();assert.deepEqual((await limited.document()).objects,nearLimit);
   for(const length of [0,.5,201,NaN,null,'40'])assert.throws(()=>validate({version:1,objects:[{...existingBarrier,length}]}));
   rail.barrier();rail.escape();assert.match(rail.nodes.get('add').textContent,/suojakaidetta/);
@@ -298,12 +302,12 @@ function editor(objects=[],withSale=false,protocol='http:',withSites=false,withR
   const pan=editor();pan.lake();
   pan.pointer('pointerdown',500,500,{button:1});pan.pointer('pointermove',600,600);pan.pointer('pointerup',600,600);
   assert.equal((await pan.document()).objects.length,0,'Middle-button pan must not paint');
-  const full=editor(Array.from({length:999},()=>({...original})));full.lake();
+  const full=editor(Array.from({length:maxObjects-1},()=>({...original})));full.lake();
   full.pointer('pointerdown',1000,1000);full.pointer('pointerup',2000,2000);
-  const limit=await full.document();assert.equal(limit.objects.length,1000);validate(limit);
+  const limit=await full.document();assert.equal(limit.objects.length,maxObjects);validate(limit);
   full.pointer('pointerdown',2000,2000);full.pointer('pointerup',2100,2100);
-  assert.equal((await full.document()).objects.length,1000);
-  full.nodes.get('undo').onclick();assert.equal((await full.document()).objects.length,999);
+  assert.equal((await full.document()).objects.length,maxObjects);
+  full.nodes.get('undo').onclick();assert.equal((await full.document()).objects.length,maxObjects-1);
 
   const render={window:{LPRTrackDocument:documentApi,LPRTrackData:first,LPRCampus:{
     obstacleBounds:[],makeBody:(bounds,kind,mass)=>({bounds,kind,mass})

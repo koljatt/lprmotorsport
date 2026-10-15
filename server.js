@@ -3,7 +3,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {randomUUID}=require('node:crypto');
 const {root,gameFiles,readDocument,dataScript}=require('./scripts/build.cjs');
-const {validate}=require('./shared/track-document.js');
+const {validate,maxDocumentBytes}=require('./shared/track-document.js');
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.png':'image/png','.jpg':'image/jpeg','.webp':'image/webp'};
 function createServer({production=false}={}) {
   const base=production?path.join(root,'dist'):root;
@@ -24,7 +24,7 @@ function createServer({production=false}={}) {
       if(request.headers['content-type']!=='application/json')return reply(415,'Expected application/json');
       try {
         let body='';let size=0;
-        for await(const chunk of request){size+=chunk.length;if(size>1000000)return reply(413,'File too large');body+=chunk.toString();}
+        for await(const chunk of request){size+=chunk.length;if(size>maxDocumentBytes)return reply(413,'File too large');body+=chunk.toString();}
         const doc={version:1,objects:validate(JSON.parse(body))};
         const file=path.join(root,'data/track-objects.json');
         const temporary=path.join(root,`data/.track-objects-${randomUUID()}.tmp`);

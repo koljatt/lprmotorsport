@@ -111,7 +111,7 @@
     const spacing=(drag.type==='hill'?50:drag.type==='asphalt'?18:30)*drag.scale;
     const steps=Math.max(1,Math.ceil(distance/spacing));
     for(let i=1;i<=steps;i++){
-      if(objects.length+drag.stamps.length>=1000){drag.full=true;break;}
+      if(objects.length+drag.stamps.length>=api.maxObjects){drag.full=true;break;}
       const stamp={type:drag.type,x:previous.x+(point.x-previous.x)*i/steps,y:previous.y+(point.y-previous.y)*i/steps,angle:0,scale:drag.scale,...(drag.type==='asphalt'?{square:true,roundness:drag.roundness,allowOnTrack:drag.allowOnTrack}:drag.type==='hill'?{height:drag.height}:{})};
       if(stamp.type==='asphalt'&&!stamp.allowOnTrack&&!api.asphaltPolygons(stamp,roadMask).length)continue;
       drag.stamps.push(stamp);
@@ -140,7 +140,7 @@
     if(length<1)return;
     const count=Math.ceil(length/api.types[drag.type].w),angle=Math.atan2(end.y-start.y,end.x-start.x);
     for(let i=1;i<=count;i++){
-      if(objects.length+drag.stamps.length>=1000){drag.full=true;break;}
+      if(objects.length+drag.stamps.length>=api.maxObjects){drag.full=true;break;}
       const a={x:start.x+(end.x-start.x)*(i-1)/count,y:start.y+(end.y-start.y)*(i-1)/count};
       const b={x:start.x+(end.x-start.x)*i/count,y:start.y+(end.y-start.y)*i/count};
       drag.stamps.push({type:drag.type,x:(a.x+b.x)/2,y:(a.y+b.y)/2,angle,scale:1,length:length/count});
@@ -357,12 +357,12 @@
     if(drag||![0,1].includes(e.button))return;const p=world(e);
     if(e.button===1){e.preventDefault();drag={id:e.pointerId,x:e.clientX,y:e.clientY,p,origin:null,moved:false};canvas.setPointerCapture(e.pointerId);return;}
     if(drawingBarrier()){
-      if(objects.length>=1000){$('status').textContent='Enintään 1000 elementtiä. Poista elementtejä ennen piirtämistä.';return;}
+      if(objects.length>=api.maxObjects){$('status').textContent=`Enintään ${api.maxObjects} elementtiä. Poista elementtejä ennen piirtämistä.`;return;}
       drag={id:e.pointerId,mode:'barrier-paint',type:$('type').value,stamps:[],last:barrierPoint(p,true)};
       brushPoint=p;canvas.setPointerCapture(e.pointerId);draw();return;
     }
     if(paintingSurface()){
-      if(objects.length>=1000){$('status').textContent='Enintään 1000 elementtiä. Poista elementtejä ennen piirtämistä.';return;}
+      if(objects.length>=api.maxObjects){$('status').textContent=`Enintään ${api.maxObjects} elementtiä. Poista elementtejä ennen piirtämistä.`;return;}
       drag={id:e.pointerId,mode:'surface-paint',type:$('type').value,stamps:[],scale:brushScale(),roundness:Number($('asphalt-roundness').value)/100,height:Number($('hill-height').value),allowOnTrack:$('asphalt-over-road').checked};
       brushPoint=p;addBrushStamps(p);
       canvas.setPointerCapture(e.pointerId);draw();return;
@@ -380,7 +380,7 @@
         canvas.setPointerCapture(e.pointerId);sync();
         return;
       }
-      if(objects.length>=1000){$('status').textContent='Enintään 1000 elementtiä.';return;}checkpoint();objects.push({type:$('type').value,x:clamp(p.x,5200),y:clamp(p.y,4400),angle:0,scale:1});selected=objects.length-1;canvas.style.cursor='crosshair';sync();return;
+      if(objects.length>=api.maxObjects){$('status').textContent=`Enintään ${api.maxObjects} elementtiä.`;return;}checkpoint();objects.push({type:$('type').value,x:clamp(p.x,5200),y:clamp(p.y,4400),angle:0,scale:1});selected=objects.length-1;canvas.style.cursor='crosshair';sync();return;
     }
     const treeIndex = treeAt(p);
     if(treeIndex !== null&&(hitIndex<0||objects[hitIndex].type==='tree')){
@@ -449,7 +449,7 @@
       if(stroke.stamps.length){checkpoint();objects.push(...stroke.stamps);selected=-1;}
     }
     drag=null;canvas.style.cursor=adding?'crosshair':'';sync();
-    if(stroke.full&&event==='pointerup')$('status').textContent='Enintään 1000 elementtiä. Veto tallennettiin rajaan asti; voit kumota sen.';
+    if(stroke.full&&event==='pointerup')$('status').textContent=`Enintään ${api.maxObjects} elementtiä. Veto tallennettiin rajaan asti; voit kumota sen.`;
   }});
   canvas.addEventListener('pointerleave',()=>{if(!drag){brushPoint=null;draw();}});
   window.addEventListener('keydown',e=>{
@@ -487,7 +487,7 @@
   function removeSelected(){if(selected<0||drag||api.isScene(objects[selected].type))return;checkpoint();objects.splice(selected,1);selected=-1;sync();}
   $('remove').onclick=removeSelected;
   $('remove').textContent='Poista (Delete)';
-  $('duplicate').onclick=()=>{if(selected<0||objects.length>=1000||api.isScene(objects[selected].type))return;checkpoint();const o=objects[selected];objects.push({...o,x:clamp(o.x+20,5200),y:clamp(o.y+20,4400)});selected=objects.length-1;sync();};
+  $('duplicate').onclick=()=>{if(selected<0||objects.length>=api.maxObjects||api.isScene(objects[selected].type))return;checkpoint();const o=objects[selected];objects.push({...o,x:clamp(o.x+20,5200),y:clamp(o.y+20,4400)});selected=objects.length-1;sync();};
   function restore(from,to){if(!from.length)return;to.push(copy());objects=JSON.parse(from.pop());selected=-1;dirty=true;if(!saving)saveStatus('Tallentamattomia muutoksia.','dirty');sync();}
   $('undo').onclick=()=>restore(undo,redo);$('redo').onclick=()=>restore(redo,undo);
   $('save').onclick=async()=>{
@@ -513,7 +513,7 @@
     finally{saving=false;$('save').disabled=false;}
   };
   $('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,objects},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='lpr-rataelementit.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-  $('import').onchange=async()=>{try{const file=$('import').files[0];if(!file)return;if(file.size>1000000)throw Error('Tiedosto on liian suuri.');const next=api.withSceneDefaults(api.validate(JSON.parse(await file.text())),LPRCampus);checkpoint();objects=next;selected=-1;sync();}catch(e){$('status').textContent=`Tuonti epäonnistui: ${e.message}`;}finally{$('import').value='';}};
+  $('import').onchange=async()=>{try{const file=$('import').files[0];if(!file)return;if(file.size>api.maxDocumentBytes)throw Error('Tiedosto on liian suuri.');const next=api.withSceneDefaults(api.validate(JSON.parse(await file.text())),LPRCampus);checkpoint();objects=next;selected=-1;sync();}catch(e){$('status').textContent=`Tuonti epäonnistui: ${e.message}`;}finally{$('import').value='';}};
   window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
   updateAddButtonLabel();
   new ResizeObserver(draw).observe(canvas);fit();sync();

@@ -17,9 +17,10 @@
     pool:{name:'Palju',w:28,d:28,h:10,color:[.67,.44,.25]},
     person:{name:'Ihminen',w:7,d:7,h:18,color:[.055,.63,.22]}
   };
+  const maxObjects=10000,maxDocumentBytes=5000000;
   const isScene=type=>['sauna','bonfire','pool','person'].includes(type);
   function validate(doc) {
-    if(doc?.version!==1 || !Array.isArray(doc.objects) || doc.objects.length>1000) throw Error('Virheellinen rataelementtitiedosto (versio 1, enintään 1000 elementtiä).');
+    if(doc?.version!==1 || !Array.isArray(doc.objects) || doc.objects.length>maxObjects) throw Error(`Virheellinen rataelementtitiedosto (versio 1, enintään ${maxObjects} elementtiä).`);
     const sceneKeys=new Set();
     return doc.objects.map((o,i)=>{
       if(!o || !Object.hasOwn(types,o.type) || !['x','y','angle','scale'].every(k=>Number.isFinite(o[k])) || o.scale<(o.type==='asphalt'?1/12:.2) || o.scale>5 || o.x<0 || o.x>5200 || o.y<0 || o.y>4400) throw Error(`Elementin ${i+1} tiedot eivät kelpaa.`);
@@ -157,7 +158,7 @@
     const outline=asphaltOutline(o).map(([x,y])=>[o.x+(x*c-y*s)*o.scale,o.y+(x*s+y*c)*o.scale]);
     return o.allowOnTrack===false&&roadMask?roadMask.outside(outline):[outline];
   }
-  const api={types,validate,isScene,sceneDefaults,withSceneDefaults,barrierFootprint,wallFootprint,asphaltFootprint,asphaltOutline,onAsphaltObject,createRoadMask,asphaltPolygons};
+  const api={maxObjects,maxDocumentBytes,types,validate,isScene,sceneDefaults,withSceneDefaults,barrierFootprint,wallFootprint,asphaltFootprint,asphaltOutline,onAsphaltObject,createRoadMask,asphaltPolygons};
   if(typeof module==='object') module.exports=api;
   else root.LPRTrackDocument=api;
 })(typeof window==='object'?window:globalThis);
