@@ -2,7 +2,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const read=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
 const nodes=new Map(),submissions=[],mediaHandlers=[];let requiresName=true,startedSessions=0;
 const timers=new Map();let nextTimer=0;
-const windowHandlers=new Map();
+const windowHandlers=new Map(),documentHandlers=new Map();
+const emitDocument=(type,event={})=>{for(const fn of documentHandlers.get(type)||[])fn(event)};
 const emitWindow=(type,event={})=>{for(const fn of windowHandlers.get(type)||[])fn(event)};
 const element=id=>{
   if(!nodes.has(id)){const handlers={};nodes.set(id,{dataset:{control:id.match(/data-control="(\w+)"/)?.[1]},setPointerCapture(){},trigger(type,event){handlers[type]?.(event)},tagName:'DIV',open:false,value:'',classList:{add(){},remove(){},toggle(){}},style:{setProperty(){}},setAttribute(){},querySelector:element,
@@ -11,10 +12,11 @@ const element=id=>{
 };
 const ctx={URLSearchParams,window:{LPRVehicleSpec:require('../shared/vehicle-spec.js'),location:{search:''},screen:{},addEventListener(type,fn){if(!windowHandlers.has(type))windowHandlers.set(type,[]);windowHandlers.get(type).push(fn)},
   matchMedia:()=>({matches:false,addEventListener:(type,handler)=>mediaHandlers.push(handler)}),
-  LPRLeaderboard:{get requiresName(){return requiresName},beginSession(){startedSessions++;element('#settings-dialog').showModal()},submit:(ms,sectors)=>submissions.push({ms,sectors})}},
-  document:{hidden:false,querySelector:element,querySelectorAll:()=>['left','right','gas','brake'].map(name=>element(`[data-control="${name}"]`)),addEventListener(){}},performance:{now:()=>1000},navigator:{},
+  LPRLeaderboard:{refresh(){},get requiresName(){return requiresName},beginSession(){startedSessions++;element('#settings-dialog').showModal()},submit:(ms,sectors)=>submissions.push({ms,sectors})}},
+  document:{hidden:false,querySelector:element,querySelectorAll:()=>['left','right','gas','brake'].map(name=>element(`[data-control="${name}"]`)),addEventListener(type,fn){if(!documentHandlers.has(type))documentHandlers.set(type,[]);documentHandlers.get(type).push(fn)}},performance:{now:()=>clock},navigator:{},
   localStorage:{getItem:()=>null,setItem(){}},setTimeout(fn,ms){const id=++nextTimer;timers.set(id,{fn,ms});return id},clearTimeout(id){timers.delete(id)},requestAnimationFrame(){},ResizeObserver:class{observe(){}},
   LPRRenderer3D:class{constructor(){this.saunaStop={x:900,y:650}}resize(){}updatePeople(){}}};
+let clock=1000;
 vm.createContext(ctx);
 for(const file of ['audio.js','sauna.js','vehicle.js','campus.js','sale.js','timing.js'])vm.runInContext(read(file),ctx);
 for(const name of ['LPRGameAudio','LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming'])ctx[name]=ctx.window[name];
@@ -85,3 +87,16 @@ right.trigger('pointerdown',pointer(5));gas.trigger('pointerdown',pointer(6));em
 assert.equal(game.readInput().steer,0);assert.equal(game.readInput().gas,0,'Losing focus releases every control');
 right.trigger('pointerdown',pointer(7));emitWindow('resize');assert.equal(game.readInput().steer,0,'Rotation releases steering');
 console.log('PASS: touch arrows match WASD, simultaneous throttle, release, opposite arrows, cancellation, focus and orientation');
+
+// Menus and leaving the app keep the lap eligible, with all elapsed time counted.
+game.reset();game.held.gas=true;game.update(0,200000);
+element('#leaderboard-button').click();assert(dialog.open);
+game.update(5,205000);assert.equal(game.car.lapStart,200000,'Menu time remains in the lap clock');
+dialog.close();ctx.document.hidden=true;clock=206000;emitDocument('visibilitychange');
+ctx.document.hidden=false;clock=260000;emitDocument('visibilitychange');
+assert.equal(game.car.lapStart,200000,'Time in another app remains in the lap clock');
+for(const [index,time] of [[65,270000],[125,280000],[185,290000],[0,300000]]) {
+ game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;game.update(0,time);
+}
+assert.equal(submissions.length,3);assert.equal(submissions[2].ms,100000,'Interrupted lap submits normally including time away');
+console.log('PASS: leaderboard menu and app switching preserve submission and full elapsed time');

@@ -24,7 +24,7 @@
   } catch {}
   function chooseIdentity(name) {
     // A shared phone can have several drivers; changing names must not submit
-    // one person's lap under another person's persistent best-time identity.
+    // one person's lap under another person's identity.
     const key = `lpr-player-token:${name.normalize('NFC').toLowerCase()}`;
     let saved;
     try { saved = localStorage.getItem(key); } catch {}
@@ -118,14 +118,19 @@
         const previousRecord = trackBestMs;
         const result = await api('/api/laps', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ version, nickname: name, lapMs: elapsed, sectors: rounded })
+          body: JSON.stringify({ version, nickname: name, lapId: newToken(), lapMs: elapsed, sectors: rounded })
         });
-        if (result.saved === true && result.rank === 1 && result.bestMs === elapsed &&
+        if (result.mode !== 'laps') {
+          status.textContent = t('Verkkotuloslista ei vielä tue useita kierroksia samalta kuljettajalta.');
+          await refresh();
+          return;
+        }
+        if (result.record === true && result.rank === 1 && result.lapMs === elapsed &&
             (previousRecord === null || elapsed < previousRecord)) {
           trackBestMs = elapsed;
           window.LPRRaceEffects?.celebrate(elapsed);
         }
-        status.textContent = `${t('Oma sijoitus')}: ${result.rank} · ${t('Paras')}: ${format(result.bestMs)}`;
+        status.textContent = t('lapRank', { time: format(elapsed), rank: result.rank });
         await refresh();
       } catch { status.textContent = t('Tuloksen lähetys epäonnistui. Oma aika säilyy selaimessa.'); }
     }

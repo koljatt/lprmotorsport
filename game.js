@@ -44,7 +44,6 @@
   const held = { left: false, right: false, gas: false, brake: false };
   const keyboard = new Set();
   const touchPointers = new Map();
-  let suspendedAt = null;
   let activePad = null;
   let best = Number(localStorage.getItem('lpr-best-time-lut-20261011-v3')) || 0;
   let storedSectors = null;
@@ -458,7 +457,6 @@
     }
     if (ui.dialog.open || car.sauna || car.sale || car.pool) {
       if (car.started) {
-        if (ui.dialog.open) car.lapStart += dt * 1000;
         car.lapElapsedMs = Math.max(0, now - car.lapStart);
         ui.time.textContent = formatTime(car.lapElapsedMs);
       }
@@ -528,7 +526,7 @@
         if (lapTime > 5000) {
           audio.lap(!best || lapTime < best);
           showSector(lapTime);
-          if (!car.onlineInvalid && timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
+          if (timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
           if (!best || lapTime < best) {
             best = lapTime;
             localStorage.setItem('lpr-best-time-lut-20261011-v3', String(best));
@@ -541,7 +539,6 @@
           car.lapStart = now;
           car.stage = 0;
           timing.reset();
-          car.onlineInvalid = false;
           ui.lap.textContent = String(car.lap);
         }
       }
@@ -666,15 +663,10 @@
   });
   document.addEventListener('visibilitychange', () => {
     syncAudio();
-    if (document.hidden && car.started) car.onlineInvalid = true;
     clearInput();
     if(document.hidden) saunaLife.stopSound();
-    if (document.hidden) suspendedAt = performance.now();
-    else if (suspendedAt !== null) {
-      const now = performance.now();
-      if (car.started) car.lapStart += now - suspendedAt;
-      lastFrame = now; suspendedAt = null;
-    }
+    // Resume physics without a large step; the lap clock includes time away.
+    if (!document.hidden) lastFrame = performance.now();
   });
   window.addEventListener('resize', clearInput);
   document.querySelector('#restart-button').addEventListener('click', reset);
@@ -689,7 +681,6 @@
     saunaSound.textContent = saunaLife.sound ? t("Saunan \u00e4\u00e4net: p\u00e4\u00e4ll\u00e4") : t("Saunan \u00e4\u00e4net: pois");
   });
   function openLeaderboard() {
-    if (car.started) car.onlineInvalid = true;
     clearInput(); saunaLife.stopSound(); ui.dialog.showModal(); syncAudio();
   }
   ui.dialog.addEventListener('close', () => { syncAudio(); audio.unlock(); });

@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../leaderboard.js'),'utf8');
-function setup(storage=new Map(),offline=false,lapResult={rank:2,bestMs:12346}) {
+function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true,rank:2,lapMs:12346,bestMs:12346,record:false}) {
   const nodes=new Map(),calls=[],celebrations=[];
   const node=id=>{
     if(!nodes.has(id)) {
@@ -47,10 +47,16 @@ function setup(storage=new Map(),offline=false,lapResult={rank:2,bestMs:12346}) 
   const token=storage.get('lpr-player-token');assert.match(token,/^[a-f0-9]{64}$/);
   await board.submit(12345.6,[3000.4,3000.4,6344.8]);
   const post=calls.find(c=>c.options?.method==='POST'),sent=JSON.parse(post.options.body);
-  assert.equal(sent.nickname,'Panu');assert.equal(sent.sectors.reduce((a,b)=>a+b,0),sent.lapMs);
+  assert.equal(sent.nickname,'Panu');assert.match(sent.lapId,/^[a-f0-9]{64}$/);assert.equal(sent.sectors.reduce((a,b)=>a+b,0),sent.lapMs);
   assert.equal(post.options.headers.Authorization,`Bearer ${token}`,'The first named lap is submitted');
   node('#leaderboard-name').value='Other';await board.submit(12345.6,[3000.4,3000.4,6344.8]);
   assert.equal(JSON.parse(calls.filter(c=>c.options?.method==='POST').at(-1).options.body).nickname,'Panu','Session identity stays fixed');
+  const laps=calls.filter(c=>c.options?.method==='POST').map(c=>JSON.parse(c.options.body));
+  assert.equal(new Set(laps.map(lap=>lap.lapId)).size,laps.length,'Each lap in one session has a distinct submission ID');
+  const legacyServer=setup(new Map(),false,{rank:1,bestMs:10000,saved:true});
+  legacyServer.node('#leaderboard-name').value='Legacy server';legacyServer.node('#leaderboard-start-form').trigger('submit');
+  await legacyServer.board.submit(10000,[3000,3000,4000]);
+  assert.match(legacyServer.node('#leaderboard-status').textContent,/ei vielä tue/,'An old server cannot silently claim to support multiple laps');
   const reopened=setup(storage);reopened.board.beginSession();await reopened.board.refresh();
   assert(reopened.board.requiresName,'Every page load asks again, even with a remembered nickname');
   assert.equal(reopened.node('#leaderboard-name').value,'Panu');
@@ -61,15 +67,15 @@ function setup(storage=new Map(),offline=false,lapResult={rank:2,bestMs:12346}) 
   const legacyStorage=new Map([['lpr-nickname','Legacy'],['lpr-player-token','a'.repeat(64)]]);
   const legacy=setup(legacyStorage);legacy.node('#leaderboard-start-form').trigger('submit');
   assert.equal(legacyStorage.get('lpr-player-token:legacy'),'a'.repeat(64),'Existing player records survive migration');
-  const record=setup(new Map(),false,{saved:true,rank:1,bestMs:11000});
+  const record=setup(new Map(),false,{mode:'laps',saved:true,rank:1,lapMs:11000,bestMs:11000,record:true});
   await record.board.refresh();record.node('#leaderboard-name').value='Record';record.node('#leaderboard-start-form').trigger('submit');
   await record.board.submit(11000,[3000,3000,5000]);
   assert.deepEqual(record.celebrations,[11000],'Confirmed new leader triggers champagne');
-  const unchanged=setup(new Map(),false,{saved:false,rank:1,bestMs:11000});
+  const unchanged=setup(new Map(),false,{mode:'laps',saved:true,rank:3,lapMs:15000,bestMs:11000,record:false});
   await unchanged.board.refresh();unchanged.node('#leaderboard-name').value='Record';unchanged.node('#leaderboard-start-form').trigger('submit');
   await unchanged.board.submit(15000,[5000,5000,5000]);
   assert.equal(unchanged.celebrations.length,0,'An existing leader driving a slower lap does not celebrate');
-  const tied=setup(new Map(),false,{saved:true,rank:1,bestMs:12346});
+  const tied=setup(new Map(),false,{mode:'laps',saved:true,rank:2,lapMs:12346,bestMs:12346,record:false});
   await tied.board.refresh();tied.node('#leaderboard-name').value='Tie';tied.node('#leaderboard-start-form').trigger('submit');
   await tied.board.submit(12346,[3000,3000,6346]);
   assert.equal(tied.celebrations.length,0,'Matching a known track record does not celebrate');

@@ -28,6 +28,7 @@
   "Verkkotulokset tarvitsevat selaimen tallennustilan.": "Online results require browser storage.",
   "Valitse nimimerkki tuloslistasta ennen seuraavaa kierrosta.": "Choose a nickname in the leaderboard before your next lap.",
   "Lähetetään kierrosaikaa…": "Submitting lap time…",
+  "Verkkotuloslista ei vielä tue useita kierroksia samalta kuljettajalta.": "The online leaderboard does not yet support multiple laps from the same driver.",
   "Oma sijoitus": "Your rank",
   "Paras": "Best",
   "Tuloksen lähetys epäonnistui. Oma aika säilyy selaimessa.": "Submission failed. Your personal time stays in this browser.",
@@ -151,6 +152,7 @@
   "LPR Motorsport Lap Challenge \u2013 aja kierros Formula Student -radalla.": "LPR Motorsport Lap Challenge \u2013 drive a lap on a Formula Student track."
 };
   const templates = {
+    lapRank: ['KIERROS {time} · SIJOITUS {rank}', 'LAP {time} · POSITION {rank}'],
     deviceDetails: ['Yhdistetty: {device} \u00b7 {axes} akselia, {buttons} painiketta', 'Connected: {device} \u00b7 {axes} axes, {buttons} buttons'],
     connected: ['Yhdistetty: {device}', 'Connected: {device}'],
     record: ['UUSI ENN\u00c4TYS \u00b7 {time}', 'NEW RECORD \u00b7 {time}'],
