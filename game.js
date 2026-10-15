@@ -44,9 +44,6 @@
   const held = { left: false, right: false, gas: false, brake: false };
   const keyboard = new Set();
   const touchPointers = new Map();
-  const steeringPad = document.querySelector("#steering-pad");
-  let steeringPointer = null;
-  let touchSteer = 0;
   let suspendedAt = null;
   let activePad = null;
   let best = Number(localStorage.getItem('lpr-best-time-lut-20261011-v3')) || 0;
@@ -384,8 +381,8 @@
       activePad = null;
     }
     const device = padInput(pad);
-    const local = held.left || held.right || held.gas || held.brake || steeringPointer !== null || touchSteer !== 0;
-    const steer = held.left || held.right ? (held.right ? 1 : 0) - (held.left ? 1 : 0) : steeringPointer !== null || touchSteer !== 0 ? touchSteer : 0;
+    const local = held.left || held.right || held.gas || held.brake;
+    const steer = (held.right ? 1 : 0) - (held.left ? 1 : 0);
     return local ? { steer, gas: held.gas ? 1 : 0, brake: held.brake ? 1 : 0, analog: false, wheel: false } : { ...device, analog: !!pad, wheel: false };
   }
 
@@ -611,11 +608,6 @@
       document.querySelector(`[data-control="${name}"]`).classList.toggle('active', held[name]);
     }
   }
-  function setSteer(value) {
-    touchSteer = Math.max(-1, Math.min(1, value));
-    steeringPad.style.setProperty('--steer-offset', `${touchSteer * Math.max(0, steeringPad.clientWidth / 2 - 30)}px`);
-    steeringPad.setAttribute('aria-valuenow', String(Math.round(touchSteer * 100)));
-  }
   function clearInput() {
     if (document.pointerLockElement === canvas) document.exitPointerLock?.();
     stopLooking();
@@ -623,9 +615,6 @@
     saunaSteamSelected=false;
     keyboard.clear();
     touchPointers.clear();
-    steeringPointer = null;
-    setSteer(0);
-    steeringPad.classList.remove('active');
     syncHeld();
   }
   window.addEventListener('keydown', event => {
@@ -642,7 +631,7 @@
       if (event.code === 'KeyF' && car.sauna) { event.preventDefault(); switchSaunaSeat(); return; }
       if (event.code === 'Space' && car.sauna) { event.preventDefault(); throwSteam(); return; }
     }
-    if (!keyMap[event.code] || ui.dialog.open || event.target === steeringPad) return;
+    if (!keyMap[event.code] || ui.dialog.open) return;
     event.preventDefault(); keyboard.add(event.code); syncHeld();
   });
   window.addEventListener('keyup', event => {
@@ -675,32 +664,6 @@
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, release);
     button.addEventListener('contextmenu', event => event.preventDefault());
   });
-  function moveSteering(event) {
-    const bounds = steeringPad.getBoundingClientRect();
-    const value = (event.clientX - bounds.left - bounds.width / 2) / Math.max(1, bounds.width / 2 - 30);
-    setSteer(Math.abs(value) < .06 ? 0 : value);
-  }
-  steeringPad.addEventListener('pointerdown', event => {
-    if (steeringPointer !== null || ui.dialog.open) return;
-    event.preventDefault(); steeringPointer = event.pointerId;
-    steeringPad.setPointerCapture(event.pointerId); steeringPad.classList.add('active'); moveSteering(event);
-  });
-  steeringPad.addEventListener('pointermove', event => {
-    if (event.pointerId === steeringPointer) { event.preventDefault(); moveSteering(event); }
-  });
-  const releaseSteering = event => {
-    if (event.pointerId !== steeringPointer) return;
-    steeringPointer = null; setSteer(0); steeringPad.classList.remove('active');
-  };
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) steeringPad.addEventListener(type, releaseSteering);
-  steeringPad.addEventListener('contextmenu', event => event.preventDefault());
-  steeringPad.addEventListener('keydown', event => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.code)) return;
-    event.preventDefault();
-    setSteer(event.code === 'Home' ? 0 : event.code === 'End' ? 1 : touchSteer + (event.code === 'ArrowLeft' ? -.1 : .1));
-  });
-  steeringPad.addEventListener('keyup', () => setSteer(0));
-  steeringPad.addEventListener('blur', () => { if (steeringPointer === null) setSteer(0); });
   document.addEventListener('visibilitychange', () => {
     syncAudio();
     if (document.hidden && car.started) car.onlineInvalid = true;

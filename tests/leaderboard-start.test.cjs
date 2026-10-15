@@ -2,22 +2,24 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const read=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
 const nodes=new Map(),submissions=[],mediaHandlers=[];let requiresName=true,startedSessions=0;
 const timers=new Map();let nextTimer=0;
+const windowHandlers=new Map();
+const emitWindow=(type,event={})=>{for(const fn of windowHandlers.get(type)||[])fn(event)};
 const element=id=>{
-  if(!nodes.has(id)){const handlers={};nodes.set(id,{tagName:'DIV',open:false,value:'',classList:{add(){},remove(){},toggle(){}},style:{setProperty(){}},setAttribute(){},querySelector:element,
+  if(!nodes.has(id)){const handlers={};nodes.set(id,{dataset:{control:id.match(/data-control="(\w+)"/)?.[1]},setPointerCapture(){},trigger(type,event){handlers[type]?.(event)},tagName:'DIV',open:false,value:'',classList:{add(){},remove(){},toggle(){}},style:{setProperty(){}},setAttribute(){},querySelector:element,
     addEventListener:(type,handler)=>{handlers[type]=handler},click(){handlers.click?.()},showModal(){this.open=true},close(){this.open=false;handlers.close?.()},clientWidth:800});}
   return nodes.get(id);
 };
-const ctx={URLSearchParams,window:{LPRVehicleSpec:require('../shared/vehicle-spec.js'),location:{search:''},screen:{},addEventListener(){},
+const ctx={URLSearchParams,window:{LPRVehicleSpec:require('../shared/vehicle-spec.js'),location:{search:''},screen:{},addEventListener(type,fn){if(!windowHandlers.has(type))windowHandlers.set(type,[]);windowHandlers.get(type).push(fn)},
   matchMedia:()=>({matches:false,addEventListener:(type,handler)=>mediaHandlers.push(handler)}),
   LPRLeaderboard:{get requiresName(){return requiresName},beginSession(){startedSessions++;element('#settings-dialog').showModal()},submit:(ms,sectors)=>submissions.push({ms,sectors})}},
-  document:{hidden:false,querySelector:element,querySelectorAll:()=>[],addEventListener(){}},performance:{now:()=>1000},navigator:{},
+  document:{hidden:false,querySelector:element,querySelectorAll:()=>['left','right','gas','brake'].map(name=>element(`[data-control="${name}"]`)),addEventListener(){}},performance:{now:()=>1000},navigator:{},
   localStorage:{getItem:()=>null,setItem(){}},setTimeout(fn,ms){const id=++nextTimer;timers.set(id,{fn,ms});return id},clearTimeout(id){timers.delete(id)},requestAnimationFrame(){},ResizeObserver:class{observe(){}},
   LPRRenderer3D:class{constructor(){this.saunaStop={x:900,y:650}}resize(){}updatePeople(){}}};
 vm.createContext(ctx);
 for(const file of ['audio.js','sauna.js','vehicle.js','campus.js','sale.js','timing.js'])vm.runInContext(read(file),ctx);
 for(const name of ['LPRGameAudio','LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming'])ctx[name]=ctx.window[name];
 const source=read('game.js').replace('  reset();\n  openTestScene',
- '  globalThis.test={get car(){return car},held,update,dynamics,reset,showSector,toggleSauna,toggleSale,togglePool};\n  reset();\n  openTestScene');
+ '  globalThis.test={get car(){return car},held,update,dynamics,reset,showSector,readInput,toggleSauna,toggleSale,togglePool};\n  reset();\n  openTestScene');
 ctx.window.LPRLeaderboard.beginSession(); // leaderboard.js runs before game.js.
 vm.runInContext(source,ctx);const game=ctx.test,dialog=element('#settings-dialog');
 assert.equal(startedSessions,1);assert(dialog.open);
@@ -63,3 +65,23 @@ let timer=[...timers.values()].find(t=>t.ms===3000);assert(timer,'Sector expires
 game.showSector(2000);assert.equal([...timers.values()].filter(t=>t.ms===3000).length,1,'New split replaces the previous expiry');
 timer=[...timers.values()].find(t=>t.ms===3000);timer.fn();assert.equal(element('#sector-time').hidden,true);
 game.reset();assert(![...timers.values()].some(t=>t.ms===3000),'Restart clears pending sector expiry');
+
+// Touch arrows and WASD use exactly the same digital input path.
+game.reset();
+const left=element('[data-control="left"]'),right=element('[data-control="right"]'),gas=element('[data-control="gas"]');
+const pointer=id=>({pointerId:id,preventDefault(){}});
+left.trigger('pointerdown',pointer(1));gas.trigger('pointerdown',pointer(2));
+const touchInput=game.readInput();assert.equal(touchInput.steer,-1);assert.equal(touchInput.gas,1);assert.equal(touchInput.analog,false);
+left.trigger('pointerup',pointer(1));assert.equal(game.readInput().steer,0);assert.equal(game.readInput().gas,1,'Releasing steering keeps the pedal held');
+gas.trigger('pointerup',pointer(2));
+const key=code=>({code,target:{tagName:'DIV'},preventDefault(){}});
+emitWindow('keydown',key('KeyA'));emitWindow('keydown',key('KeyW'));
+assert.deepEqual(game.readInput(),touchInput,'Touch left + gas is identical to A + W');
+emitWindow('keyup',key('KeyA'));emitWindow('keyup',key('KeyW'));
+left.trigger('pointerdown',pointer(3));right.trigger('pointerdown',pointer(4));assert.equal(game.readInput().steer,0,'Opposite arrows cancel each other');
+left.trigger('pointercancel',pointer(3));assert.equal(game.readInput().steer,1);
+right.trigger('lostpointercapture',pointer(4));assert.equal(game.readInput().steer,0,'Lost capture cannot leave steering stuck');
+right.trigger('pointerdown',pointer(5));gas.trigger('pointerdown',pointer(6));emitWindow('blur');
+assert.equal(game.readInput().steer,0);assert.equal(game.readInput().gas,0,'Losing focus releases every control');
+right.trigger('pointerdown',pointer(7));emitWindow('resize');assert.equal(game.readInput().steer,0,'Rotation releases steering');
+console.log('PASS: touch arrows match WASD, simultaneous throttle, release, opposite arrows, cancellation, focus and orientation');

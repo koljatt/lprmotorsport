@@ -11,9 +11,9 @@
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
-    <link rel="stylesheet" href="styles.css?v=mobile-20261008" />
-    <link rel="stylesheet" href="3d.css?v=skinnarila-20261015" />
-    <script src="i18n.js?v=skinnarila-20261015" defer></script>
+    <link rel="stylesheet" href="styles.css?v=mobile-buttons-20261015" />
+    <link rel="stylesheet" href="3d.css?v=mobile-buttons-20261015" />
+    <script src="i18n.js?v=mobile-buttons-20261015" defer></script>
     <script src="shared/vehicle-spec.js?v=vehicle-dimensions-20261013" defer></script>
     <script src="campus.js?v=roadside-trees-20261014" defer></script>
     <script src="shared/track-document.js?v=asphalt-small-brush-20261013" defer></script>
@@ -29,7 +29,7 @@
     <script src="leaderboard.js?v=skinnarila-20261015" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
-    <script src="game.js?v=skinnarila-20261015" defer></script>
+    <script src="game.js?v=mobile-buttons-20261015" defer></script>
   </head>
   <body>
     <main class="app">
@@ -65,11 +65,10 @@
           <button id="wheel-dim" type="button" aria-pressed="false">Himmennys (B)</button>
           <button id="wheel-tc" type="button" aria-pressed="true">Luistonesto (T)</button>
         </div>
-        <div id="steering-pad" class="steering-pad" role="slider" tabindex="0" aria-label="Ohjaus: liu’uta vasemmalle tai oikealle" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0"><span class="steering-guide">← OHJAA →</span><span class="steering-thumb"></span></div>
-        <div class="steering"><button class="control steer" data-control="left" aria-label="Ohjaa vasemmalle">↶</button><button class="control steer" data-control="right" aria-label="Ohjaa oikealle">↷</button></div>
+        <div class="steering"><button class="control steer" data-control="left" aria-label="Ohjaa vasemmalle">←</button><button class="control steer" data-control="right" aria-label="Ohjaa oikealle">→</button></div>
         <div class="pedals"><button class="control brake" data-control="brake">JARRU</button><button class="control gas" data-control="gas">KAASU</button></div>
       </section>
-      <p class="help">Puhelimella: liu’uta vasenta peukaloa ohjausalueella, pidä oikealla kaasua tai jarrua. Voit ajaa myös vaakasuunnassa. Tietokoneella: ← → tai A D, kaasu ↑ / W, jarru ↓ / S.</p>
+      <p class="help">Puhelimella: käännä vasemman ja oikean nuolinapeilla, pidä toisella kädellä kaasua tai jarrua. Voit ajaa myös vaakasuunnassa. Tietokoneella: ← → tai A D, kaasu ↑ / W, jarru ↓ / S.</p>
     </main>
 
     <dialog id="settings-dialog" aria-labelledby="leaderboard-title">
