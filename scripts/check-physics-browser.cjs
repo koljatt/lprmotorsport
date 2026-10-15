@@ -61,9 +61,9 @@ async function main() {
       const fastWheelDegrees=renderer.steeringWheelLayout(fastCar).angle*180/Math.PI;
       if(fastWheelDegrees<20 || fastWheelDegrees>80)throw Error('Fast steering should be visible without full lock');
       renderer.render(fastCar,1150);
-      for(const lock of [-1,-.75,0,.75,1]) {
+      for(const [index,lock] of [-1,-.75,0,.75,1].entries()) {
         car.steerAngle=lock*window.LPRVehicleSpec.maxRoadWheelAngle;
-        renderer.render(car,1200);
+        renderer.render(car,1200+index*500);
         if(renderer.gl.getError())throw Error('WebGL error during steering sweep');
       }
       window.steeringPreview={renderer,car:fastCar};

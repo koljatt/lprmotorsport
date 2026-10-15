@@ -49,3 +49,38 @@ for (let i = 1; i <= 100; i++) {
   assert(next > previous && next - previous < .015, 'Visible steering builds smoothly without snapping to lock');
 }
 console.log('PASS: amplified visual steering, moderate high-speed wheel pose, original speed assistance and unchanged vehicle state', { fastWheelDegrees: degrees });
+
+function animate(fps) {
+  const view=Object.create(context.window.LPRRenderer3D.prototype);
+  view.width=1280;view.height=720;
+  const car={steerAngle:0};
+  view.updateVisualSteering(car,0);
+  car.steerAngle=spec.maxRoadWheelAngle;
+  let previous=0;
+  for(let frame=1;frame<=fps;frame++) {
+    view.updateVisualSteering(car,frame*1000/fps);
+    const angle=view.visualSteeringAngle(car);
+    assert(angle>=previous && angle-previous<=1.2/fps+1e-12,
+      'Visual steering builds continuously at a bounded rate');
+    assert(Math.abs(view.steeringWheelLayout(car).angle/spec.maxSteeringWheelAngle-
+      angle/spec.maxVisualRoadWheelAngle)<1e-12,'Cockpit and tyres share the animated angle');
+    previous=angle;
+  }
+  const locked=previous;
+  assert(locked>spec.maxVisualRoadWheelAngle*.99,'Smoothing must still reach the hairpin pose');
+  car.steerAngle=0;
+  for(let frame=1;frame<=fps;frame++) {
+    view.updateVisualSteering(car,1000+frame*1000/fps);
+    const angle=view.visualSteeringAngle(car);
+    assert(angle>=0 && angle<=previous,'Release centres without an opposite steering flick');
+    previous=angle;
+  }
+  const reset={steerAngle:0};
+  view.updateVisualSteering(reset,2001);
+  assert.equal(view.visualSteeringAngle(reset),0,'Restart clears the previous steering pose');
+  return locked;
+}
+const reference=animate(60);
+for(const fps of [30,144]) assert(Math.abs(animate(fps)-reference)<.001,
+  'Animation timing stays consistent across frame rates');
+console.log('PASS: shared visual movement, bounded turning speed, smooth centering, reset and 30/60/144 fps');

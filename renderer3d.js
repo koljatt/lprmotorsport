@@ -1716,7 +1716,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const bodyForward = [Math.cos(car.angle),Math.sin(car.angle)];
     const bodyRight = [-bodyForward[1],bodyForward[0]];
     const pose=this.vehiclePose || {forward:[bodyForward[0],0,bodyForward[1]],right:[bodyRight[0],0,bodyRight[1]],up:[0,1,0]};
-    const visualSteerAngle = spec.visualRoadWheelAngle(car.steerAngle || 0);
+    const visualSteerAngle = this.visualSteeringAngle(car);
     const steeredAngle = car.angle + visualSteerAngle;
     const wheelForward = [Math.cos(steeredAngle),Math.sin(steeredAngle)];
     const axleDirection = [-wheelForward[1],wheelForward[0]];
@@ -2139,6 +2139,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
 
   render(car, now = 0) {
     this.viewFrustum=null;
+    this.updateVisualSteering(car,now);
     this.updateObstacleMeshes();
     if (car.sale) { this.renderSale(car); return; }
     if (car.pool) { this.renderPool(car, now); return; }
@@ -2702,10 +2703,31 @@ window.LPRRenderer3D = class LPRRenderer3D {
     this.drawSteeringWheel(car);
   }
 
+  updateVisualSteering(car,now) {
+    const target=window.LPRVehicleSpec.visualRoadWheelAngle(car.steerAngle || 0);
+    const previous=this.visualSteering;
+    const dt=previous ? (now-previous.time)/1000 : 0;
+    if(!previous || previous.car!==car || dt<0 || dt>.25) {
+      this.visualSteering={car,time:now,angle:target};
+      return;
+    }
+    // Presentation only: one shared, bounded movement for tyres, wheel and
+    // hands. No spring overshoot or artificial opposite steering on release.
+    const change=(target-previous.angle)*(1-Math.exp(-18*dt));
+    const rate=1.2; // rad/s at the equivalent visual road wheel (306 deg/s at the wheel)
+    previous.angle+=Math.max(-rate*dt,Math.min(rate*dt,change));
+    previous.time=now;
+  }
+
+  visualSteeringAngle(car) {
+    return this.visualSteering?.car===car ? this.visualSteering.angle :
+      window.LPRVehicleSpec.visualRoadWheelAngle(car.steerAngle || 0);
+  }
+
   steeringWheelLayout(car) {
     const radius=Math.min(this.width*.25,this.height*.17,140);
     const spec=window.LPRVehicleSpec;
-    const lock=spec.visualRoadWheelAngle(car.steerAngle || 0)/spec.maxVisualRoadWheelAngle;
+    const lock=this.visualSteeringAngle(car)/spec.maxVisualRoadWheelAngle;
     // Leave room for the tall silhouette as the wheel passes through 90 degrees.
     return { x:this.width*.5, y:this.height-radius*1.04-10, radius, angle:lock*spec.maxSteeringWheelAngle };
   }
@@ -2734,19 +2756,22 @@ window.LPRRenderer3D = class LPRRenderer3D {
     // Anchor the pinch point to the horizontal side of the wheel (9 and 3),
     // then turn the glove so the wrist descends from that side grip.
     const grip={x:width*(.35-.45),y:-.50+height*.13};
-    // Rotate the grip about its pinch point as the arms cross. This keeps the
-    // forearms directed toward the elbows instead of rotating them upside down.
-    const baseAngle=.20-side*layout.angle*.85;
+    const c=Math.cos(layout.angle),s=Math.sin(layout.angle);
+    const gripWorld={x:layout.x+side*layout.radius*.94*c,
+      y:layout.y+side*layout.radius*.94*s};
+    // Let each elbow follow its hand a little, then orient the glove/forearm
+    // toward that elbow about the fixed grip point. Arms can cross at full lock.
+    const elbow={x:layout.x+side*layout.radius*1.60+
+      (gripWorld.x-layout.x-side*layout.radius*.94)*.25,
+      y:this.height+layout.radius*.85};
+    const sourceDirection=Math.atan2(wrist.y-grip.y,side*(wrist.x-grip.x));
+    const gripDirection=Math.atan2(elbow.y-gripWorld.y,elbow.x-gripWorld.x);
+    const baseAngle=side*(gripDirection-sourceDirection-layout.angle);
     const pose={width,height,wrist,grip,baseAngle,side,radius:layout.radius};
     const wheelWrist=this.driverArmWheelPoint(pose,wrist);
     const localX=wheelWrist.x,localY=wheelWrist.y;
-    const c=Math.cos(layout.angle),s=Math.sin(layout.angle);
     const wristWorld={x:layout.x+layout.radius*(localX*c-localY*s),
       y:layout.y+layout.radius*(localX*s+localY*c)};
-    // The offscreen elbow moves slightly outward as its hand rises. This
-    // changes forearm direction without moving the hand off the wheel.
-    const elbow={x:layout.x+side*layout.radius*(1.60-side*layout.angle*.12),
-      y:this.height+layout.radius*.85};
     const neutralDirection=Math.atan2(height*.64,side*width*.26)+side*baseAngle+layout.angle;
     const desiredDirection=Math.atan2(elbow.y-wristWorld.y,elbow.x-wristWorld.x);
     const difference=Math.atan2(Math.sin(desiredDirection-neutralDirection),Math.cos(desiredDirection-neutralDirection));

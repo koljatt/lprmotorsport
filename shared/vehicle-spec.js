@@ -29,7 +29,9 @@
       // Presentation only: make small assisted rack angles visible, smoothly
       // approaching the hairpin pose without changing tyre forces or input.
       const lock = Math.max(-1, Math.min(1, angle / this.maxRoadWheelAngle));
-      return this.maxVisualRoadWheelAngle * Math.tanh(3 * lock) / Math.tanh(3);
+      // Keep useful movement through the middle of the range instead of
+      // saturating early. Both the wheel and tyres use this presentation ratio.
+      return this.maxVisualRoadWheelAngle * 2.8 * lock / (1 + 1.8 * Math.abs(lock));
     },
     roadWheelAngle(angle, side) {
       // Positive side is right: the inside tyre turns more sharply.

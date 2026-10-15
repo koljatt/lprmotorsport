@@ -82,6 +82,19 @@ for(const direction of [-1,1]) {
     context.window.LPRVehicleSpec.wheelbase/Math.tan(front[1])-context.window.LPRVehicleSpec.trackWidth)<1e-10,
     'Rendered tyre axes share the turn centre');
 }
+const animatedCar={...car,steerAngle:0};
+renderer.updateVisualSteering(animatedCar,0);
+animatedCar.steerAngle=context.window.LPRVehicleSpec.maxRoadWheelAngle;
+renderer.updateVisualSteering(animatedCar,1000/60);
+renderer.draws=[];
+renderer.drawWheels(animatedCar,195);
+for(const [index,side] of [[2,-1],[4,1]]) {
+  const right=renderer.draws[index].uniforms.meshRight;
+  const angle=Math.atan2(-right[0],right[2]);
+  const expected=context.window.LPRVehicleSpec.roadWheelAngle(renderer.visualSteeringAngle(animatedCar),side);
+  assert(Math.abs(angle-expected)<1e-12,'Rendered tyres use the same smoothed steering as the cockpit');
+  assert(Math.abs(angle)<.04,'First animation frame must not jump to full tyre lock');
+}
 renderer.drawWheels({...car,damage:.3,impactSide:-1},200);
 assert.equal(renderer.deleted.length,20,'Damage disposes all superseded GPU buffers');
 assert.notEqual([...renderer.vehicleParts.values()][0],initialParts[0]);
