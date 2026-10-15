@@ -55,12 +55,15 @@
   const timing = new LPRLapTiming(storedSectors?.lapTime === best ? storedSectors.sectors : null);
   const sectorUI = document.querySelector('#sector-time');
 
+  let sectorTimeout = 0;
   function showSector(elapsed) {
     const result = timing.split(elapsed);
     if (!result) return;
     const difference = result.delta === null ? '' : ` (${result.delta > 0 ? '+' : result.delta < 0 ? '-' : ''}${(Math.abs(result.delta) / 1000).toFixed(3)} s)`;
     sectorUI.textContent = `S${result.sector} · ${formatTime(result.time)}${difference}`;
+    clearTimeout(sectorTimeout);
     sectorUI.hidden = false;
+    sectorTimeout = setTimeout(() => { sectorUI.hidden = true; }, 3000);
     sectorUI.classList.toggle('faster', result.delta !== null && result.delta < 0);
     sectorUI.classList.toggle('slower', result.delta !== null && result.delta > 0);
   }
@@ -318,7 +321,9 @@
     window.LPRCampus.resetObstacles();
     audio.stopEffects();
     timing.reset();
+    clearTimeout(sectorTimeout);
     sectorUI.hidden = true;
+    window.LPRRaceEffects?.clear();
     clearInput();
     saunaLife.leave();
     car = { x: track[0].x, y: track[0].y, angle: startAngle, speed: 0, lap: 1, lapStart: 0, stage: 0, started: false, offroad: false, damage:0, crashed:false, pool:false, poolX:0, poolZ:0 };

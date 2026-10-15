@@ -451,10 +451,11 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const tangentLength = Math.hypot(tangent.x,tangent.z);
     tangent.x /= tangentLength; tangent.z /= tangentLength;
     const square = (side, along) => [first.x + normals[0].x * side + tangent.x * along,.18,first.y + normals[0].z * side + tangent.z * along];
-    for (let row = 0; row < 2; row++) for (let col = 0; col < 10; col++) {
-      const cellWidth = edgeLine * 2 / 10;
-      const a = -edgeLine + col * cellWidth, b = a + cellWidth, f = -2 + row * 2, g = f + 2;
-      quad(square(a,f),square(b,f),square(b,g),square(a,g),(row+col)%2 ? [.94,.94,.86] : [.08,.09,.09]);
+    for (let row = 0; row < 3; row++) for (let col = 0; col < 12; col++) {
+      const cellWidth = halfWidth * 2 / 12;
+      const a = -halfWidth + col * cellWidth, b = a + cellWidth;
+      const f = (row - 1.5) * cellWidth, g = f + cellWidth;
+      quad(square(a,f),square(b,f),square(b,g),square(a,g),(row+col)%2 ? [1,1,1] : [.025,.025,.025]);
     }
 
     // Campus woods and editor trees share the same species-specific geometry.

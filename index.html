@@ -10,10 +10,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
-    <title>LPR Lap Challenge</title>
+    <title>Skinnarila Grand Prix · LPR Motorsport</title>
     <link rel="stylesheet" href="styles.css?v=mobile-20261008" />
-    <link rel="stylesheet" href="3d.css?v=podium-20261014" />
-    <script src="i18n.js?v=podium-20261014" defer></script>
+    <link rel="stylesheet" href="3d.css?v=skinnarila-20261015" />
+    <script src="i18n.js?v=skinnarila-20261015" defer></script>
     <script src="shared/vehicle-spec.js?v=vehicle-dimensions-20261013" defer></script>
     <script src="campus.js?v=roadside-trees-20261014" defer></script>
     <script src="shared/track-document.js?v=asphalt-small-brush-20261013" defer></script>
@@ -22,19 +22,20 @@
     <script src="shared/track-objects.js?v=asphalt-small-brush-20261013" defer></script>
     <script src="shared/track-sync.js?v=20261013" defer></script>
     <script src="sale.js?v=solid-shelves-long-checkout-20261013" defer></script>
-    <script src="renderer3d.js?v=view-culling-20261014" defer></script>
+    <script src="renderer3d.js?v=skinnarila-20261015" defer></script>
     <script src="vehicle.js?v=vehicle-dimensions-20261013" defer></script>
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
-    <script src="leaderboard.js?v=podium-20261014" defer></script>
+    <script src="leaderboard.js?v=skinnarila-20261015" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
-    <script src="game.js?v=podium-visits-20261014" defer></script>
+    <script src="race-effects.js?v=skinnarila-20261015" defer></script>
+    <script src="game.js?v=skinnarila-20261015" defer></script>
   </head>
   <body>
     <main class="app">
       <header class="topbar">
         <img class="logo" src="assets/lpr-logo.jpg" alt="LPR Motorsport Formula Student" />
-        <div class="topbar-title"><span>FORMULA STUDENT</span><strong>LAP CHALLENGE</strong></div>
+        <div class="topbar-title"><span>FORMULA STUDENT</span><strong>SKINNARILA GRAND PRIX</strong></div>
         <select id="language-select" aria-label="Kieli / Language"><option value="fi">FI</option><option value="en">EN</option></select>
         <button id="sound-button" class="icon-button" type="button" aria-label="Äänet: päällä" aria-pressed="true">♫<span>Äänet: päällä</span></button>
         <button id="leaderboard-button" class="icon-button" type="button" aria-label="Tuloslista">🏆</button>
@@ -73,7 +74,7 @@
 
     <dialog id="settings-dialog" aria-labelledby="leaderboard-title">
       <div class="dialog-head">
-        <div><p class="race-eyebrow">LPR MOTORSPORT · TIME ATTACK</p><h2 id="leaderboard-title">Haasta kärki.</h2></div>
+        <div class="race-heading"><span class="race-flag" aria-hidden="true"></span><h2 id="leaderboard-title">SKINNARILA<br>GRAND PRIX</h2><p class="race-eyebrow">LPR MOTORSPORT · TIME ATTACK</p></div>
         <button id="close-settings" class="icon-button close" type="button" aria-label="Sulje tuloslista" hidden><span aria-hidden="true">×</span> Takaisin peliin</button>
       </div>
       <section id="leaderboard-panel" class="leaderboard-panel" aria-label="Tuloslista">
@@ -95,11 +96,10 @@
             <ol id="leaderboard-list" aria-live="polite"><li>Ladataan tuloslistaa…</li></ol>
           </div>
           <form id="leaderboard-start-form" class="leaderboard-start-form">
-            <p class="race-eyebrow">OMA KIERROKSESI</p>
-            <h3>Sinun vuorosi.</h3>
+            <h3>Kuljettaja</h3>
             <label for="leaderboard-name">Nimimerkki</label>
             <input id="leaderboard-name" required maxlength="24" autocomplete="nickname" autocapitalize="off" enterkeyhint="go" placeholder="Nimimerkki" />
-            <button id="leaderboard-start" class="leaderboard-start" type="submit">Aja kärkeen <span aria-hidden="true">→</span></button>
+            <button id="leaderboard-start" class="leaderboard-start" type="submit">Aloita ajo <span aria-hidden="true">→</span></button>
             <p id="leaderboard-status" role="status"></p>
           </form>
         </div>

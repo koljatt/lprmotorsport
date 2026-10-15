@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../leaderboard.js'),'utf8');
-function setup(storage=new Map(),offline=false) {
-  const nodes=new Map(),calls=[];
+function setup(storage=new Map(),offline=false,lapResult={rank:2,bestMs:12346}) {
+  const nodes=new Map(),calls=[],celebrations=[];
   const node=id=>{
     if(!nodes.has(id)) {
       const handlers=new Map();let text='';
@@ -14,15 +14,15 @@ function setup(storage=new Map(),offline=false) {
     }
     return nodes.get(id);
   };
-  const context={window:{},crypto:require('node:crypto').webcrypto,AbortSignal,
+  const context={window:{LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)}},crypto:require('node:crypto').webcrypto,AbortSignal,
     localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},
     document:{querySelector:node,createElement:()=>({textContent:''})},
     async fetch(url,options){calls.push({url,options});if(offline)throw new Error('offline');
-      return {ok:true,json:async()=>url.endsWith('/api/laps')?{rank:2,bestMs:12346}:
+      return {ok:true,json:async()=>url.endsWith('/api/laps')?lapResult:
         {version:'lut-20261011-v3',results:Array.from({length:20},(_,i)=>({nickname:i?'Driver '+i:'<script>',lap_ms:12346+i*1000}))}};
     }};
   vm.createContext(context);vm.runInContext(source,context);
-  return {board:context.window.LPRLeaderboard,node,calls,storage};
+  return {board:context.window.LPRLeaderboard,node,calls,storage,celebrations};
 }
 (async()=>{
   const app=setup(),{board,node,calls,storage}=app;
@@ -61,6 +61,18 @@ function setup(storage=new Map(),offline=false) {
   const legacyStorage=new Map([['lpr-nickname','Legacy'],['lpr-player-token','a'.repeat(64)]]);
   const legacy=setup(legacyStorage);legacy.node('#leaderboard-start-form').trigger('submit');
   assert.equal(legacyStorage.get('lpr-player-token:legacy'),'a'.repeat(64),'Existing player records survive migration');
+  const record=setup(new Map(),false,{saved:true,rank:1,bestMs:11000});
+  await record.board.refresh();record.node('#leaderboard-name').value='Record';record.node('#leaderboard-start-form').trigger('submit');
+  await record.board.submit(11000,[3000,3000,5000]);
+  assert.deepEqual(record.celebrations,[11000],'Confirmed new leader triggers champagne');
+  const unchanged=setup(new Map(),false,{saved:false,rank:1,bestMs:11000});
+  await unchanged.board.refresh();unchanged.node('#leaderboard-name').value='Record';unchanged.node('#leaderboard-start-form').trigger('submit');
+  await unchanged.board.submit(15000,[5000,5000,5000]);
+  assert.equal(unchanged.celebrations.length,0,'An existing leader driving a slower lap does not celebrate');
+  const tied=setup(new Map(),false,{saved:true,rank:1,bestMs:12346});
+  await tied.board.refresh();tied.node('#leaderboard-name').value='Tie';tied.node('#leaderboard-start-form').trigger('submit');
+  await tied.board.submit(12346,[3000,3000,6346]);
+  assert.equal(tied.celebrations.length,0,'Matching a known track record does not celebrate');
   const offline=setup(new Map(),true);offline.board.beginSession();await offline.board.refresh();
   assert.match(offline.node('#leaderboard-list').textContent,/saatavilla/);
   offline.node('#leaderboard-name').value='Offline';offline.node('#leaderboard-start-form').trigger('submit');

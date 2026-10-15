@@ -15,6 +15,7 @@
   const validName = name => /^[\p{L}\p{N} _.-]{1,24}$/u.test(name);
   const validToken = value => /^[a-f0-9]{64}$/.test(value ?? '');
   const newToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
+  let trackBestMs = null;
   let token, activeName = '', rememberedName = '', legacyToken;
   try {
     rememberedName = localStorage.getItem('lpr-nickname') ?? '';
@@ -69,6 +70,7 @@
       if (data.version !== version || !Array.isArray(data.results)) throw new Error('Invalid leaderboard');
       list.textContent = '';
       const results = data.results.slice(0, 10);
+      trackBestMs = results[0]?.lap_ms ?? null;
       for (let rank = 1; rank <= 3; rank++) {
         const row = results[rank - 1];
         const name = document.querySelector(`#podium-name-${rank}`);
@@ -113,10 +115,16 @@
         const rounded = sectors.map(Math.round);
         const elapsed = Math.round(lapMs);
         rounded[2] += elapsed - rounded.reduce((a, b) => a + b, 0);
+        const previousRecord = trackBestMs;
         const result = await api('/api/laps', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ version, nickname: name, lapMs: elapsed, sectors: rounded })
         });
+        if (result.saved === true && result.rank === 1 && result.bestMs === elapsed &&
+            (previousRecord === null || elapsed < previousRecord)) {
+          trackBestMs = elapsed;
+          window.LPRRaceEffects?.celebrate(elapsed);
+        }
         status.textContent = `${t('Oma sijoitus')}: ${result.rank} · ${t('Paras')}: ${format(result.bestMs)}`;
         await refresh();
       } catch { status.textContent = t('Tuloksen lähetys epäonnistui. Oma aika säilyy selaimessa.'); }
