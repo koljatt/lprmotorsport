@@ -27,7 +27,7 @@ const bodyVertices=data=>{
 renderer.render(car,0);
 const neutral=Array.from(mesh), body=bodyVertices(mesh);
 assert(body.length>0);
-for(const steerAngle of [-.36,.36]) {
+for(const steerAngle of [-context.window.LPRVehicleSpec.maxRoadWheelAngle,context.window.LPRVehicleSpec.maxRoadWheelAngle]) {
   renderer.render({...car,steer:Math.sign(steerAngle),steerAngle,lateralG:1.5},0);
   assert.deepEqual(bodyVertices(mesh),body,'Steering and lateral G must not move bodywork');
   assert.notDeepEqual(Array.from(mesh),neutral,'Front tyre geometry must respond to steering');

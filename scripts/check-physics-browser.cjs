@@ -53,12 +53,41 @@ async function main() {
       const error=renderer.gl.getError();
       const moved=campus.bodies.filter(b=>b.damage>0).length;
       campus.resetObstacles();renderer.render(car,1100);
-      return {error,resetError:renderer.gl.getError(),damaged:moved,meshCount:renderer.obstacleMeshes.length};
+      const fastCar={x:car.x,y:car.y,angle:car.angle};
+      dynamics.reset(fastCar);fastCar.vx=25;
+      for(let frame=0;frame<90;frame++) {
+        dynamics.step(fastCar,{steer:1,gas:1,brake:0},1/90,0);
+      }
+      const fastWheelDegrees=renderer.steeringWheelLayout(fastCar).angle*180/Math.PI;
+      if(fastWheelDegrees<20 || fastWheelDegrees>80)throw Error('Fast steering should be visible without full lock');
+      renderer.render(fastCar,1150);
+      for(const lock of [-1,-.75,0,.75,1]) {
+        car.steerAngle=lock*window.LPRVehicleSpec.maxRoadWheelAngle;
+        renderer.render(car,1200);
+        if(renderer.gl.getError())throw Error('WebGL error during steering sweep');
+      }
+      window.steeringPreview={renderer,car:fastCar};
+      return {error,resetError:renderer.gl.getError(),damaged:moved,meshCount:renderer.obstacleMeshes.length,fastWheelDegrees};
     })()`});
     assert(!result.exceptionDetails,JSON.stringify(result.exceptionDetails));
     assert.equal(result.result.value.error,0);assert.equal(result.result.value.resetError,0);
     assert(result.result.value.damaged>0);assert.equal(errors.length,0,JSON.stringify(errors));
-    console.log('PASS: real Chrome/WebGL impact rendering and reset',result.result.value);
+    console.log('PASS: real Chrome/WebGL impact rendering, full steering sweep and reset',result.result.value);
+    if(process.argv.includes('--steering-preview')) {
+      for(const [width,height,lock] of [[1280,800,1],[390,844,-1]]) {
+        await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+        await send('Runtime.evaluate',{expression:`(()=>{
+          const {renderer,car}=window.steeringPreview;
+          car.steerAngle=${lock}*Math.abs(car.steerAngle);
+          document.querySelector('#settings-dialog').close();
+          renderer.resize();renderer.render(car,1300);
+        })()`});
+        const screenshot=await send('Page.captureScreenshot',{format:'png'});
+        const file=path.join(os.tmpdir(),`lpr-steering-${width}.png`);
+        fs.writeFileSync(file,Buffer.from(screenshot.data,'base64'));
+        console.log(file);
+      }
+    }
   } finally {
     socket?.close();browser.kill();
     // Chrome's temporary profile is intentionally left to the OS temp cleanup.

@@ -11,19 +11,19 @@
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
-    <link rel="stylesheet" href="styles.css?v=mobile-buttons-20261015" />
-    <link rel="stylesheet" href="3d.css?v=mobile-buttons-20261015" />
-    <script src="i18n.js?v=all-laps-20261015" defer></script>
-    <script src="shared/vehicle-spec.js?v=vehicle-dimensions-20261013" defer></script>
+    <link rel="stylesheet" href="styles.css?v=single-line-topbar-20261015" />
+    <link rel="stylesheet" href="3d.css?v=subtle-checkered-background-20261015" />
+    <script src="i18n.js?v=language-flags-20261015" defer></script>
+    <script src="shared/vehicle-spec.js?v=visual-steering-20261015" defer></script>
     <script src="campus.js?v=roadside-trees-20261014" defer></script>
     <script src="shared/track-document.js?v=asphalt-small-brush-20261013" defer></script>
     <script src="shared/terrain.js?v=asphalt-small-brush-20261013" defer></script>
     <script src="data/track-data.js?v=2" defer></script>
-    <script src="shared/track-objects.js?v=asphalt-small-brush-20261013" defer></script>
+    <script src="shared/track-objects.js?v=solid-tyre-stacks-20261015" defer></script>
     <script src="shared/track-sync.js?v=20261013" defer></script>
     <script src="sale.js?v=solid-shelves-long-checkout-20261013" defer></script>
-    <script src="renderer3d.js?v=skinnarila-20261015" defer></script>
-    <script src="vehicle.js?v=vehicle-dimensions-20261013" defer></script>
+    <script src="renderer3d.js?v=visual-steering-20261015" defer></script>
+    <script src="vehicle.js?v=visual-steering-20261015" defer></script>
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
     <script src="leaderboard.js?v=all-laps-20261015" defer></script>
@@ -36,10 +36,13 @@
       <header class="topbar">
         <img class="logo" src="assets/lpr-logo.jpg" alt="LPR Motorsport Formula Student" />
         <div class="topbar-title"><span>FORMULA STUDENT</span><strong>SKINNARILA GRAND PRIX</strong></div>
-        <select id="language-select" aria-label="Kieli / Language"><option value="fi">FI</option><option value="en">EN</option></select>
         <button id="sound-button" class="icon-button" type="button" aria-label="Äänet: päällä" aria-pressed="true">♫<span>Äänet: päällä</span></button>
         <button id="leaderboard-button" class="icon-button" type="button" aria-label="Tuloslista">🏆</button>
         <button id="restart-button" class="icon-button" type="button" aria-label="Aloita uudelleen">↺ <span>Aloita uudelleen</span></button>
+        <div class="language-switcher" role="group" aria-label="Kieli / Language">
+          <button type="button" data-language="fi" aria-label="Suomi" aria-pressed="true" title="Suomi" lang="fi"><svg viewBox="0 0 36 22" aria-hidden="true"><path fill="#fff" d="M0 0h36v22H0z"/><path fill="#003580" d="M10 0h6v22h-6zM0 8h36v6H0z"/></svg></button>
+          <button type="button" data-language="en" aria-label="English" aria-pressed="false" title="English" lang="en"><svg viewBox="0 0 60 30" aria-hidden="true"><path fill="#012169" d="M0 0h60v30H0z"/><path stroke="#fff" stroke-width="6" d="m0 0 60 30m0-30L0 30"/><path fill="#c8102e" d="M0 0 30 15h-4.472L0 2.236zM60 0 30 15v-2.236L55.528 0zM60 30 30 15h4.472L60 27.764zM0 30 30 15v2.236L4.472 30z"/><path stroke="#fff" stroke-width="10" d="M30 0v30M0 15h60"/><path stroke="#c8102e" stroke-width="6" d="M30 0v30M0 15h60"/></svg></button>
+        </div>
       </header>
 
       <section class="game-shell" aria-label="Ajopeli">
@@ -73,8 +76,14 @@
 
     <dialog id="settings-dialog" aria-labelledby="leaderboard-title">
       <div class="dialog-head">
-        <div class="race-heading"><span class="race-flag" aria-hidden="true"></span><h2 id="leaderboard-title">SKINNARILA<br>GRAND PRIX</h2><p class="race-eyebrow">LPR MOTORSPORT · TIME ATTACK</p></div>
+        <div class="race-heading"><h2 id="leaderboard-title">SKINNARILA<br>GRAND PRIX</h2><p class="race-eyebrow">LPR MOTORSPORT · TIME ATTACK</p></div>
+        <div class="dialog-actions">
+        <div class="language-switcher" role="group" aria-label="Kieli / Language">
+          <button type="button" data-language="fi" aria-label="Suomi" aria-pressed="true" title="Suomi" lang="fi"><svg viewBox="0 0 36 22" aria-hidden="true"><path fill="#fff" d="M0 0h36v22H0z"/><path fill="#003580" d="M10 0h6v22h-6zM0 8h36v6H0z"/></svg></button>
+          <button type="button" data-language="en" aria-label="English" aria-pressed="false" title="English" lang="en"><svg viewBox="0 0 60 30" aria-hidden="true"><path fill="#012169" d="M0 0h60v30H0z"/><path stroke="#fff" stroke-width="6" d="m0 0 60 30m0-30L0 30"/><path fill="#c8102e" d="M0 0 30 15h-4.472L0 2.236zM60 0 30 15v-2.236L55.528 0zM60 30 30 15h4.472L60 27.764zM0 30 30 15v2.236L4.472 30z"/><path stroke="#fff" stroke-width="10" d="M30 0v30M0 15h60"/><path stroke="#c8102e" stroke-width="6" d="M30 0v30M0 15h60"/></svg></button>
+        </div>
         <button id="close-settings" class="icon-button close" type="button" aria-label="Sulje tuloslista" hidden><span aria-hidden="true">×</span> Takaisin peliin</button>
+        </div>
       </div>
       <section id="leaderboard-panel" class="leaderboard-panel" aria-label="Tuloslista">
         <div id="leaderboard-podium" class="leaderboard-podium" aria-label="Kolme parasta">

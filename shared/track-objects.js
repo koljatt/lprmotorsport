@@ -247,17 +247,20 @@ window.LPRTrackObjects = (() => {
       }
       if(o.type==='tyreWall') {
         const count=Math.max(1,Math.ceil(t.w/7.2)),radiusX=Math.min(3.6,t.w/2);
+        const layers=4,layerHeight=t.h/layers;
+        // Closed tyre cross-section with a tread, shoulders and centre hole.
+        // Flat sidewalls touch the next layer; widely spaced thin tori left
+        // a large see-through gap across the middle of the entire wall.
+        const profile=[[1.7,0],[3.15,0],[3.6,.16],[3.6,.84],[3.15,1],[1.7,1],[1.7,0]];
         for(let i=0;i<count;i++) {
           const center=count===1?0:-t.w/2+radiusX+i*(t.w-2*radiusX)/(count-1);
-          for(let layer=0;layer<2;layer++) {
-            const base=layer*7.6;
-            for(let major=0;major<16;major++) for(let minor=0;minor<8;minor++) {
-              const a=major*Math.PI/8,b=(major+1)*Math.PI/8,u=minor*Math.PI/4,v=(minor+1)*Math.PI/4;
-              const point=(around,section)=>{
-                const radius=2.65+Math.cos(section)*.95;
-                return p(center+radius*Math.cos(around)*radiusX/3.6,base+2.2+Math.sin(section)*.95,radius*Math.sin(around));
-              };
-              quad(point(a,u),point(b,u),point(b,v),point(a,v),t.color.map(value=>value*(minor===3?1.15:1)));
+          for(let layer=0;layer<layers;layer++) {
+            for(let major=0;major<16;major++) for(let ring=0;ring<profile.length-1;ring++) {
+              const a=major*Math.PI/8,b=(major+1)*Math.PI/8;
+              const [radius,height]=profile[ring],[nextRadius,nextHeight]=profile[ring+1];
+              const point=(around,r,h)=>p(center+r*Math.cos(around)*radiusX/3.6,(layer+h)*layerHeight,r*Math.sin(around));
+              quad(point(a,radius,height),point(b,radius,height),point(b,nextRadius,nextHeight),point(a,nextRadius,nextHeight),
+                t.color.map(value=>value*(ring===5?.6:ring===2?1:1.15)));
             }
           }
         }

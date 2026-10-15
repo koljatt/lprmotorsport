@@ -227,7 +227,7 @@
     drawBrush();
   }
   function drawObject(o,i){
-    const t=api.types[o.type],size=objectSize(o),w=isWall(o.type)?size.w*o.scale:Math.max(size.w*o.scale,10/zoom),d=Math.max(size.d*o.scale,isWall(o.type)?3/zoom:10/zoom);
+    const t=api.types[o.type],size=objectSize(o),w=isWall(o.type)?size.w*o.scale:Math.max(size.w*o.scale,10/zoom),d=isWall(o.type)?size.d*o.scale:Math.max(size.d*o.scale,10/zoom);
     ctx.save();ctx.translate(o.x,o.y);ctx.rotate(o.angle);
     if(o.type==='hill'){
       for(const ring of [1,.75,.5,.25]){
@@ -244,21 +244,25 @@
       ctx.beginPath();asphaltPath(o);
       ctx.fillStyle=`rgb(${t.color.map(c=>Math.round(c*255)).join(',')})`;ctx.fill();
     } else if(o.type==='barrier') {
-      const postWidth=Math.min(w,Math.max(1.35*o.scale,1.5/zoom)),postHeight=d*.78,railHeight=Math.max(3/zoom,d*.38);
+      // Top-down footprint of the posts, brackets and both corrugated beams
+      // in track-objects.js. Keep world dimensions independent of map zoom.
       const postCount=Math.max(2,Math.ceil(size.w/20));
       ctx.fillStyle='#4b5357';
       for(let i=0;i<postCount;i++){
-        const x=-w/2+postWidth/2+i*(w-postWidth)/(postCount-1);
-        ctx.fillRect(x-postWidth/2,-postHeight*.28,postWidth,postHeight);
+        const inset=Math.max(0,size.w/2-1.2),x=Math.max(-inset,Math.min(inset,-size.w/2+i*size.w/(postCount-1)))*o.scale;
+        const postWidth=Math.min(1.35,size.w)*o.scale,bracketWidth=Math.min(2.4,size.w)*o.scale;
+        ctx.fillRect(x-postWidth/2,-.675*o.scale,postWidth,1.35*o.scale);
+        ctx.fillRect(x-bracketWidth/2,-1.1*o.scale,bracketWidth,2.2*o.scale);
       }
+      const inner=(size.d*.24-.55)*o.scale,beamWidth=d/2-inner;
       ctx.fillStyle='#aeb6b8';
-      ctx.fillRect(-w/2,-railHeight*.34,w,railHeight*.68);
-      ctx.strokeStyle='#737d80';ctx.lineWidth=Math.max(1/zoom,railHeight*.13);
-      for(let y=-railHeight*.25;y<=railHeight*.25;y+=railHeight*.25) {
+      for(const side of [-1,1]){
+        ctx.fillRect(-w/2,side<0?-d/2:inner,w,beamWidth);
+        const highlightWidth=.35*o.scale;
+        ctx.strokeStyle='#e0e3e2';ctx.lineWidth=highlightWidth;
+        const y=side*(d/2-highlightWidth/2);
         ctx.beginPath();ctx.moveTo(-w/2,y);ctx.lineTo(w/2,y);ctx.stroke();
       }
-      ctx.strokeStyle='#e0e3e2';ctx.lineWidth=Math.max(1/zoom,railHeight*.08);
-      ctx.beginPath();ctx.moveTo(-w/2,-railHeight*.31);ctx.lineTo(w/2,-railHeight*.31);ctx.stroke();
     } else if(api.isScene(o.type)) {
       ctx.fillStyle=`rgb(${t.color.map(c=>Math.round(c*255)).join(',')})`;
       if(o.type==='person'||o.type==='pool'){
@@ -268,12 +272,12 @@
       ctx.rotate(-o.angle);ctx.fillStyle='#fff';ctx.font=`${11/zoom}px system-ui`;
       ctx.fillText(o.type==='person'?`${o.personId+1}`:t.name,0,-d/2-5/zoom);
     } else if(o.type==='tyreWall') {
-      const count=Math.max(1,Math.ceil(size.w/7.2)),radius=Math.min(3.6,size.w/2)*o.scale;
+      const count=Math.max(1,Math.ceil(size.w/7.2)),radius=Math.min(3.6,size.w/2)*o.scale,depth=3.6*o.scale;
       ctx.fillStyle='#202322';ctx.strokeStyle='#646967';ctx.lineWidth=Math.min(radius*.25,1/zoom);
       for(let i=0;i<count;i++){
         const x=count===1?0:-w/2+radius+i*(w-2*radius)/(count-1);
-        ctx.beginPath();ctx.arc(x,0,radius,0,Math.PI*2);ctx.fill();ctx.stroke();
-        ctx.beginPath();ctx.arc(x,0,radius*.48,0,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.ellipse(x,0,radius,depth,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+        ctx.beginPath();ctx.ellipse(x,0,radius*.48,depth*.48,0,0,Math.PI*2);ctx.stroke();
       }
     } else if(o.type==='pier') {
       ctx.fillStyle='#8c5d32';
@@ -299,10 +303,6 @@
     } else {
       ctx.fillStyle=`rgb(${t.color.map(c=>Math.round(c*255)).join(',')})`;
       ctx.fillRect(-w/2,-d/2,w,d);
-    }
-    if(o.type==='tyreWall') {
-      ctx.strokeStyle='#555';ctx.lineWidth=2/zoom;
-      for(let x=-w/2+5;x<w/2;x+=10){ctx.beginPath();ctx.arc(x,0,Math.min(d*.38,3.8),0,Math.PI*2);ctx.stroke();}
     }
     if(o.type==='building'){ctx.strokeStyle='#9a998e';ctx.lineWidth=2/zoom;ctx.strokeRect(-w/2+5,-d/2+5,w-10,d-10);}
     if(!['lake','asphalt','hill','barrier','tyreWall'].includes(o.type)||(i===selected&&i>=0&&!drawingStroke())){

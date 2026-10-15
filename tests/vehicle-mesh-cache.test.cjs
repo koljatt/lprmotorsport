@@ -66,6 +66,22 @@ for(const [index,state] of [
     assert(compared>0);
   }
 }
+// Inspect rendered front-tyre bases at full lock, independent of the geometry helper.
+for(const direction of [-1,1]) {
+  const rack=direction*context.window.LPRVehicleSpec.maxRoadWheelAngle;
+  renderer.draws=[];
+  renderer.drawWheels({...car,steerAngle:rack},190);
+  const front=renderer.draws.slice(2,6).filter((_,i)=>i%2===0).map(draw=>{
+    const right=draw.uniforms.meshRight;
+    return Math.atan2(-right[0],right[2]);
+  });
+  assert.equal(front.length,2);
+  assert(direction>0 ? Math.abs(front[1])>Math.abs(front[0]) : Math.abs(front[0])>Math.abs(front[1]),
+    'Rendered inside tyre turns more than the outside tyre');
+  assert(Math.abs(context.window.LPRVehicleSpec.wheelbase/Math.tan(front[0])-
+    context.window.LPRVehicleSpec.wheelbase/Math.tan(front[1])-context.window.LPRVehicleSpec.trackWidth)<1e-10,
+    'Rendered tyre axes share the turn centre');
+}
 renderer.drawWheels({...car,damage:.3,impactSide:-1},200);
 assert.equal(renderer.deleted.length,20,'Damage disposes all superseded GPU buffers');
 assert.notEqual([...renderer.vehicleParts.values()][0],initialParts[0]);

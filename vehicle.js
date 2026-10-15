@@ -14,16 +14,22 @@ window.VehicleDynamics = class VehicleDynamics {
       rearCorneringStiffness: 14000 * (spec.mass / 275) ** .94,  // N/rad, combined rear axle
       roadGrip: 1.55,
       grassGrip: 0.58,
-      peakDriveForce: 1850,     // N
-      peakPower: 60000,         // W
+      drivetrain: spec.drivetrain, // two driven rear wheels; axle forces combined below
+      motorTorque: spec.motorTorque, // Nm at the motor, before final drive
+      finalDriveRatio: spec.finalDriveRatio, // unconfirmed estimate
+      drivetrainEfficiency: spec.drivetrainEfficiency, // unconfirmed estimate
+      peakDriveForce: spec.motorTorque * spec.finalDriveRatio * spec.drivetrainEfficiency / (spec.tyreDiameter / 2), // N at tyres
+      peakPower: Math.min(spec.motorPower, spec.maxBatteryPower * spec.motorInverterEfficiency) * spec.drivetrainEfficiency, // W at tyres, electrical input capped first
+      maxSpeed: spec.maxMotorRpm * 2 * Math.PI / 60 / spec.finalDriveRatio * (spec.tyreDiameter / 2), // m/s, motor rpm limit
       peakBrakeForce: 4500,     // N, tire grip limits the delivered braking force
       coastBrakeForce: 420,     // N, game-tuned lift-off braking with stable axle distribution
       tractionControlEnabled: true,
-      maxRoadWheelAngle: 0.36,  // rad
+      maxRoadWheelAngle: spec.maxRoadWheelAngle, // equivalent bicycle angle, rad
       assistedSteeringGrip: 0.9, // fraction of available grip requested at full assisted steering
       dragArea: 0.75,           // CdA, m²
       rollingResistance: 45,    // N
       suspension: {
+        type: spec.suspensionType, // pushrod linkage; forces below are wheel-equivalent
         unsprungMass: 8,        // kg per corner; provisional values throughout
         wheelRate: 28000,       // N/m at the wheel (includes motion ratio)
         bumpDamping: 900, reboundDamping: 1400, // N s/m at the wheel
@@ -273,12 +279,12 @@ window.VehicleDynamics = class VehicleDynamics {
       Math.min(frontLimit, totalBrake * frontBrakeBias));
     let frontFx = -frontBrakeForce;
     const rearBrakeForce = totalBrake - frontBrakeForce;
-    // Power is provisionally sent to the rear axle.
+    // Confirmed rear-wheel drive: only the rear axle receives motor torque.
     let rearFx = Math.max(-rearLimit, Math.min(rearLimit, driveRequest - rearBrakeForce));
 
     if (speed < 1.5) {
       const ax = (frontFx + rearFx - drag - rolling) / p.mass+gradeForward;
-      state.vx = Math.max(0, Math.min(36, state.vx + ax * dt));
+      state.vx = Math.max(0, Math.min(p.maxSpeed, state.vx + ax * dt));
       state.vy *= Math.max(0, 1 - 6 * dt);
       state.yawRate = state.vx * Math.tan(state.steerAngle) / wheelbase;
       state.lateralG = state.vx * state.yawRate / gravity;
@@ -304,7 +310,7 @@ window.VehicleDynamics = class VehicleDynamics {
       const vxDot = (frontBodyFx + rearFx - drag - rolling) / p.mass + state.vy * state.yawRate+gradeForward;
       const vyDot = (frontBodyFy + rearFy) / p.mass - state.vx * state.yawRate+gradeRight;
       const yawDot = (p.frontAxle * frontBodyFy - p.rearAxle * rearFy) / p.yawInertia;
-      state.vx = Math.max(0, Math.min(36, state.vx + vxDot * dt));
+      state.vx = Math.max(0, Math.min(p.maxSpeed, state.vx + vxDot * dt));
       state.vy = Math.max(-14, Math.min(14, state.vy + vyDot * dt));
       state.yawRate = Math.max(-3, Math.min(3, state.yawRate + yawDot * dt));
       state.lateralG = (frontBodyFy + rearFy) / (p.mass * gravity);

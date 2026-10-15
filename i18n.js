@@ -202,15 +202,18 @@
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (node.parentElement.closest('script, style, #language-select')) continue;
+      if (node.parentElement.closest('script, style, .language-switcher')) continue;
       const translated = t(node.nodeValue);
       if (translated !== node.nodeValue) node.nodeValue = translated;
     }
-    for (const element of document.querySelectorAll('[aria-label], meta[name="description"]')) {
-      const attribute = element.hasAttribute('aria-label') ? 'aria-label' : 'content';
-      element.setAttribute(attribute, t(element.getAttribute(attribute)));
+    for (const element of document.querySelectorAll('[aria-label], [placeholder], meta[name="description"]')) {
+      for (const attribute of ['aria-label', 'placeholder', 'content']) {
+        if (element.hasAttribute(attribute)) element.setAttribute(attribute, t(element.getAttribute(attribute)));
+      }
     }
-    document.querySelector('#language-select').value = language;
+    for (const button of document.querySelectorAll('[data-language]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.language === language));
+    }
   }
   window.LPRI18n = {
     t,
@@ -223,6 +226,8 @@
       refresh();
     }
   };
-  document.querySelector('#language-select').addEventListener('change', event => window.LPRI18n.setLanguage(event.target.value));
+  for (const button of document.querySelectorAll('[data-language]')) {
+    button.addEventListener('click', () => window.LPRI18n.setLanguage(button.dataset.language));
+  }
   refresh();
 })();

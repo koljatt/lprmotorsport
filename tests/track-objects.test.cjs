@@ -16,6 +16,24 @@ const tyreQuads=[];tyreContext.window.LPRTrackObjects.build({quad:(...args)=>tyr
 const tyrePoints=tyreQuads.flatMap(q=>q.slice(0,4));
 assert(Math.abs(Math.min(...tyrePoints.map(p=>p[2]))-3988.5)<1e-8);
 assert(Math.abs(Math.max(...tyrePoints.map(p=>p[2]))-4011.5)<1e-8);
+assert.equal(Math.min(...tyrePoints.map(p=>p[1])),0,'Tyre stacks must rest on the ground');
+assert.equal(Math.max(...tyrePoints.map(p=>p[1])),8,'Tyre stacks must match the declared wall height');
+// Cast horizontal sight lines through the first stack at every height.
+// A wall made of two floating tori passed footprint tests but exposed the
+// guardrail behind it through a broad empty band at driver eye height.
+function blocksSightLine(height){
+  const z=4000-23/2+3.6;
+  const hits=(a,b,c)=>{
+    const determinant=(b[1]-a[1])*(c[2]-a[2])-(b[2]-a[2])*(c[1]-a[1]);
+    if(Math.abs(determinant)<1e-10)return false;
+    const u=((height-a[1])*(c[2]-a[2])-(z-a[2])*(c[1]-a[1]))/determinant;
+    const v=((b[1]-a[1])*(z-a[2])-(b[2]-a[2])*(height-a[1]))/determinant;
+    return u>=-1e-8&&v>=-1e-8&&u+v<=1+1e-8;
+  };
+  return tyreQuads.some(([a,b,c,d])=>hits(a,b,c)||hits(a,c,d));
+}
+for(let height=.125;height<8;height+=.25)assert(blocksSightLine(height),`Tyre wall must hide objects behind the stack at height ${height}`);
+console.log('PASS: grounded tyre stacks with continuous opaque side coverage');
 const tyreBound=tyreContext.window.LPRCampus.obstacleBounds.at(-1);
 assert.equal(tyreBound.maxX-tyreBound.minX,23,'Collision footprint must use the saved segment length');
 assert.equal(tyreBound.impactMaterial,'tyres');

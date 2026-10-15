@@ -18,8 +18,8 @@ renderer.driverArm={complete:true,naturalWidth:1024,naturalHeight:1536};
 for(const [width,height] of [[360,450],[800,380],[1280,720]]) {
   renderer.width=width;renderer.height=height;
   renderer.canvas={getBoundingClientRect:()=>({left:25,top:40,width:width/2,height:height/2})};
-  for(const steer of [-1,0,1]) {
-    const car={steer,speed:10,lap:2,lapElapsedMs:65400,lateralG:-1.2,tireUse:.86,tcEnabled:true};
+  for(const steer of [-1,-.75,-.5,-.25,0,.25,.5,.75,1]) {
+    const car={steer,steerAngle:steer*context.window.LPRVehicleSpec.maxRoadWheelAngle,speed:10,lap:2,lapElapsedMs:65400,lateralG:-1.2,tireUse:.86,tcEnabled:true};
     const layout=renderer.steeringWheelLayout(car);
     const verticalExtent=layout.radius*(Math.hypot(.94*Math.sin(layout.angle),.64*Math.cos(layout.angle))+.08);
     assert(layout.y-verticalExtent>=0 && layout.y+verticalExtent<=height,'Wheel remains inside viewport at full lock');
@@ -64,7 +64,7 @@ for(const [width,height] of [[360,450],[800,380],[1280,720]]) {
 for(const side of [-1,1]) {
   const bends=[];
   for(let step=-10;step<=10;step++) {
-    const pose=renderer.driverArmPose(renderer.steeringWheelLayout({steer:step/10}),side);
+    const pose=renderer.driverArmPose(renderer.steeringWheelLayout({steerAngle:step/10*context.window.LPRVehicleSpec.maxRoadWheelAngle}),side);
     const joint=renderer.driverArmPoint(pose,.52,.36);
     assert(Math.hypot(joint.x-pose.wrist.x,joint.y-pose.wrist.y)<1e-12,'Wrist pivot stays connected');
     const before=renderer.driverArmPoint(pose,.52,.43-1e-7),after=renderer.driverArmPoint(pose,.52,.43+1e-7);
@@ -72,7 +72,22 @@ for(const side of [-1,1]) {
     if(bends.length) assert(Math.abs(pose.bend-bends.at(-1))<.12,'Pose changes continuously through a steering sweep');
     bends.push(pose.bend);
   }
-  assert(Math.max(...bends)-Math.min(...bends)>.1,'Steering changes the wrist and forearm pose');
+  const left=renderer.driverArmPose(renderer.steeringWheelLayout({steerAngle:-context.window.LPRVehicleSpec.maxRoadWheelAngle}),side);
+  const right=renderer.driverArmPose(renderer.steeringWheelLayout({steerAngle:context.window.LPRVehicleSpec.maxRoadWheelAngle}),side);
+  assert(Math.abs(left.baseAngle-right.baseAngle)>3,'Grip rotates to keep crossed forearms below the wheel');
+}
+
+const spec=context.window.LPRVehicleSpec;
+assert.equal(renderer.steeringWheelLayout({steer:1,steerAngle:0}).angle,0,'Wheel follows actual rack rather than requested input');
+assert.equal(renderer.steeringWheelLayout({steer:0,steerAngle:spec.maxRoadWheelAngle}).angle,spec.maxSteeringWheelAngle);
+for(let step=-100;step<=100;step++) {
+  const angle=step/100*spec.maxRoadWheelAngle;
+  const left=spec.roadWheelAngle(angle,-1),right=spec.roadWheelAngle(angle,1);
+  assert.equal(left,-spec.roadWheelAngle(-angle,1),'Ackermann geometry mirrors between turns');
+  if(step===0) {assert.equal(left,0);assert.equal(right,0);continue;}
+  assert(angle>0 ? right>left : left<right,'Inside wheel has greater lock');
+  assert(Math.abs(spec.wheelbase/Math.tan(left)-spec.wheelbase/Math.tan(right)-spec.trackWidth)<1e-10,
+    'Both wheel axes meet at the same turn centre');
 }
 
 const nodes=new Map(), events=new Map();
@@ -83,18 +98,19 @@ const element=id=>{
   return nodes.get(id);
 };
 const gameContext={
-  window: { LPRVehicleSpec: require('../shared/vehicle-spec.js'), matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(type,handler){if(!events.has(type)) events.set(type,[]);events.get(type).push(handler);},screen:{}},
+  URLSearchParams,
+  window: { location:{search:''}, LPRVehicleSpec: require('../shared/vehicle-spec.js'), matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(type,handler){if(!events.has(type)) events.set(type,[]);events.get(type).push(handler);},screen:{}},
   performance:{now:()=>1000},document:{querySelector:element,querySelectorAll:()=>[],addEventListener(){}},
   navigator:{},localStorage:{getItem:()=>null},setTimeout(){},clearTimeout(){},requestAnimationFrame(){},
   ResizeObserver:class{observe(){}},
-  LPRRenderer3D:class{constructor(){this.saunaStop={x:900,y:650};}resize(){}},
+  LPRRenderer3D:class{constructor(){this.saunaStop={x:900,y:650};}resize(){}updatePeople(){}},
   LPRTiltSteering:class{read(){return 0;}}
 };
 vm.createContext(gameContext);
 for(const file of ['audio.js','sauna.js','vehicle.js','campus.js','sale.js','timing.js']) vm.runInContext(source(file),gameContext);
 for(const name of ['LPRGameAudio','LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming']) gameContext[name]=gameContext.window[name];
-vm.runInContext(source('game.js').replace(/  reset\(\);\s+resize\(\);/,
-  'reset(); globalThis.test={get car(){return car},operateWheel,dynamics,update,reset,held}; resize();'),gameContext);
+vm.runInContext(source('game.js').replace('  openTestScene(window.location.search);',
+  '  globalThis.test={get car(){return car},operateWheel,dynamics,update,reset,held};'),gameContext);
 const game=gameContext.test;
 element('#wheel-page').click();assert.equal(game.car.wheelPage,1);
 element('#wheel-dim').click();assert.equal(game.car.wheelDim,true);

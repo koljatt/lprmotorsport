@@ -1716,7 +1716,8 @@ window.LPRRenderer3D = class LPRRenderer3D {
     const bodyForward = [Math.cos(car.angle),Math.sin(car.angle)];
     const bodyRight = [-bodyForward[1],bodyForward[0]];
     const pose=this.vehiclePose || {forward:[bodyForward[0],0,bodyForward[1]],right:[bodyRight[0],0,bodyRight[1]],up:[0,1,0]};
-    const steeredAngle = car.angle + (car.steerAngle || 0);
+    const visualSteerAngle = spec.visualRoadWheelAngle(car.steerAngle || 0);
+    const steeredAngle = car.angle + visualSteerAngle;
     const wheelForward = [Math.cos(steeredAngle),Math.sin(steeredAngle)];
     const axleDirection = [-wheelForward[1],wheelForward[0]];
     const units=1/spec.metresPerWorldUnit;
@@ -1955,7 +1956,7 @@ window.LPRRenderer3D = class LPRRenderer3D {
       const center=[car.x+bodyForward[0]*forward+bodyRight[0]*lateral,
         radius+wheelHeight,car.y+bodyForward[1]*forward+bodyRight[1]*lateral];
       const uprightPoint=height=>[center[0]-axleDirection[0]*side*1.2,height+wheelHeight,center[2]-axleDirection[1]*side*1.2];
-      const bentAngle=axle===0?steeredAngle+side*damage*.65:car.angle;
+      const bentAngle=axle===0?car.angle+spec.roadWheelAngle(visualSteerAngle,side)+side*damage*.65:car.angle;
       wheelForward[0]=Math.cos(bentAngle); wheelForward[1]=Math.sin(bentAngle);
       axleDirection[0]=-wheelForward[1]; axleDirection[1]=wheelForward[0];
       const point=(axial,rad,theta)=>[
@@ -2703,7 +2704,10 @@ window.LPRRenderer3D = class LPRRenderer3D {
 
   steeringWheelLayout(car) {
     const radius=Math.min(this.width*.25,this.height*.17,140);
-    return { x:this.width*.5, y:this.height-radius*.89-10, radius, angle:(car.steer || 0)*.52 };
+    const spec=window.LPRVehicleSpec;
+    const lock=spec.visualRoadWheelAngle(car.steerAngle || 0)/spec.maxVisualRoadWheelAngle;
+    // Leave room for the tall silhouette as the wheel passes through 90 degrees.
+    return { x:this.width*.5, y:this.height-radius*1.04-10, radius, angle:lock*spec.maxSteeringWheelAngle };
   }
 
   steeringWheelActionAt(car, clientX, clientY) {
@@ -2730,7 +2734,9 @@ window.LPRRenderer3D = class LPRRenderer3D {
     // Anchor the pinch point to the horizontal side of the wheel (9 and 3),
     // then turn the glove so the wrist descends from that side grip.
     const grip={x:width*(.35-.45),y:-.50+height*.13};
-    const baseAngle=.20;
+    // Rotate the grip about its pinch point as the arms cross. This keeps the
+    // forearms directed toward the elbows instead of rotating them upside down.
+    const baseAngle=.20-side*layout.angle*.85;
     const pose={width,height,wrist,grip,baseAngle,side,radius:layout.radius};
     const wheelWrist=this.driverArmWheelPoint(pose,wrist);
     const localX=wheelWrist.x,localY=wheelWrist.y;

@@ -7,6 +7,41 @@ const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js')
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8').replace(
   'const vxDot =', 'state.frontFx = frontFx; state.rearFx = rearFx; const vxDot ='), context);
 
+// Check delivered forces, not just stored motor ratings. Low speed is torque-limited;
+// high speed is power-limited. Front wheels receive no drive force.
+for (const speed of [2, 5, 10, 20, 30]) {
+  const dynamics = new context.window.VehicleDynamics();
+  const state = { x: 0, y: 0, angle: 0 };
+  dynamics.reset(state);
+  const suspension = dynamics.createSuspension(state);
+  for (const wheel of suspension.wheels) {
+    assert(Math.abs(wheel.load - 450 * 9.81 / 4) < 1e-8,
+      'Provisional 50/50 balance must give equal static corner loads');
+  }
+  state.vx = speed;
+  dynamics.step(state, { gas: 1, brake: 0, steer: 0 }, 1 / 90, 0);
+  const expectedForce = Math.min(140 * 6 * .95 / (.5207 / 2), 60000 * .95 / speed);
+  assert(Math.abs(state.frontFx) < 1e-10, 'The front axle must be undriven');
+  assert(Math.abs(state.rearFx - expectedForce) < 1e-8,
+    'Rear drive must respect both 140 Nm motor torque and 60 kW motor power');
+}
+// A higher requested motor rating must still obey the battery-output limit.
+const limitedContext = { window: { LPRVehicleSpec: {
+  ...context.window.LPRVehicleSpec, motorPower: 100000
+} } };
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../vehicle.js'), 'utf8'), limitedContext);
+assert.equal(new limitedContext.window.VehicleDynamics().parameters.peakPower, 80000 * .90 * .95);
+const straightModel = new context.window.VehicleDynamics();
+const straightState = { x: 0, y: 0, angle: 0 };
+straightModel.reset(straightState);
+const rpmSpeedLimit = 7000 * 2 * Math.PI / 60 / 6 * (.5207 / 2);
+for (let frame = 0; frame < 90 * 20; frame++) {
+  straightModel.step(straightState, { gas: 1, brake: 0, steer: 0 }, 1 / 90, 0);
+  assert(straightState.vx <= rpmSpeedLimit + 1e-8, 'Acceleration must respect the motor rpm limit');
+}
+assert(straightState.vx > rpmSpeedLimit * .99, 'The selected drivetrain must reach its geared top speed');
+console.log('PASS: 50/50 loads, rear-only 140 Nm / 60 kW drive and 80 kW battery cap');
+
 function corner(speed, steer, extraInput = {}) {
   const dynamics = new context.window.VehicleDynamics();
   const state = { x: 0, y: 0, angle: 0 };
@@ -39,7 +74,7 @@ assert(Math.abs(fast.state.lateralG) < 1.3, 'High-speed cornering must retain th
 assert(fast.radius < 17,
   'Full assisted steering at 54 km/h must negotiate a 17 m radius instead of pushing wide');
 const wheel = corner(3, 1, { analog: true, wheel: true });
-assert.equal(wheel.state.steerAngle, .36, 'Calibrated wheel input must retain direct full lock');
+assert.equal(wheel.state.steerAngle, context.window.LPRVehicleSpec.maxRoadWheelAngle, 'Calibrated wheel input must retain direct full lock');
 
 console.log('PASS: tight low-speed turns, symmetric steering, partial input, speed limiting and wheel input');
 
@@ -162,7 +197,7 @@ function poweredTurn(steer, analog = false, wheel = false) {
   const dynamics = new context.window.VehicleDynamics();
   const state = { x: 0, y: 0, angle: 0 };
   dynamics.reset(state);
-  state.vx = 30;
+  state.vx = 20; // below the motor rpm limit and power-limited terminal speed
   let greatestSlip = 0;
   for (let step = 0; step < 720; step++) {
     dynamics.step(state, { gas: 1, brake: 0, steer, analog, wheel }, 1 / 90, 0);
@@ -177,12 +212,12 @@ for (const analog of [false, true]) {
   const tight = poweredTurn(1, analog);
   const gentle = poweredTurn(.15, analog);
   assert(tight.state.speed > 17, 'Full steering must not impose the former automatic corner speed');
-  assert(gentle.state.speed > 30, 'Small steering corrections must retain straight-line acceleration');
+  assert(gentle.state.speed > 20, 'Small steering corrections must retain straight-line acceleration');
   assert(tight.greatestSlip < .1, 'Assisted turns must avoid persistent sideways drift');
   assert(tight.state.yawRate > .1, 'Powered cornering must retain a turning response');
   assert(Math.abs(tight.state.vx / tight.state.yawRate) > 17,
     'Excess entry speed must produce a wider turn instead of automatic braking into a tight corner');
 }
-assert(poweredTurn(0, true, true).state.speed > 30, 'Direct wheel driving must retain straight-line acceleration');
+assert(poweredTurn(0, true, true).state.speed > 20, 'Direct wheel driving must retain straight-line acceleration');
 for (const steer of [-1, 1]) poweredTurn(steer, true, true);
 console.log('PASS: no automatic braking in powered turns, wider fast corners and small corrections');

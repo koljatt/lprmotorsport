@@ -55,7 +55,7 @@ assert([...mesh].every(Number.isFinite));
 renderer.drawWheels({...state,vx:10},100);
 renderer.drawWheels({...state,vx:10},150);
 near(renderer.wheelPhase,.05*10/(20.5*.0254/2));
-// Keep the retained force estimate: a heavier car must accelerate more slowly.
+// With the same motor and gearing, a heavier car must accelerate more slowly.
 const accelerate=mass=>{
   const model=new context.window.VehicleDynamics();model.parameters.mass=mass;
   const car={x:0,y:0,angle:0};model.reset(car);

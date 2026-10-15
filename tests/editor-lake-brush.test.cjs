@@ -5,7 +5,7 @@ const documentApi=require('../shared/track-document.js');
 const {maxObjects,types,validate,onAsphaltObject,asphaltOutline}=documentApi;
 
 // Exercise the real editor event handlers with a small DOM/canvas adapter.
-function editor(objects=[],withSale=false,protocol='http:',withSites=false,withRoad=false){
+function editor(objects=[],withSale=false,protocol='http:',withSites=false,withRoad=false,recordDraws=false){
   const nodes=new Map(),windowEvents=new Map();
   const html=fs.readFileSync('tools/track-editor/editor.html','utf8');
   for(const [,id] of html.matchAll(/id="([^"]+)"/g)){
@@ -20,7 +20,7 @@ function editor(objects=[],withSale=false,protocol='http:',withSites=false,withR
   }
   const canvas=nodes.get('map'),captures=new Set(),drawn=[];
   Object.assign(canvas,{clientWidth:5200,clientHeight:4400,
-    getContext:()=>new Proxy({},{get:(_,name)=>(...args)=>{if(withSale)drawn.push([name,...args]);}}),
+    getContext:()=>new Proxy({},{get:(_,name)=>(...args)=>{if(withSale||recordDraws)drawn.push([name,...args]);}}),
     getBoundingClientRect:()=>({left:0,top:0}),
     setPointerCapture:id=>captures.add(id),
     hasPointerCapture:id=>captures.has(id),
@@ -72,6 +72,39 @@ function editor(objects=[],withSale=false,protocol='http:',withSites=false,withR
 }
 
 (async()=>{
+  // Compare the editor's actual canvas shapes with the game's generated mesh.
+  // A thin centre-line symbol used to hide the guardrail's two wide beams.
+  for(const [angle,scale,length] of [[0,1,40],[Math.PI/2,2,23],[Math.PI/4,.2,1],[-.7,5,50]]){
+    const rail={type:'barrier',x:2500,y:2200,angle,scale,length};
+    const tyres={...rail,type:'tyreWall',x:rail.x-Math.sin(angle)*8*scale,y:rail.y+Math.cos(angle)*8*scale};
+    const plan=editor([rail,tyres],false,'http:',false,false,true);
+    const game={window:{LPRVehicleSpec:require('../shared/vehicle-spec.js'),LPRTrackData:{version:1,objects:[rail,tyres]}}};
+    vm.createContext(game);
+    for(const file of ['campus.js','shared/track-document.js','shared/track-objects.js'])vm.runInContext(fs.readFileSync(file,'utf8'),game);
+    const meshes=[];
+    game.window.LPRTrackObjects.build({beginObject:()=>meshes.push([]),quad:(...q)=>meshes.at(-1).push(...q.slice(0,4))});
+    const gameBounds=[];
+    for(const [index,o] of [rail,tyres].entries()){
+      const start=plan.drawn.findLastIndex(call=>call[0]==='translate'&&call[1]===o.x&&call[2]===o.y);
+      assert(start>=0);
+      const end=plan.drawn.findIndex((call,i)=>i>start&&call[0]==='restore');
+      const points=[];
+      for(const [method,x,y,w,d] of plan.drawn.slice(start+1,end)){
+        if(method==='fillRect')points.push([x,y],[x+w,y+d]);
+        if(method==='ellipse')points.push([x-w,y-d],[x+w,y+d]);
+      }
+      const bounds=ps=>[Math.min(...ps.map(p=>p[0])),Math.max(...ps.map(p=>p[0])),Math.min(...ps.map(p=>p[1])),Math.max(...ps.map(p=>p[1]))];
+      const drawnBounds=bounds(points);
+      const meshBounds=bounds(meshes[index].map(p=>{
+        const dx=p[0]-o.x,dy=p[2]-o.y;
+        return [dx*Math.cos(angle)+dy*Math.sin(angle),-dx*Math.sin(angle)+dy*Math.cos(angle)];
+      }));
+      drawnBounds.forEach((value,i)=>assert(Math.abs(value-meshBounds[i])<1e-8,`${o.type}: editor and game must show the same footprint (angle ${angle}, scale ${scale}, length ${length})`));
+      gameBounds.push(meshBounds);
+    }
+    assert(gameBounds[0][3]<8*scale+gameBounds[1][2],'Walls placed side by side in the editor must stay separate in the game');
+  }
+  console.log('PASS: editor and game wall footprints agree for adjacent, rotated, scaled and short segments');
   const protectedRoad=editor([],false,'http:',false,true);protectedRoad.asphalt();
   protectedRoad.nodes.get('asphalt-width').value='4';
   protectedRoad.pointer('pointerdown',1200,1000);protectedRoad.pointer('pointerup',1200,1000);
