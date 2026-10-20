@@ -289,3 +289,13 @@ Pelin voimansiirron suunnittelutavoite on yksi EMRAX 208 -luokan sähkömoottori
 Pelimallin alustavat arviot ovat yksivaihteinen 6:1-välitys, mekaanisen voimansiirron 95 % hyötysuhde ja moottorin sekä invertterin yhteinen 90 % hyötysuhde. [FSG 2026 -sääntöjen](https://www.formulastudent.de/fileadmin/user_upload/all/2026/rules/FS-Rules_2026_v1.1.pdf#page=82) EV2.2.1 rajoittaa akuston ulostulotehon 80 kW:iin. Malli rajoittaa tehon tämän mukaan ennen mekaanisia häviöitä: 60 kW:n moottoriteho tarvitsee arviolta 66,7 kW akustolta ja tuottaa 57 kW renkaille. Vetovoima on enintään noin 3065 N yhteensä taka-akselilla ennen pitorajoituksia. Yksinkertainen vääntö-/tehoraja vähentää vääntöä nopeuden kasvaessa; 7000 r/min kierroslukuraja ja rengaskoko rajoittavat nopeuden noin 114,5 km/h:iin. Todellinen toteutettavuus edellyttää sopivan moottorin, invertterin, akun, välityksen ja jäähdytyksen mitoitusta. Sääntöjen muita sähkö- ja turvallisuusvaatimuksia ei validoida pelissä.
 
 Jousitustyyppi on vahvistettu push rod. Nykyinen kuvamalli sisältää työntötangot ja korin sisäpuoliset jousi-vaimenninelementit; fysiikka käyttää pyörälle muunnettuja jousi- ja vaimennusarvoja. Tarkkaa kinematiikkaa, jousijäykkyyksiä, vaimennuksia tai liikesuhdetta ei ole annettu, joten ne ovat edelleen arvioita (liikesuhde 0,70). Myös painopisteen korkeus 290 mm, jarruvoima 4500 N ja pito ovat pelimallin arvioita. Kokonaiskorkeus ei määritä painopisteen korkeutta. Hitausmomentit ja renkaiden sivuttaisjäykkyydet on suhteutettu massaan ja mittoihin. Renkaiden koko vastaa annettua nimelliskokoa; tarkat asennetut mitat ja rengasvoimat vaativat rengasdataa. Tarkistukset: `npm run test:physics`, `node tests/vehicle-dimensions.test.cjs`, `node tests/braking.test.cjs` ja `node tests/kerb.test.cjs`.
+
+## Pelianalytiikka
+
+Aloitusnäkymän vapaaehtoinen valinta sallii nimimerkkiin yhdistetyn
+pelihistorian tallennuksen 90 päiväksi. Ilman valintaa analytiikkaa ei lähetetä.
+Tiedot-linkistä voi lukea lisätietoja ja poistaa oman analytiikkaprofiilin;
+samassa kohdassa valinnan poistaminen lopettaa keräyksen.
+Ylläpidon suojattu raportti ja palvelimen käyttöönotto:
+[cloudflare/README.md](cloudflare/README.md#vapaaehtoinen-pelianalytiikka-20102026).
+Testit: `npm run test:analytics`.

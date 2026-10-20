@@ -49,6 +49,7 @@
     }
     token = chooseIdentity(name);
     activeName = name;
+    window.LPRAnalytics?.identify(name);
     nickname.value = name;
     nickname.readOnly = true;
     startButton.hidden = true;
