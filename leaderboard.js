@@ -2,6 +2,7 @@
   'use strict';
   const endpoint = 'https://lpr-leaderboard.panu-musakka.workers.dev';
   const version = 'lut-20261011-v3';
+  const protocol = 'timed-v1';
   const t = (text, values) => window.LPRI18n?.t(text, values) ?? text;
   const nickname = document.querySelector('#leaderboard-name');
   const status = document.querySelector('#leaderboard-status');
@@ -17,6 +18,7 @@
   const newToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
   let token, activeName = '', rememberedName = '', legacyToken;
   let pending = [], sending = null;
+  let activeLap = null;
   const pendingKey = () => `lpr-pending-laps:${token}`;
   function savePending() {
     try { localStorage.setItem(pendingKey(), JSON.stringify(pending)); } catch {}
@@ -56,7 +58,7 @@
     window.LPRAnalytics?.identify(name);
     try {
       const saved = JSON.parse(localStorage.getItem(pendingKey()) ?? '[]');
-      if (Array.isArray(saved)) pending = saved.filter(lap => lap?.version === version &&
+      if (Array.isArray(saved)) pending = saved.filter(lap => lap?.version === version && lap.protocol === protocol &&
         typeof lap.nickname === 'string' && lap.nickname.normalize('NFC').toLowerCase() === name.toLowerCase() &&
         validToken(lap.lapId) && Number.isSafeInteger(lap.lapMs) && lap.lapMs > 5000 &&
         Array.isArray(lap.sectors) && lap.sectors.length === 3 && lap.sectors.every(n => Number.isSafeInteger(n) && n > 0) &&
@@ -73,7 +75,11 @@
   dialog.addEventListener('cancel', event => { if (!activeName) event.preventDefault(); });
   async function api(path, options) {
     const response = await fetch(endpoint + path, { ...options, signal: AbortSignal.timeout(10000) });
-    if (!response.ok) throw new Error(`Leaderboard HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(`Leaderboard HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
     return response.json();
   }
   async function refresh() {
@@ -112,15 +118,31 @@
           while (pending.length) {
             const lap = pending[0];
             status.textContent = t('Lähetetään kierrosaikaa…');
-            const result = await api('/api/laps', {
-              method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify(lap)
-            });
+            let result;
+            try {
+              result = await api('/api/laps', {
+                method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify(lap)
+              });
+            } catch (error) {
+              if ([400,401,403,404,409,410,413,415,422,428].includes(error.status)) {
+                pending.shift(); savePending();
+                status.textContent = t('Kierrosta ei hyväksytty verkkotuloslistalle. Paikallinen aika säilyy.');
+                continue;
+              }
+              throw error;
+            }
             if (result.mode !== 'laps') {
               status.textContent = t('Verkkotuloslista ei vielä tue useita kierroksia samalta kuljettajalta.');
               return;
             }
-            if (result.lapMs !== lap.lapMs || !Number.isSafeInteger(result.rank) || result.rank < 1) throw new Error('Invalid lap response');
+            if (result.protection !== protocol || result.lapMs !== lap.lapMs) throw new Error('Invalid lap response');
+            if (result.moderation === 'quarantined' || result.moderation === 'hidden') {
+              pending.shift(); savePending();
+              status.textContent = t('Kierros odottaa ylläpidon tarkistusta eikä näy vielä tuloslistalla.');
+              continue;
+            }
+            if (result.moderation !== 'approved' || !Number.isSafeInteger(result.rank) || result.rank < 1) throw new Error('Invalid lap response');
             pending.shift();
             savePending();
             // The server decides whether this is a new record. A cached list may be stale.
@@ -139,6 +161,20 @@
     window.addEventListener('online', flushPending);
     window.LPRLeaderboard = {
       refresh,
+      cancelLap() { activeLap = null; },
+      startLap() {
+        if (!token || !activeName) return Promise.resolve(null);
+        const lap = { requestId: newToken(), nickname: activeName };
+        activeLap = lap;
+        lap.ticket = api('/api/laps/start', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ version, nickname: lap.nickname, requestId: lap.requestId })
+        }).then(data => {
+          if (data.mode !== protocol || !validToken(data.lapId)) throw new Error('Invalid lap start');
+          return data.lapId;
+        }).catch(() => null);
+        return lap.ticket;
+      },
       get requiresName() { return !activeName; },
       beginSession() {
         if (activeName) return;
@@ -151,6 +187,8 @@
         refresh();
       },
       async submit(lapMs, sectors) {
+        const started = activeLap;
+        activeLap = null;
         const name = activeName;
         if (!token || !validName(name)) {
           status.textContent = t('Valitse nimimerkki tuloslistasta ennen seuraavaa kierrosta.');
@@ -162,7 +200,12 @@
         const elapsed = Math.round(lapMs);
         rounded[2] += elapsed - rounded.reduce((a, b) => a + b, 0);
         if (!rounded.every(n => Number.isSafeInteger(n) && n > 0) || !Number.isSafeInteger(elapsed) || elapsed <= 5000) return;
-        pending.push({ version, nickname: name, lapId: newToken(), lapMs: elapsed, sectors: rounded });
+        const lapId = started && await started.ticket;
+        if (!lapId || started.nickname !== name) {
+          status.textContent = t('Kierros tallentui vain paikallisesti: verkkokierroksen aloitusta ei vahvistettu.');
+          return;
+        }
+        pending.push({ version, protocol, nickname: name, lapId, lapMs: elapsed, sectors: rounded });
         savePending();
         await flushPending();
       }

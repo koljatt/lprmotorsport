@@ -2,6 +2,9 @@
 (() => {
   'use strict';
   const english = {
+  "Kierrosta ei hyväksytty verkkotuloslistalle. Paikallinen aika säilyy.": "The lap was not accepted for the online leaderboard. Your local time is preserved.",
+  "Kierros odottaa ylläpidon tarkistusta eikä näy vielä tuloslistalla.": "Your lap is awaiting review and is not yet visible on the leaderboard.",
+  "Kierros tallentui vain paikallisesti: verkkokierroksen aloitusta ei vahvistettu.": "The lap was saved locally only: its online start was not confirmed.",
   "Äänet: päällä": "Sound: on",
   "Äänet: pois": "Sound: off",
   "Tuloslista": "Leaderboard",
