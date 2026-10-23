@@ -20,7 +20,7 @@ let clock=1000;
 vm.createContext(ctx);
 for(const file of ['audio.js','sauna.js','vehicle.js','campus.js','sale.js','timing.js'])vm.runInContext(read(file),ctx);
 for(const name of ['LPRGameAudio','LPRCampus','LPRSaunaLife','VehicleDynamics','LPRLapTiming'])ctx[name]=ctx.window[name];
-const source=read('game.js').replace('  reset();\n  openTestScene',
+const source=read('game.js').replace(/  reset\(\);\r?\n  openTestScene/,
  '  globalThis.test={get car(){return car},held,update,dynamics,reset,showSector,readInput,toggleSauna,toggleSale,togglePool};\n  reset();\n  openTestScene');
 ctx.window.LPRLeaderboard.beginSession(); // leaderboard.js runs before game.js.
 vm.runInContext(source,ctx);const game=ctx.test,dialog=element('#settings-dialog');

@@ -6,6 +6,8 @@
   "Äänet: pois": "Sound: off",
   "Tuloslista": "Leaderboard",
   "Kuljettaja": "Driver",
+  "Kymmenen nopeinta kierrosta. Sama kuljettaja voi saada useita sijoituksia.": "The ten fastest laps. One driver can hold multiple places.",
+  "Kierrosaika odottaa lähetystä. Yritä uudelleen painamalla Päivitä tuloslista.": "Your lap is waiting to be submitted. Press Refresh leaderboard to retry.",
   "UUSI RATAENNÄTYS": "NEW TRACK RECORD",
   "Kolme parasta": "Top three",
   "OMA KIERROKSESI": "YOUR LAP",

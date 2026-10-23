@@ -1,7 +1,8 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../leaderboard.js'),'utf8');
 function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true,rank:2,lapMs:12346,bestMs:12346,record:false}) {
-  const nodes=new Map(),calls=[],celebrations=[];
+  const nodes=new Map(),calls=[],celebrations=[],handlers=new Map();
+  const network={offline};
   const node=id=>{
     if(!nodes.has(id)) {
       const handlers=new Map();let text='';
@@ -14,15 +15,15 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
     }
     return nodes.get(id);
   };
-  const context={window:{LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)}},crypto:require('node:crypto').webcrypto,AbortSignal,
+  const context={window:{addEventListener:(type,fn)=>handlers.set(type,fn),LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)}},crypto:require('node:crypto').webcrypto,AbortSignal,
     localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},
     document:{querySelector:node,createElement:()=>({textContent:''})},
-    async fetch(url,options){calls.push({url,options});if(offline)throw new Error('offline');
+    async fetch(url,options){calls.push({url,options});if(network.offline)throw new Error('offline');
       return {ok:true,json:async()=>url.endsWith('/api/laps')?lapResult:
         {version:'lut-20261011-v3',results:Array.from({length:20},(_,i)=>({nickname:i?'Driver '+i:'<script>',lap_ms:12346+i*1000}))}};
     }};
   vm.createContext(context);vm.runInContext(source,context);
-  return {board:context.window.LPRLeaderboard,node,calls,storage,celebrations};
+  return {board:context.window.LPRLeaderboard,node,calls,storage,celebrations,network,handlers};
 }
 (async()=>{
   const app=setup(),{board,node,calls,storage}=app;
@@ -84,6 +85,22 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
   offline.node('#leaderboard-name').value='Offline';offline.node('#leaderboard-start-form').trigger('submit');
   assert(!offline.board.requiresName,'Unavailable leaderboard does not block playing');
   await offline.board.submit(12345.6,[3000.4,3000.4,6344.8]);
-  assert.match(offline.node('#leaderboard-status').textContent,/epäonnistui/);
+  assert.match(offline.node('#leaderboard-status').textContent,/odottaa lähetystä/);
+  const queuedPost=offline.calls.find(c=>c.options?.method==='POST');
+  offline.network.offline=false;
+  await offline.handlers.get('online')();
+  const retriedPost=offline.calls.filter(c=>c.options?.method==='POST').at(-1);
+  assert.equal(retriedPost.options.body,queuedPost.options.body,'Retry keeps the lap ID so a lost response cannot duplicate a lap');
+  assert.equal(JSON.parse(offline.storage.get(`lpr-pending-laps:${offline.storage.get('lpr-player-token')}`)).length,0);
+  const savedQueue=setup(new Map(),true);
+  savedQueue.node('#leaderboard-name').value='Reload';savedQueue.node('#leaderboard-start-form').trigger('submit');
+  await savedQueue.board.submit(12345.6,[3000.4,3000.4,6344.8]);
+  const reload=setup(savedQueue.storage);reload.node('#leaderboard-start-form').trigger('submit');
+  await reload.handlers.get('online')();
+  assert.equal(reload.calls.filter(c=>c.options?.method==='POST').length,1,'A confirmed driver retries saved laps after a page reload');
+  const authoritative=setup(new Map(),false,{mode:'laps',saved:true,rank:1,lapMs:13000,record:true});
+  await authoritative.board.refresh();authoritative.node('#leaderboard-name').value='Server record';authoritative.node('#leaderboard-start-form').trigger('submit');
+  await authoritative.board.submit(13000,[3000,3000,7000]);
+  assert.deepEqual(authoritative.celebrations,[13000],'Server record confirmation takes priority over a stale cached leaderboard');
   console.log('PASS: required startup nickname, top ten, first submission, reload confirmation, fixed/per-name identity, migration, safe rendering and offline play');
 })().catch(e=>{console.error(e);process.exitCode=1});
