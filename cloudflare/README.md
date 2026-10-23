@@ -29,3 +29,77 @@ Uusi GET `/api/leaderboard` palauttaa `mode: "laps"` ja kymmenen nopeinta kierro
 Julkaise Worker ennen päivitettyä peliä. Jos pelin julkaisu ehtii ensin, vanhan palvelimen vastaus näytetään käyttäjälle selkeästi: lista ei vielä tue saman kuljettajan useita kierroksia. Uusi palvelin on käytössä vasta, kun GET-vastauksessa näkyy `mode: "laps"`.
 
 Kierroskello jatkuu tuloslistan ollessa auki ja sovelluksen ollessa taustalla. Palattaessa fysiikan ruutuaika nollataan, jotta auto ei hyppää eteenpäin tauon pituista askelta, mutta kierrosajasta ei vähennetä taukoa.
+
+## Vapaaehtoinen pelianalytiikka (20.10.2026)
+
+Peli kerää nimimerkkiin yhdistettyä historiaa vain analytiikkaruudun valinneilta
+pelaajilta. Oletus on pois päältä, suostumus vanhenee 180 päivässä.
+Suostumus, sen ajankohta ja analytiikkatunniste ovat erillään tuloslistan
+pelaajatunnisteesta. Suostumuksen ajankohta kulkee tapahtumien mukana.
+Tilastot kuvaavat suostumuksen antaneita selainprofiileja, eivät kaikkia kävijöitä
+tai varmennettuja henkilöitä. Jaetun selaimen eri nimimerkit näkyvät samassa
+analytiikkaprofiilissa; tuloslistan identiteetit säilyvät erillisinä.
+
+### Käyttöönotto — palvelin ensin, peli sitten
+
+1. Varmista `privacy.html`-sivun rekisterinpitäjä ja yhteyssähköposti sekä
+   Cloudflare-tilisi tietojenkäsittelyehdot ja käyttämäsi palvelun asetukset.
+2. Päivitä **nykyinen** `lpr-leaderboard`-Worker kokonaisella `worker.mjs`-tiedostolla.
+   Se on edelleen yksi itsenäinen moduuli; DB-binding on edelleen `lpr-times`.
+   Analytiikan taulut ja indeksit syntyvät automaattisesti. Tuloslistan tauluihin
+   ei tehdä analytiikkaa varten muutoksia.
+3. Luo pitkä satunnainen ylläpitoavain esimerkiksi paikallisesti:
+   `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
+   Lisää se Cloudflare Workerin **Settings → Variables and Secrets** -kohdassa
+   **Secret**-tyyppisenä nimellä `ANALYTICS_ADMIN_TOKEN`. Älä tallenna avainta
+   lähdekoodiin, GitHubiin, sivun URL:iin tai julkiseen peliin.
+4. Lisää Workerille päivittäinen Cron Trigger `0 2 * * *`. `scheduled`-käsittelijä
+   poistaa yli 90 päivän tapahtumat myös silloin, kun kukaan ei pelaa.
+   Siivous tehdään lisäksi analytiikan API-kutsujen yhteydessä.
+5. Julkaise peli normaalisti GitHub Pagesiin. Uusi `analytics.js` ja `privacy.html`
+   sisältyvät `npm run build` -pakettiin.
+6. Avaa **https://lpr-leaderboard.panu-musakka.workers.dev/admin**, syötä ylläpitoavain
+   ja tarkista tilastot. Avain säilyy vain avoimen ylläpitosivun muistissa.
+   Lukitse-painike tyhjentää sivun. Älä käytä ylläpitoavainta jaetulla laitteella.
+
+Ilman asetettua ylläpitoavainta raportointirajapinta palauttaa 503 eikä luovuta
+pelaajatietoja. Julkinen `/admin`-osoite sisältää vain kirjautumiskuoren.
+Kaikki raporttien luku- ja poistopyynnöt vaativat avaimen. Raportteja ei anneta
+julkisesta tuloslistarajapinnasta. Tarvittaessa Cloudflare Accessin voi lisätä
+suojaksi ylläpitopolkujen eteen, mutta pelkkä Access-otsake ei korvaa tämän
+version palvelinpuolista avaintarkistusta.
+
+Ylläpitonäkymän lähde on `cloudflare/admin.html`. Muokkaamisen jälkeen aja
+`npm run build:worker`, joka upottaa sen itsenäiseen `worker.mjs`-moduuliin.
+
+### Keräys ja rajat
+
+- `POST /api/analytics/events`: enintään 40 tapahtumaa / 32 KiB. Sallittujen
+  kenttien validointi, tapahtumatunnisteisiin perustuva kaksoiskappaleiden esto,
+  pelaaja- ja IP-kohtaiset lyhytikäiset lähetysrajat. IP-tiivisteet eivät näy raporteissa.
+- Noin 30 sekunnin lähetysväli, muistinvarainen enintään 300 tapahtuman jono.
+  Verkkovirheet eivät pysäytä peliä. Pitkän verkkokatkon aikana osa tapahtumista
+  voi kadota. Sulkemishetken beacon on parhaaseen yritykseen perustuva lähetys.
+- Aika erotellaan ajamiseen, valikkoon, saunaan, kauppaan, paljuun, hajonneeseen
+  autoon ja toimettomuuteen. Taustalla tai ilman kohdistusta aikaa ei lasketa.
+  Kahden minuutin toimettomuus siirtää ajan idle-luokkaan. Aktiivinen peliohjaimen
+  syöte lasketaan toiminnaksi. Hiljainen oleskelu ilman syötteitä voi päätyä idleksi.
+- Kierroksen valmistuminen ei ole automaattisesti radan lopettamista: seuraava
+  kierros alkaa heti. Aloitetut/valmiit kierrokset eivät siten yksin mittaa poistumista.
+- Laitteen, selaimen ja käyttöjärjestelmän luokitus on karkea arvio. Lähteestä
+  tallennetaan vain verkkotunnus, ei polkua tai kyselyparametreja. Ei raakaa
+  user-agentia, tarkkaa sijaintia, painettujen näppäinten sisältöä tai hiiren reittiä.
+- Raportit ovat viimeisten 1/7/30/90 vuorokauden liukuvia ikkunoita. Päiväryhmät
+  käyttävät UTC:tä; tapahtuma-ajat näytetään Suomen aikavyöhykkeellä.
+- Pelaajalista sivutetaan 100 profiilin ja tapahtumat 200 tapahtuman erissä.
+  Yhteenvetoluvut lasketaan koko valitusta aikavälistä, eivät vain nykyiseltä sivulta.
+- `DELETE /api/analytics/me` poistaa profiilin sen oman yksityisen tunnisteen
+  perusteella. Käyttäjä voi myös vain perua suostumuksen poistamatta historiaa.
+  Tuloslistan kierroksia ei poisteta analytiikan poistolla.
+- Ylläpito voi poistaa profiilin raportista. Poistosta jää 90 päivän tekninen
+  estotunniste, jotta keskeneräinen lähetys ei luo historiaa uudelleen.
+- Selainlähetyksiä voidaan väärentää: tämä ei ole vahvistettu henkilöllisyys-
+  tai kilpailutulosten varmennusjärjestelmä. Säilytys koskee tämän tietokannan
+  tapahtumia; palveluntarjoajan varmuuskopio- ja lokikäytännöt tarkistetaan erikseen.
+
+Testit: `npm run test:analytics`, `npm run test:leaderboard`, `npm run build`.

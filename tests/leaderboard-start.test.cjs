@@ -1,5 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const read=name=>fs.readFileSync(path.join(__dirname,'..',name),'utf8');
+const analytics=[];
 const nodes=new Map(),submissions=[],mediaHandlers=[];let requiresName=true,startedSessions=0;
 const timers=new Map();let nextTimer=0;
 const windowHandlers=new Map(),documentHandlers=new Map();
@@ -12,6 +13,7 @@ const element=id=>{
 };
 const ctx={URLSearchParams,window:{LPRVehicleSpec:require('../shared/vehicle-spec.js'),location:{search:''},screen:{},addEventListener(type,fn){if(!windowHandlers.has(type))windowHandlers.set(type,[]);windowHandlers.get(type).push(fn)},
   matchMedia:()=>({matches:false,addEventListener:(type,handler)=>mediaHandlers.push(handler)}),
+  LPRAnalytics:{event:(type,details)=>analytics.push({type,...details})},
   LPRLeaderboard:{refresh(){},get requiresName(){return requiresName},beginSession(){startedSessions++;element('#settings-dialog').showModal()},submit:(ms,sectors)=>submissions.push({ms,sectors})}},
   document:{hidden:false,querySelector:element,querySelectorAll:()=>['left','right','gas','brake'].map(name=>element(`[data-control="${name}"]`)),addEventListener(type,fn){if(!documentHandlers.has(type))documentHandlers.set(type,[]);documentHandlers.get(type).push(fn)}},performance:{now:()=>clock},navigator:{},
   localStorage:{getItem:()=>null,setItem(){}},setTimeout(fn,ms){const id=++nextTimer;timers.set(id,{fn,ms});return id},clearTimeout(id){timers.delete(id)},requestAnimationFrame(){},ResizeObserver:class{observe(){}},
@@ -41,6 +43,8 @@ assert.equal(submissions.length,1,'The very first complete valid lap is submitte
 assert.equal(submissions[0].ms,40000);
 assert.deepEqual(Array.from(submissions[0].sectors),[10000,10000,20000]);
 assert.equal(game.car.lap,2);
+assert.equal(analytics.filter(e=>e.type==='lap_start').length,2);
+assert.equal(analytics.find(e=>e.type==='lap_complete').lapMs,40000,'Analytics uses genuine lap completion');
 // A complete lap with sauna, pool and shop visits remains eligible.
 game.reset();game.held.gas=true;game.update(0,50000);
 for(const [toggle,position,time] of [

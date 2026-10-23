@@ -190,3 +190,9 @@ dialog { touch-action: pan-y pinch-zoom; }
   #settings-dialog .dialog-head{gap:8px}
   #settings-dialog .close{max-width:110px}
 }
+
+.analytics-settings { margin: 12px 0; padding: 10px; border: 1px solid #53615b; border-radius: 8px; font-size: 13px; line-height: 1.45; }
+.analytics-settings label { display: flex; align-items: flex-start; gap: 8px; }
+.analytics-settings input[type=checkbox] { width: 18px; min-width: 18px; height: 18px; margin: 2px 0; }
+.analytics-settings details { margin: 8px 0; }
+.analytics-settings button { font-size: 12px; padding: 6px 10px; }

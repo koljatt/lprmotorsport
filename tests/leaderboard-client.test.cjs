@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../leaderboard.js'),'utf8');
 function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true,rank:2,lapMs:12346,bestMs:12346,record:false}) {
-  const nodes=new Map(),calls=[],celebrations=[],handlers=new Map();
+  const nodes=new Map(),calls=[],celebrations=[],handlers=new Map(),identified=[];
   const network={offline};
   const node=id=>{
     if(!nodes.has(id)) {
@@ -15,7 +15,7 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
     }
     return nodes.get(id);
   };
-  const context={window:{addEventListener:(type,fn)=>handlers.set(type,fn),LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)}},crypto:require('node:crypto').webcrypto,AbortSignal,
+  const context={window:{addEventListener:(type,fn)=>handlers.set(type,fn),LPRAnalytics:{identify:name=>identified.push(name)},LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)}},crypto:require('node:crypto').webcrypto,AbortSignal,
     localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},
     document:{querySelector:node,createElement:()=>({textContent:''})},
     async fetch(url,options){calls.push({url,options});if(network.offline)throw new Error('offline');
@@ -23,7 +23,7 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
         {version:'lut-20261011-v3',results:Array.from({length:20},(_,i)=>({nickname:i?'Driver '+i:'<script>',lap_ms:12346+i*1000}))}};
     }};
   vm.createContext(context);vm.runInContext(source,context);
-  return {board:context.window.LPRLeaderboard,node,calls,storage,celebrations,network,handlers};
+  return {board:context.window.LPRLeaderboard,node,calls,storage,celebrations,network,handlers,identified};
 }
 (async()=>{
   const app=setup(),{board,node,calls,storage}=app;
@@ -42,8 +42,10 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
   assert.equal(calls.filter(c=>c.options?.method==='POST').length,0,'No lap can submit before confirmation');
   node('#leaderboard-name').value='   ';node('#leaderboard-start-form').trigger('submit');
   assert(board.requiresName);assert(node('#leaderboard-name').reported);
+  assert.deepEqual(app.identified,[],'Invalid names do not identify an analytics session');
   node('#leaderboard-name').value=' Panu ';node('#leaderboard-start-form').trigger('submit');
   assert(!board.requiresName);assert(!node('#settings-dialog').open);
+  assert.deepEqual(app.identified,['Panu'],'Confirmed nickname still identifies analytics after merging lap retries');
   assert(node('#leaderboard-name').readOnly);assert(node('#leaderboard-start').hidden);
   const token=storage.get('lpr-player-token');assert.match(token,/^[a-f0-9]{64}$/);
   await board.submit(12345.6,[3000.4,3000.4,6344.8]);
@@ -97,6 +99,7 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
   await savedQueue.board.submit(12345.6,[3000.4,3000.4,6344.8]);
   const reload=setup(savedQueue.storage);reload.node('#leaderboard-start-form').trigger('submit');
   await reload.handlers.get('online')();
+  assert.deepEqual(reload.identified,['Reload'],'Restoring queued laps preserves analytics identification');
   assert.equal(reload.calls.filter(c=>c.options?.method==='POST').length,1,'A confirmed driver retries saved laps after a page reload');
   const authoritative=setup(new Map(),false,{mode:'laps',saved:true,rank:1,lapMs:13000,record:true});
   await authoritative.board.refresh();authoritative.node('#leaderboard-name').value='Server record';authoritative.node('#leaderboard-start-form').trigger('submit');

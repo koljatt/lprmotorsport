@@ -53,6 +53,7 @@
     }
     token = chooseIdentity(name);
     activeName = name;
+    window.LPRAnalytics?.identify(name);
     try {
       const saved = JSON.parse(localStorage.getItem(pendingKey()) ?? '[]');
       if (Array.isArray(saved)) pending = saved.filter(lap => lap?.version === version &&

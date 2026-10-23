@@ -24,6 +24,9 @@ async function ensureLaps(db) {
 }
 
 export default {
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil((async () => { await ensureAnalytics(env.DB); await cleanAnalytics(env.DB); })());
+  },
   async fetch(request, env) {
     const origin = request.headers.get('Origin');
     const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Origin' };
@@ -31,9 +34,13 @@ export default {
     const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
     if (origin && !ORIGINS.has(origin)) return reply({ error: 'Origin denied' }, 403);
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
+      return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
     }
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/api/analytics/') || url.pathname.startsWith('/api/admin/') || url.pathname === '/admin') {
+      try { return await analyticsRoute(request, env, url, reply); }
+      catch (error) { console.error('Analytics operation failed', error.message); return reply({ error: 'Analytics unavailable' }, 503); }
+    }
     if (url.pathname === '/' && request.method === 'GET') return reply({ service: 'LPR leaderboard', version: VERSION });
     try {
       await ensureLaps(env.DB);
@@ -101,3 +108,155 @@ export default {
     }
   }
 };
+
+// Analytics is isolated from leaderboard availability and identity.
+const ANALYTICS_RETENTION = 90 * 86400000;
+const analyticsReady = new WeakMap();
+const ANALYTICS_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS analytics_events (
+    player_hash TEXT NOT NULL, session_id TEXT NOT NULL, event_id TEXT NOT NULL,
+    nickname TEXT NOT NULL, version TEXT NOT NULL, kind TEXT NOT NULL,
+    state TEXT NOT NULL, input TEXT NOT NULL, duration_ms INTEGER NOT NULL,
+    lap_ms INTEGER, code TEXT NOT NULL, at INTEGER NOT NULL, received INTEGER NOT NULL,
+    metadata TEXT NOT NULL, consent_at INTEGER NOT NULL, PRIMARY KEY(player_hash, session_id, event_id))`,
+  'CREATE INDEX IF NOT EXISTS analytics_time ON analytics_events(at)',
+  'CREATE INDEX IF NOT EXISTS analytics_player_time ON analytics_events(player_hash, at)',
+  `CREATE TABLE IF NOT EXISTS analytics_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)`,
+  'CREATE INDEX IF NOT EXISTS analytics_limits_expiry ON analytics_limits(expires)',
+  // Tombstones prevent an already queued beacon from recreating a deleted profile.
+  'CREATE TABLE IF NOT EXISTS analytics_deleted (player_hash TEXT PRIMARY KEY, expires INTEGER NOT NULL)'
+];
+async function ensureAnalytics(db) {
+  if (!analyticsReady.has(db)) analyticsReady.set(db, db.batch(ANALYTICS_SCHEMA.map(sql => db.prepare(sql))).catch(e => { analyticsReady.delete(db); throw e; }));
+  await analyticsReady.get(db);
+}
+async function cleanAnalytics(db) {
+  const now = Date.now();
+  await db.batch([
+    db.prepare('DELETE FROM analytics_events WHERE at < ?').bind(now - ANALYTICS_RETENTION),
+    db.prepare('DELETE FROM analytics_limits WHERE expires < ?').bind(now),
+    db.prepare('DELETE FROM analytics_deleted WHERE expires < ?').bind(now)
+  ]);
+}
+async function readAnalyticsBody(request) {
+  if (!request.headers.get('Content-Type')?.startsWith('application/json')) return { error: 'JSON required', status: 415 };
+  const reader = request.body?.getReader();
+  if (!reader) return { error: 'Missing body', status: 400 };
+  let size = 0; const chunks = [];
+  for (;;) {
+    const { value, done } = await reader.read(); if (done) break;
+    size += value.length;
+    if (size > 32768) { await reader.cancel(); return { error: 'Body too large', status: 413 }; }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  try { return { data: JSON.parse(new TextDecoder().decode(bytes)) }; }
+  catch { return { error: 'Invalid JSON', status: 400 }; }
+}
+const analyticsToken = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const eventKinds = new Set(['session_start','play_start','time','lap_start','lap_complete','state_change','restart','leaderboard_open','page_hide','error']);
+const eventStates = new Set(['menu','driving','sauna','shop','pool','crashed','idle']);
+const eventInputs = new Set(['unknown','keyboard','touch','mouse','gamepad']);
+function validAnalytics(data, now) {
+  if (!data || !Number.isSafeInteger(data.consentAt) || data.consentAt > now + 300000 || data.consentAt < now - 180 * 86400000 || !analyticsToken(data.token) || !analyticsToken(data.session) || typeof data.version !== 'string' || !/^[a-zA-Z0-9_.-]{1,60}$/.test(data.version) || !Array.isArray(data.events) || !data.events.length || data.events.length > 40) return false;
+  const m = data.meta;
+  if (!m || !['mobile','desktop'].includes(m.device) || !['Edge','Firefox','Chrome','Safari','other'].includes(m.browser) || !['Android','iOS','Windows','macOS','Linux','other'].includes(m.os) || !Number.isInteger(m.width) || m.width < 0 || m.width > 10000 || !Number.isInteger(m.height) || m.height < 0 || m.height > 10000 || typeof m.language !== 'string' || !/^[a-zA-Z0-9-]{0,20}$/.test(m.language) || typeof m.referrer !== 'string' || !/^[a-zA-Z0-9.:-]{0,200}$/.test(m.referrer)) return false;
+  let duration = 0;
+  for (const e of data.events) {
+    if (!e || !analyticsToken(e.id) || !eventKinds.has(e.type) || !eventStates.has(e.state) || !eventInputs.has(e.input) || typeof e.nickname !== 'string' || !/^[\p{L}\p{N} _.-]{0,24}$/u.test(e.nickname) || !Number.isSafeInteger(e.at) || e.at < now - ANALYTICS_RETENTION || e.at > now + 300000) return false;
+    if (e.type === 'time') { if (!Number.isSafeInteger(e.ms) || e.ms < 1 || e.ms > 60000) return false; duration += e.ms; }
+    if (e.type === 'lap_complete' && (!Number.isSafeInteger(e.lapMs) || e.lapMs <= 5000 || e.lapMs > 86400000)) return false;
+    if (e.type === 'error' && !['runtime','promise'].includes(e.code)) return false;
+  }
+  return duration <= 120000;
+}
+const reportTotals = `COUNT(DISTINCT player_hash) AS players, COUNT(DISTINCT session_id) AS sessions,
+ COUNT(DISTINCT CASE WHEN kind='play_start' THEN session_id END) AS played_sessions,
+ SUM(CASE WHEN kind='time' AND state!='idle' THEN duration_ms ELSE 0 END) AS active_ms,
+ SUM(CASE WHEN kind='time' AND state='idle' THEN duration_ms ELSE 0 END) AS idle_ms,
+ SUM(CASE WHEN kind='lap_start' THEN 1 ELSE 0 END) AS laps_started,
+ SUM(CASE WHEN kind='lap_complete' THEN 1 ELSE 0 END) AS laps_completed,
+ MIN(CASE WHEN kind='lap_complete' THEN lap_ms END) AS best_lap_ms,
+ MIN(at) AS first_seen, MAX(at) AS last_seen`;
+async function analyticsRoute(request, env, url, reply) {
+  // Public HTML is only a login shell. Every data route checks a server-side secret.
+  if (url.pathname === '/admin' && request.method === 'GET') return new Response(ADMIN_HTML, { headers: {
+    'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+    'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+  }});
+  const admin = url.pathname.startsWith('/api/admin/');
+  const bearer = request.headers.get('Authorization')?.replace(/^Bearer /, '');
+  if (admin) {
+    if (typeof env.ANALYTICS_ADMIN_TOKEN !== 'string' || env.ANALYTICS_ADMIN_TOKEN.length < 32) return reply({ error: 'Admin access not configured' }, 503);
+    // Fixed-length digests avoid content-dependent token comparison.
+    const [a,b] = await Promise.all([hash(bearer || ''), hash(env.ANALYTICS_ADMIN_TOKEN)]);
+    let difference = 0; for (let i = 0; i < a.length; i++) difference |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    if (difference) return reply({ error: 'Unauthorized' }, 401);
+  }
+  if (url.pathname === '/api/analytics/me' && !analyticsToken(bearer)) return reply({ error: 'Invalid player token' }, 401);
+  const known = new Set(['/api/analytics/events','/api/analytics/me','/api/admin/summary','/api/admin/player','/api/admin/delete']);
+  if (!known.has(url.pathname)) return reply({ error: 'Not found' }, 404);
+  const expected = url.pathname.endsWith('/events') ? 'POST' : url.pathname.endsWith('/me') || url.pathname.endsWith('/delete') ? 'DELETE' : 'GET';
+  if (request.method !== expected) return reply({ error: 'Method not allowed' }, 405);
+  // Validate before touching the database, including streamed request size limits.
+  let payload;
+  if (expected === 'POST') {
+    const body = await readAnalyticsBody(request);
+    if (body.error) return reply({ error: body.error }, body.status);
+    payload = body.data;
+    if (!validAnalytics(payload, Date.now())) return reply({ error: 'Invalid analytics' }, 400);
+  }
+  await ensureAnalytics(env.DB);
+  await cleanAnalytics(env.DB);
+  if (url.pathname === '/api/analytics/events') {
+    const now = Date.now(), player = await hash(payload.token);
+    if (await env.DB.prepare('SELECT player_hash FROM analytics_deleted WHERE player_hash = ?').bind(player).first()) return reply({ error: 'Profile deleted' }, 410);
+    const window = Math.floor(now / 60000);
+    // Short-lived IP hash is used solely for abuse prevention, never player reports.
+    const ip = await hash(request.headers.get('CF-Connecting-IP') || 'unknown');
+    for (const key of [`p:${player}:${window}`, `i:${ip}:${window}`]) {
+      const row = await env.DB.prepare(`INSERT INTO analytics_limits(key,attempts,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts`).bind(key, now + 120000).first();
+      if (row.attempts > (key.startsWith('p:') ? 30 : 300)) return reply({ error: 'Too many requests' }, 429);
+    }
+    // Pick known fields only. Arbitrary extra metadata never reaches persistent storage.
+    const m = payload.meta;
+    const metadata = JSON.stringify({device:m.device,browser:m.browser,os:m.os,width:m.width,height:m.height,language:m.language,referrer:m.referrer});
+    const statements = payload.events.map(e => env.DB.prepare(`INSERT OR IGNORE INTO analytics_events
+      (player_hash,session_id,event_id,nickname,version,kind,state,input,duration_ms,lap_ms,code,at,received,metadata,consent_at)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM analytics_deleted WHERE player_hash=?)`)
+      .bind(player,payload.session,e.id,e.nickname,payload.version,e.type,e.state,e.input,e.type==='time'?e.ms:0,e.type==='lap_complete'?e.lapMs:null,e.type==='error'?e.code:'',Math.min(e.at,now),now,metadata,payload.consentAt,player));
+    await env.DB.batch(statements);
+    return reply({ ok: true });
+  }
+  if (url.pathname === '/api/analytics/me' || url.pathname === '/api/admin/delete') {
+    const player = admin ? url.searchParams.get('player') : await hash(bearer);
+    if (!analyticsToken(player)) return reply({ error: 'Invalid player' }, 400);
+    await env.DB.batch([
+      env.DB.prepare('INSERT OR REPLACE INTO analytics_deleted(player_hash,expires) VALUES (?,?)').bind(player,Date.now()+ANALYTICS_RETENTION),
+      env.DB.prepare('DELETE FROM analytics_events WHERE player_hash=?').bind(player)
+    ]);
+    return reply({ ok: true });
+  }
+  const days = Math.max(1,Math.min(90,Number(url.searchParams.get('days')) || 7));
+  const since = Date.now() - days * 86400000;
+  const offset = Math.max(0,Math.min(1000000,Math.floor(Number(url.searchParams.get('offset')) || 0)));
+  if (url.pathname === '/api/admin/summary') {
+    const totals = await env.DB.prepare(`SELECT ${reportTotals} FROM analytics_events WHERE at>=?`).bind(since).first();
+    const daily = await env.DB.prepare(`SELECT date(at/1000,'unixepoch') AS day, ${reportTotals} FROM analytics_events WHERE at>=? GROUP BY day ORDER BY day`).bind(since).all();
+    const players = await env.DB.prepare(`SELECT player_hash, ${reportTotals},
+      (SELECT nickname FROM analytics_events b WHERE b.player_hash=a.player_hash AND nickname!='' ORDER BY at DESC LIMIT 1) AS nickname
+      FROM analytics_events a WHERE at>=? GROUP BY player_hash ORDER BY last_seen DESC LIMIT 101 OFFSET ?`).bind(since,offset).all();
+    const states = await env.DB.prepare(`SELECT state,SUM(duration_ms) AS ms FROM analytics_events WHERE at>=? AND kind='time' GROUP BY state`).bind(since).all();
+    const devices = await env.DB.prepare(`SELECT json_extract(metadata,'$.device') AS device,COUNT(DISTINCT session_id) AS sessions FROM analytics_events WHERE at>=? GROUP BY device`).bind(since).all();
+    return reply({ totals, daily:daily.results, players:players.results.slice(0,100), hasMore:players.results.length>100, states:states.results, devices:devices.results, days, offset, retentionDays:90 });
+  }
+  const player = url.searchParams.get('player');
+  if (!analyticsToken(player)) return reply({ error: 'Invalid player' },400);
+  const totals = await env.DB.prepare(`SELECT ${reportTotals} FROM analytics_events WHERE player_hash=? AND at>=?`).bind(player,since).first();
+  const events = await env.DB.prepare(`SELECT session_id,nickname,version,kind,state,input,duration_ms,lap_ms,code,at,metadata FROM analytics_events WHERE player_hash=? AND at>=? ORDER BY at DESC,event_id LIMIT 201 OFFSET ?`).bind(player,since,offset).all();
+  return reply({ totals, events:events.results.slice(0,200), hasMore:events.results.length>200, days, offset });
+}
+
+const ADMIN_HTML = "<!doctype html><html lang=\"fi\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>LPR · Pelianalytiikka</title>\n<style>\n:root{color-scheme:dark;font:15px system-ui;background:#101815;color:#eaf3ed}body{max-width:1200px;margin:35px auto;padding:0 20px}h1{font-size:30px}small,.muted{color:#a5b9ad}button,input,select{font:inherit;padding:10px;border:1px solid #52745e;border-radius:6px;background:#192c21;color:inherit}button{cursor:pointer}button:hover{background:#284d35}button:disabled{opacity:.5;cursor:default}a{color:#b5ec91}.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin:24px 0}.card{padding:18px;background:#1c2b22;border:1px solid #38513e;border-radius:10px}.card strong{display:block;font-size:28px;margin-top:7px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #304238;white-space:nowrap}th{color:#a9ceab}section{margin:28px 0}#status{min-height:24px;color:#ffdca3}#token{width:min(360px,80vw)}.danger{border-color:#ad766b}.bar{display:inline-block;background:#7abb59;height:9px;min-width:1px;border-radius:3px;margin-right:8px}details{margin:15px 0}[hidden]{display:none!important}\n</style>\n<h1>LPR <span class=\"muted\">/ Pelianalytiikka</span></h1><p class=\"muted\">Suostumuksen antaneiden selainten pelihistoria · säilytys 90 päivää</p>\n<form id=\"login\"><label for=\"token\">Ylläpitoavain</label> <input id=\"token\" type=\"password\" autocomplete=\"off\" required minlength=\"32\"> <button>Avaa tilastot</button><p><small>Avain säilyy vain tämän sivun muistissa. Älä jaa sitä pelaajille.</small></p></form>\n<p id=\"status\" role=\"status\"></p><main id=\"reports\" hidden>\n<div class=\"toolbar\"><label>Aikaväli <select id=\"days\"><option value=\"1\">24 tuntia</option><option value=\"7\" selected>7 päivää</option><option value=\"30\">30 päivää</option><option value=\"90\">90 päivää</option></select></label><button id=\"refresh\">Päivitä</button><button id=\"logout\">Lukitse</button></div>\n<div id=\"totals\" class=\"cards\"></div>\n<section><h2>Päivät <small>(UTC)</small></h2><div id=\"daily\" class=\"scroll\"></div></section>\n<section><h2>Ajankäyttö ja laitteet</h2><div id=\"states\"></div><p id=\"devices\"></p></section>\n<section><h2>Pelaajat <small>Selainprofiilit, eivät varmennetut henkilöt</small></h2><div id=\"players\" class=\"scroll\"></div><p class=\"toolbar\"><button id=\"previous\">Edelliset</button><button id=\"next\">Seuraavat</button></p></section>\n<section id=\"profile\" hidden><h2 id=\"profile-title\"></h2><div class=\"toolbar\"><button id=\"close-profile\">Sulje pelaajanäkymä</button><button class=\"danger\" id=\"delete-player\">Poista tämän profiilin analytiikka</button></div><div id=\"player-totals\" class=\"cards\"></div><p id=\"profile-note\"></p><div id=\"events\" class=\"scroll\"></div><p class=\"toolbar\"><button id=\"event-previous\">Uudemmat tapahtumat</button><button id=\"event-next\">Vanhemmat tapahtumat</button></p></section>\n<p><small>Aktiivinen aika edellyttää näkyvää ja kohdistettua peliä sekä toimintaa viimeisen kahden minuutin aikana. Tilastot ovat selaimen ilmoittamia; estäjät, suostumusvalinnat ja katkenneet yhteydet vaikuttavat kattavuuteen. Julkinen tuloslista on erillinen.</small></p></main>\n<script>\n'use strict';\nconst $=s=>document.querySelector(s);let secret='',offset=0,eventOffset=0,player='',playerName='',generation=0;\nconst duration=ms=>((ms||0)/60000).toFixed(1)+' min';\nconst date=ms=>ms?new Date(ms).toLocaleString('fi-FI',{timeZone:'Europe/Helsinki'}):'—';\nconst labels={menu:'Valikko',driving:'Ajaminen',sauna:'Sauna',shop:'Kauppa',pool:'Palju',crashed:'Hajonnut auto',idle:'Toimeton',session_start:'Pelikerran alku',play_start:'Ajoon siirtyminen',time:'Ajankäyttö',lap_start:'Kierroksen alku',lap_complete:'Kierros valmis',state_change:'Tilan vaihto',restart:'Uudelleenaloitus',leaderboard_open:'Tuloslista',page_hide:'Sivu piilotettu',error:'Tekninen virhe'};\nasync function api(path,method='GET') {const r=await fetch(path,{method,headers:{Authorization:'Bearer '+secret},cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error(r.status===401?'Virheellinen ylläpitoavain.':r.status===503?'Palvelu ei ole käytettävissä. Tarkista käyttöönotto.':'Pyyntö epäonnistui ('+r.status+').');return r.json();}\nfunction table(target,headers,rows){const t=document.createElement('table'),head=t.createTHead().insertRow();for(const label of headers){const th=document.createElement('th');th.textContent=label;head.append(th);}const body=t.createTBody();for(const row of rows){const tr=body.insertRow();for(const value of row){const td=tr.insertCell();if(value instanceof Node)td.append(value);else td.textContent=value??'—';}}$(target).replaceChildren(t);}\nfunction cards(target,s){$(target).replaceChildren();for(const [label,value] of [['Pelaajaprofiileja',s.players||0],['Pelikertoja',s.sessions||0],['Ajon aloittaneita pelikertoja',s.played_sessions||0],['Aktiivista aikaa',duration(s.active_ms)],['Valmiita kierroksia',s.laps_completed||0],['Aloitettuja kierroksia',s.laps_started||0]]){const box=document.createElement('div');box.className='card';box.textContent=label;const strong=document.createElement('strong');strong.textContent=value;box.append(strong);$(target).append(box);}}\nfunction lock(){generation++;secret='';$('#token').value='';$('#reports').hidden=true;$('#login').hidden=false;$('#profile').hidden=true;for(const id of ['#totals','#daily','#states','#devices','#players','#events','#player-totals'])$(id).replaceChildren();player='';$('#status').textContent='Tilastot lukittu.';}\nasync function load(){const gen=++generation;$('#status').textContent='Ladataan…';try{const d=await api('/api/admin/summary?days='+$('#days').value+'&offset='+offset);if(gen!==generation)return;$('#login').hidden=true;$('#token').value='';$('#reports').hidden=false;cards('#totals',d.totals);table('#daily',['Päivä','Profiileja','Pelikertoja','Aktiivinen aika','Kierroksia'],d.daily.map(r=>[r.day,r.players,r.sessions,duration(r.active_ms),r.laps_completed]));\nconst max=Math.max(1,...d.states.map(r=>r.ms));$('#states').replaceChildren();for(const r of d.states){const p=document.createElement('p'),bar=document.createElement('span');bar.className='bar';bar.style.width=(r.ms/max*180)+'px';p.append(bar,document.createTextNode((labels[r.state]||r.state)+': '+duration(r.ms)));$('#states').append(p);}$('#devices').textContent=d.devices.map(r=>r.device+': '+r.sessions+' pelikertaa').join(' · ');\ntable('#players',['Nimimerkki / profiili','Kerrat','Aktiivinen aika','Kierrokset','Viimeksi'],d.players.map(r=>{const b=document.createElement('button');b.textContent=(r.nickname||'Vierailija')+' · '+r.player_hash.slice(0,8);b.onclick=()=>{player=r.player_hash;playerName=r.nickname||'Vierailija';eventOffset=0;void profile();};return[b,r.sessions,duration(r.active_ms),r.laps_completed,date(r.last_seen)];}));$('#previous').disabled=offset===0;$('#next').disabled=!d.hasMore;$('#status').textContent='Päivitetty '+new Date().toLocaleTimeString('fi-FI');}catch(e){if(gen===generation){$('#status').textContent=e.message;$('#reports').hidden=true;$('#login').hidden=false;}}}\nasync function profile(){const expected=player,gen=generation;try{const d=await api('/api/admin/player?player='+player+'&days='+$('#days').value+'&offset='+eventOffset);if(expected!==player||gen!==generation)return;$('#profile').hidden=false;$('#profile-title').textContent=playerName+' · '+player.slice(0,8);cards('#player-totals',d.totals);$('#profile-note').textContent='Ensimmäinen havainto: '+date(d.totals.first_seen)+' · viimeisin: '+date(d.totals.last_seen)+' · tapahtumat '+(eventOffset+1)+'–'+(eventOffset+d.events.length);table('#events',['Aika (Suomi)','Tapahtuma','Nimimerkki','Tila','Kesto / kierros','Ohjaus','Laite / selain / OS','Näyttö / kieli / lähde','Peliversio / pelikerta'],d.events.map(r=>{const m=JSON.parse(r.metadata);return[date(r.at),labels[r.kind]||r.kind,r.nickname,labels[r.state]||r.state,r.kind==='time'?duration(r.duration_ms):r.lap_ms?(r.lap_ms/1000).toFixed(3)+' s':r.code,r.input,m.device+' / '+m.browser+' / '+m.os,m.width+'×'+m.height+' / '+m.language+' / '+(m.referrer||'suora / ei tietoa'),r.version+' / '+r.session_id.slice(0,8)];}));$('#event-previous').disabled=eventOffset===0;$('#event-next').disabled=!d.hasMore;}catch(e){$('#status').textContent=e.message;}}\n$('#login').onsubmit=e=>{e.preventDefault();secret=$('#token').value;offset=0;void load();};$('#logout').onclick=lock;$('#refresh').onclick=()=>{void load();$('#profile').hidden=true;};$('#days').onchange=()=>{offset=0;player='';$('#profile').hidden=true;void load();};$('#previous').onclick=()=>{offset=Math.max(0,offset-100);void load();};$('#next').onclick=()=>{offset+=100;void load();};$('#close-profile').onclick=()=>{player='';$('#profile').hidden=true;};$('#event-previous').onclick=()=>{eventOffset=Math.max(0,eventOffset-200);void profile();};$('#event-next').onclick=()=>{eventOffset+=200;void profile();};$('#delete-player').onclick=async()=>{if(!confirm('Poistetaanko tämän selainprofiilin kaikki analytiikkatiedot? Julkiset kierrostulokset säilyvät.'))return;try{await api('/api/admin/delete?player='+player,'DELETE');player='';$('#profile').hidden=true;offset=0;await load();}catch(e){$('#status').textContent=e.message;}};\n</script></html>\n";

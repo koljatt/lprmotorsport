@@ -314,6 +314,7 @@
   }
 
   function reset() {
+    if (car) window.LPRAnalytics?.event('restart');
     window.LPRCampus.resetObstacles();
     audio.stopEffects();
     timing.reset();
@@ -483,6 +484,7 @@
     input.steer = Math.abs(input.steer) < .04 ? 0 : input.steer;
     if (!car.started && input.gas > .08) {
       car.started = true;
+      window.LPRAnalytics?.event('lap_start');
       car.lapStart = now;
       ui.notice.classList.add('hidden');
     }
@@ -524,6 +526,7 @@
       else if (car.stage === 3 && (nearest.index < 5 || nearest.index > 235)) {
         const lapTime = now - car.lapStart;
         if (lapTime > 5000) {
+          window.LPRAnalytics?.event('lap_complete', { lapMs: Math.round(lapTime) });
           audio.lap(!best || lapTime < best);
           showSector(lapTime);
           if (timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
@@ -536,6 +539,7 @@
             showNotice(t("record", { time: formatTime(lapTime) }), 3500);
           } else showNotice(t("lapResult", { time: formatTime(lapTime) }), 2500);
           car.lap++;
+          window.LPRAnalytics?.event('lap_start');
           car.lapStart = now;
           car.stage = 0;
           timing.reset();
@@ -566,6 +570,7 @@
     const dt = Math.min((now - lastFrame) / 1000, .05);
     lastFrame = now;
     if (!document.hidden) update(dt, now);
+    window.LPRAnalytics?.sample(ui.dialog.open ? 'menu' : car.crashed ? 'crashed' : car.sale ? 'shop' : car.sauna ? 'sauna' : car.pool ? 'pool' : 'driving', !!activePad && (activePad.axes.some(v => Math.abs(v) > .1) || activePad.buttons.some(b => b.pressed)), held.left || held.right || held.gas || held.brake);
     syncAudio();
     audio.update(car);
     if (!document.hidden) updateSteamTarget();
@@ -681,6 +686,7 @@
     saunaSound.textContent = saunaLife.sound ? t("Saunan \u00e4\u00e4net: p\u00e4\u00e4ll\u00e4") : t("Saunan \u00e4\u00e4net: pois");
   });
   function openLeaderboard() {
+    if (car) window.LPRAnalytics?.event('leaderboard_open');
     clearInput(); saunaLife.stopSound(); ui.dialog.showModal(); syncAudio();
   }
   ui.dialog.addEventListener('close', () => { syncAudio(); audio.unlock(); });
