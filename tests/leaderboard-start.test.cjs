@@ -32,7 +32,13 @@ assert.equal(startedSessions,1);assert(dialog.open);
 game.held.gas=true;game.update(0,1500);assert.equal(game.car.started,false,'Startup dialog prevents the first lap from starting');
 element('#close-settings').click();assert(dialog.open,'Close button cannot bypass nickname selection');
 for(const handler of mediaHandlers)handler({matches:true});assert(dialog.open,'Rotating the phone cannot bypass nickname selection');
-requiresName=false;dialog.close();game.update(0,2000);
+requiresName=false;dialog.close();
+ctx.window.LPRVerifiedDriving={waitingForStart:true};
+const waitingCar=JSON.stringify(game.car);
+game.update(.5,1900);
+assert.equal(JSON.stringify(game.car),waitingCar,'Throttle cannot move the car or start timing before server readiness');
+delete ctx.window.LPRVerifiedDriving;
+game.update(0,2000);
 assert(game.car.started);assert.equal(game.car.lapStart,2000);assert(!game.car.onlineInvalid,'Initial naming does not invalidate the first lap');
 // Move through the genuine gate/sector logic without replacing scoring or submission.
 game.dynamics.step=()=>{};

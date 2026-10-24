@@ -1,5 +1,10 @@
 # Työn tallennuspiste 24.10.2026
 
+Tämä kuvaa aiempaa tallennuspistettä. Sen jälkeen paikallinen 3D-pelin integraatio,
+allekirjoitetut kierroskuitit ja erillinen varmennettu tuloslista on toteutettu.
+Nykytilanne ja testien rajaus: [verification/README.md](../verification/README.md).
+Julkista käyttöönottoa ei ole tehty.
+
 Haara: `codex/server-replay-experiment`, luonnos-PR #5. Ei yhdistetä mainiin tässä tallennuksessa.
 
 ## Gitissä tallessa

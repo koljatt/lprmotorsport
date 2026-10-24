@@ -24,6 +24,10 @@
     "test:live-sessions": "node tests/live-sessions.test.cjs",
     "test:live-client": "node tests/live-client.test.cjs",
     "measure:live-remote": "node scripts/measure-live-remote.cjs",
-    "test:live-lab": "node tests/live-lab.test.cjs"
+    "test:live-lab": "node tests/live-lab.test.cjs",
+    "dev:verified": "node scripts/dev-verified.cjs",
+    "test:verified": "node tests/verified-driving.test.cjs && node tests/verified-client.test.cjs",
+    "test:verified-browser": "node scripts/check-verified-browser.cjs",
+    "test:verified-realtime": "node scripts/check-verified-realtime.cjs"
   }
 }
