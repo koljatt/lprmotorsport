@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../leaderboard.js'),'utf8');
-function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true,rank:2,lapMs:12346,bestMs:12346,record:false}) {
+function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true,rank:2,lapMs:12346,bestMs:12346,record:false},consent=true) {
   const nodes=new Map(),calls=[],celebrations=[];
   const node=id=>{
     if(!nodes.has(id)) {
@@ -14,7 +14,8 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
     }
     return nodes.get(id);
   };
-  const context={window:{LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)}},crypto:require('node:crypto').webcrypto,AbortSignal,
+  const context={window:{LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)},
+    LPRAnalytics:{proof:()=>consent?'f'.repeat(64):null,flush:async()=>{calls.push({url:'flush'})}}},crypto:require('node:crypto').webcrypto,AbortSignal,
     localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},
     document:{querySelector:node,createElement:()=>({textContent:''})},
     async fetch(url,options){calls.push({url,options});if(offline)throw new Error('offline');
@@ -49,6 +50,14 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
   const post=calls.find(c=>c.options?.method==='POST'),sent=JSON.parse(post.options.body);
   assert.equal(sent.nickname,'Panu');assert.match(sent.lapId,/^[a-f0-9]{64}$/);assert.equal(sent.sectors.reduce((a,b)=>a+b,0),sent.lapMs);
   assert.equal(post.options.headers.Authorization,`Bearer ${token}`,'The first named lap is submitted');
+  assert.equal(sent.analyticsToken,'f'.repeat(64),'Lap carries the analytics profile');
+  assert.equal(calls[calls.indexOf(post)-1].url,'flush','Analytics is flushed before the lap is submitted');
+  const noConsent=setup(new Map(),false,undefined,false);
+  noConsent.node('#leaderboard-name').value='Private';noConsent.node('#leaderboard-start-form').trigger('submit');
+  await noConsent.board.submit(12345.6,[3000.4,3000.4,6344.8]);
+  assert.equal(noConsent.calls.filter(c=>c.options?.method==='POST').length,0,'No analytics consent, no leaderboard submission');
+  assert.match(noConsent.node('#leaderboard-status').textContent,/analytiikkasuostumusta/);
+  assert(!noConsent.board.requiresName,'Playing continues without consent');
   node('#leaderboard-name').value='Other';await board.submit(12345.6,[3000.4,3000.4,6344.8]);
   assert.equal(JSON.parse(calls.filter(c=>c.options?.method==='POST').at(-1).options.body).nickname,'Panu','Session identity stays fixed');
   const laps=calls.filter(c=>c.options?.method==='POST').map(c=>JSON.parse(c.options.body));

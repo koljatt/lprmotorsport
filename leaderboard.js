@@ -60,7 +60,7 @@
   dialog.addEventListener('cancel', event => { if (!activeName) event.preventDefault(); });
   async function api(path, options) {
     const response = await fetch(endpoint + path, { ...options, signal: AbortSignal.timeout(10000) });
-    if (!response.ok) throw new Error(`Leaderboard HTTP ${response.status}`);
+    if (!response.ok) throw Object.assign(new Error(`Leaderboard HTTP ${response.status}`), { status: response.status });
     return response.json();
   }
   async function refresh() {
@@ -111,16 +111,26 @@
         status.textContent = t('Valitse nimimerkki tuloslistasta ennen seuraavaa kierrosta.');
         return;
       }
+      const analytics = window.LPRAnalytics?.proof?.();
+      if (!analytics) {
+        status.textContent = t('Kierros ei tallennu tuloslistalle ilman analytiikkasuostumusta. Voit silti pelata.');
+        return;
+      }
       try {
         status.textContent = t('Lähetetään kierrosaikaa…');
         const rounded = sectors.map(Math.round);
         const elapsed = Math.round(lapMs);
         rounded[2] += elapsed - rounded.reduce((a, b) => a + b, 0);
         const previousRecord = trackBestMs;
-        const result = await api('/api/laps', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ version, nickname: name, lapId: newToken(), lapMs: elapsed, sectors: rounded })
-        });
+        const body = JSON.stringify({ version, nickname: name, lapId: newToken(), lapMs: elapsed, sectors: rounded, analyticsToken: analytics });
+        const send = async () => {
+          // The server only accepts laps whose analytics event has already arrived.
+          await window.LPRAnalytics.flush();
+          return api('/api/laps', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body });
+        };
+        let result;
+        try { result = await send(); }
+        catch (error) { if (error.status !== 428) throw error; result = await send(); }
         if (result.mode !== 'laps') {
           status.textContent = t('Verkkotuloslista ei vielä tue useita kierroksia samalta kuljettajalta.');
           await refresh();

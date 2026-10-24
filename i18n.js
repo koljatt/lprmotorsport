@@ -28,6 +28,7 @@
   "Verkkotulokset tarvitsevat selaimen tallennustilan.": "Online results require browser storage.",
   "Valitse nimimerkki tuloslistasta ennen seuraavaa kierrosta.": "Choose a nickname in the leaderboard before your next lap.",
   "Lähetetään kierrosaikaa…": "Submitting lap time…",
+  "Kierros ei tallennu tuloslistalle ilman analytiikkasuostumusta. Voit silti pelata.": "Laps are not saved to the leaderboard without analytics consent. You can still play.",
   "Verkkotuloslista ei vielä tue useita kierroksia samalta kuljettajalta.": "The online leaderboard does not yet support multiple laps from the same driver.",
   "Oma sijoitus": "Your rank",
   "Paras": "Best",

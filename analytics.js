@@ -14,7 +14,7 @@
   const consent = document.querySelector('#analytics-consent');
   const status = document.querySelector('#analytics-status');
   const remove = document.querySelector('#analytics-delete');
-  let enabled = false, token, session, nickname = '', queue = [], sending = false;
+  let enabled = false, token, session, nickname = '', queue = [], sending = false, inflight = null;
   let state = 'menu', input = 'unknown', last = performance.now(), lastInput = last, focused = document.hasFocus();
   let buckets = {}, lastFlush = last, started = false;
   const metadata = () => {
@@ -49,6 +49,8 @@
   }
   async function flush(beacon = false) {
     if (!enabled) return;
+    // Leaderboard submissions need this flush to finish, not be skipped.
+    if (!beacon && inflight) await inflight;
     collect();
     if (!queue.length) return;
     const events = queue.slice(0, 40);
@@ -57,13 +59,16 @@
     if (beacon) { try { navigator.sendBeacon(endpoint + '/api/analytics/events', new Blob([body], { type: 'application/json' })); } catch {} return; }
     if (sending) return;
     sending = true;
-    try {
-      const response = await fetch(endpoint + '/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(10000) });
-      if (response.status === 410) {
-        enabled = false; consent.checked = false; write(key, 'no'); queue = []; buckets = {};
-      }
-      if (response.ok) { const ids = new Set(events.map(e => e.id)); queue = queue.filter(e => !ids.has(e.id)); }
-    } catch {} finally { sending = false; }
+    inflight = (async () => {
+      try {
+        const response = await fetch(endpoint + '/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(10000) });
+        if (response.status === 410) {
+          enabled = false; consent.checked = false; write(key, 'no'); queue = []; buckets = {};
+        }
+        if (response.ok) { const ids = new Set(events.map(e => e.id)); queue = queue.filter(e => !ids.has(e.id)); }
+      } catch {} finally { sending = false; inflight = null; }
+    })();
+    return inflight;
   }
   function enable() {
     if (enabled) return;
@@ -100,8 +105,8 @@
   });
   function english() { return document.documentElement.lang === 'en'; }
   function translate() {
-    document.querySelector('#analytics-label').textContent = english() ? 'I allow nickname-linked gameplay and usage data to improve the game (optional)' : 'Sallin nimimerkkiini yhdistettyjen peli- ja käyttötietojen keräämisen pelin kehittämiseksi (vapaaehtoinen)';
-    document.querySelector('#analytics-info').textContent = english() ? 'The game developer can see your sessions, activity, lap times, device/browser categories and referring site. Stored for 90 days. No IP addresses or precise location are stored in your profile. You can play without analytics and turn it off here at any time. This browser identifies your profile; it is not a verified identity.' : 'Pelin kehittäjä näkee pelikerrat, tekemiset, kierrosajat, laite- ja selainluokan sekä tulosivuston. Säilytys 90 päivää. Profiiliin ei tallenneta IP-osoitetta tai tarkkaa sijaintia. Voit pelata ilman analytiikkaa ja lopettaa keräyksen tästä milloin tahansa. Profiili tunnistaa tämän selaimen, ei varmennettua henkilöä.';
+    document.querySelector('#analytics-label').textContent = english() ? 'I allow nickname-linked gameplay and usage data to be collected (required for the leaderboard)' : 'Sallin nimimerkkiini yhdistettyjen peli- ja käyttötietojen keräämisen (vaaditaan tuloslistalle)';
+    document.querySelector('#analytics-info').textContent = english() ? 'The data is used to verify leaderboard laps and to improve the game. The game developer can see your sessions, activity, lap times, device/browser categories and referring site. Stored for 90 days. No IP addresses or precise location are stored in your profile. You can play without analytics, but your laps are then not saved to the leaderboard. You can turn it off here at any time. This browser identifies your profile; it is not a verified identity.' : 'Tietoja käytetään tuloslistan kierrosten tarkistamiseen ja pelin kehittämiseen. Pelin kehittäjä näkee pelikerrat, tekemiset, kierrosajat, laite- ja selainluokan sekä tulosivuston. Säilytys 90 päivää. Profiiliin ei tallenneta IP-osoitetta tai tarkkaa sijaintia. Voit pelata ilman analytiikkaa, mutta kierroksesi eivät silloin tallennu tuloslistalle. Voit lopettaa keräyksen tästä milloin tahansa. Profiili tunnistaa tämän selaimen, ei varmennettua henkilöä.';
     remove.textContent = english() ? 'Delete my analytics' : 'Poista analytiikkatietoni';
   }
   translate(); new MutationObserver(translate).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
@@ -127,6 +132,7 @@
   window.LPRAnalytics = {
     identify(name) { nickname = name; started = true; event('play_start'); void flush(); },
     event,
+    proof() { return enabled ? token : null; },
     sample(next, gamepadActive = false, controlActive = false) {
       tick();
       if (state !== next) { state = next; event('state_change'); }

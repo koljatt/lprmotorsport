@@ -5,7 +5,24 @@ const { DatabaseSync } = require('node:sqlite');
 const { pathToFileURL } = require('node:url');
 
 (async () => {
-  const worker = (await import(pathToFileURL(path.join(__dirname, '../cloudflare/worker.mjs')).href)).default;
+  const real = (await import(pathToFileURL(path.join(__dirname, '../cloudflare/worker.mjs')).href)).default;
+  // Simulate a consenting browser: record the lap in analytics before submitting it.
+  const analyticsEvent = async (lapMs, env) => {
+    const token = require('node:crypto').randomBytes(32).toString('hex'), now = Date.now();
+    const response = await real.fetch(new Request('https://example.com/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, session: 'd'.repeat(64), version: 'lut-20261011-v3', consentAt: now,
+        meta: { device: 'desktop', browser: 'Chrome', os: 'Windows', width: 1, height: 1, language: 'fi', referrer: '' },
+        events: [{ id: require('node:crypto').randomBytes(32).toString('hex'), type: 'lap_complete', state: 'driving', input: 'keyboard', nickname: '', at: now, lapMs }] }) }), env);
+    assert.equal(response.status, 200);
+    return token;
+  };
+  const worker = { async fetch(request, env) {
+    if (request.method !== 'POST' || !request.url.endsWith('/api/laps')) return real.fetch(request, env);
+    let body; try { body = JSON.parse(await request.clone().text()); } catch {}
+    if (!Number.isSafeInteger(body?.lapMs) || body.lapMs <= 5000 || 'analyticsToken' in body) return real.fetch(request, env);
+    return real.fetch(new Request(request.url, { method: 'POST', headers: request.headers,
+      body: JSON.stringify({ ...body, analyticsToken: await analyticsEvent(body.lapMs, env) }) }), env);
+  } };
   const db = new DatabaseSync(':memory:');
   // Start with the production legacy schema and existing records only.
   const schema = fs.readFileSync(path.join(__dirname, '../cloudflare/schema.sql'), 'utf8');
@@ -60,6 +77,7 @@ const { pathToFileURL } = require('node:url');
   assert.equal(top.length,10);assert(top.every(row=>row.nickname==='Test Driver'),'One driver can hold every TOP 10 place in one session');
   assert.deepEqual(top.map(row=>row.lap_ms),Array.from({length:10},(_,i)=>10000+i*1000));
   const longLap={...data,lapMs:7200000,sectors:[10000,10000,7180000]};
+  db.exec('DELETE FROM submission_limits');
   assert.equal((await worker.fetch(request(longLap),env)).status,200,'A long break does not invalidate the lap');
   db.exec('DELETE FROM submission_limits');
   assert.equal((await worker.fetch(request({ ...data, sectors: [1, 2, 3] }), env)).status, 400);
@@ -71,8 +89,33 @@ const { pathToFileURL } = require('node:url');
   assert.equal((await worker.fetch(request({ ...data, padding: 'x'.repeat(3000) }), env)).status, 413);
   const preflight = await worker.fetch(new Request('https://example.com/api/laps', { method: 'OPTIONS', headers: { Origin: origin } }), env);
   assert.equal(preflight.status, 204);
-  for (let i = 0; i < 120; i++) assert.equal((await worker.fetch(request(data), env)).status, 200);
+  for (let i = 0; i < 10; i++) assert.equal((await worker.fetch(request(data), env)).status, 200);
   assert.equal((await worker.fetch(request(data), env)).status, 429);
+  db.exec('DELETE FROM submission_limits');
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 41000, sectors: [10000, 10000, 21000], analyticsToken: 'e'.repeat(64) }), env)).status, 428, 'Lap without analytics trail is rejected');
+  const otherLap = await analyticsEvent(42000, env);
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 41000, sectors: [10000, 10000, 21000], analyticsToken: otherLap }), env)).status, 428, 'Analytics must contain the same lap');
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 42000, sectors: [10000, 10000, 22000], analyticsToken: otherLap }), env)).status, 200);
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 43000, sectors: [10000, 10000, 23000], analyticsToken: 'x' }), env)).status, 400);
+  env.ANALYTICS_ADMIN_TOKEN = 'z'.repeat(40);
+  const admin = (query = '', method = 'GET', token = env.ANALYTICS_ADMIN_TOKEN) => worker.fetch(new Request('https://example.com/api/admin/laps' + query, { method, headers: { Authorization: `Bearer ${token}` } }), env);
+  assert.equal((await admin('', 'GET', 'wrong'.repeat(8))).status, 401);
+  assert.equal((await admin('?id=1', 'DELETE', 'wrong'.repeat(8))).status, 401);
+  let listed = (await (await admin()).json()).results;
+  assert.equal(listed[0].lap_ms, 10000);assert.equal(listed[0].player_hash.length, 64);
+  assert.equal((await admin('?id=' + listed[0].id, 'DELETE')).status, 200);
+  listed = (await (await admin()).json()).results;
+  assert.equal(listed[0].lap_ms, 11000, 'Single lap removed');
+  assert.equal((await admin('?id=999999', 'DELETE')).status, 404);
+  assert.equal((await admin('?id=abc', 'DELETE')).status, 400);
+  const legacy = listed.find(r => r.player_hash === 'legacy-player');
+  assert.equal((await admin('?id=' + legacy.id, 'DELETE')).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM best_laps').get().n, 0, 'Legacy source removed so migration cannot restore it');
+  const cheater = listed[0].player_hash;
+  assert.equal((await admin('?player=' + cheater, 'DELETE')).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM laps WHERE player_hash = ?').get(cheater).n, 0, 'All laps of a player removed');
+  assert((await (await admin()).json()).results.length > 0, 'Other players remain');
+  assert.equal((await admin('', 'POST')).status, 405);
   db.close();
-  console.log('PASS: real SQLite schema, independent laps, top ten from one driver, idempotent retries, legacy migration, rank, public list, CORS, validation, body limits and submission throttling');
+  console.log('PASS: real SQLite schema, independent laps, top ten from one driver, idempotent retries, legacy migration, rank, public list, CORS, validation, body limits, submission throttling and admin lap removal');
 })().catch(error => { console.error(error); process.exitCode = 1; });
