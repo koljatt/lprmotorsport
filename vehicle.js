@@ -1,5 +1,8 @@
 /* Simplified dynamic bicycle model. Distances and speeds inside this class are SI units. */
-window.VehicleDynamics = class VehicleDynamics {
+window.VehicleDynamics = (() => {
+// Shared physics must give bit-identical results in the browser and on the verification server.
+const Math = window.LPRMath || globalThis.Math;
+return class VehicleDynamics {
   constructor() {
     const spec = window.LPRVehicleSpec;
     this.parameters = {
@@ -8,10 +11,10 @@ window.VehicleDynamics = class VehicleDynamics {
       wheelbase: spec.wheelbase,
       frontAxle: spec.frontAxle, rearAxle: spec.rearAxle,
       trackWidth: spec.trackWidth,
-      yawInertia: 120 * (spec.mass / 275) * (spec.wheelbase / 1.63) ** 2, // estimated
+      yawInertia: 120 * (spec.mass / 275) * Math.pow(spec.wheelbase / 1.63, 2), // estimated
       centreOfMassHeight: spec.centreOfMassHeight, // unmeasured, retained estimate
-      frontCorneringStiffness: 13000 * (spec.mass / 275) ** .94, // N/rad, combined front axle
-      rearCorneringStiffness: 14000 * (spec.mass / 275) ** .94,  // N/rad, combined rear axle
+      frontCorneringStiffness: 13000 * Math.pow(spec.mass / 275, .94), // N/rad, combined front axle
+      rearCorneringStiffness: 14000 * Math.pow(spec.mass / 275, .94),  // N/rad, combined rear axle
       roadGrip: 1.55,
       grassGrip: 0.58,
       drivetrain: spec.drivetrain, // two driven rear wheels; axle forces combined below
@@ -35,8 +38,8 @@ window.VehicleDynamics = class VehicleDynamics {
         bumpDamping: 900, reboundDamping: 1400, // N s/m at the wheel
         tyreRate: 160000, tyreDamping: 120,
         antiRollRate: 4500,     // N/m of left/right travel difference
-        pitchInertia: 65 * (spec.mass / 275) * (spec.wheelbase / 1.63) ** 2,
-        rollInertia: 38 * (spec.mass / 275) * (spec.trackWidth / 1.44) ** 2, // kg m²
+        pitchInertia: 65 * (spec.mass / 275) * Math.pow(spec.wheelbase / 1.63, 2),
+        rollInertia: 38 * (spec.mass / 275) * Math.pow(spec.trackWidth / 1.44, 2), // kg m²
         bumpTravel: .035, droopTravel: .040, bumpStopRate: 180000,
         motionRatio: .70
       }
@@ -143,12 +146,12 @@ window.VehicleDynamics = class VehicleDynamics {
     // Use perpendicular speed; glancing contact keeps its tangential motion.
     const cushioned=impactMaterial==='tyres';
     const damageFreeSpeed=cushioned?4:2, disablingSpeed=cushioned?16:8;
-    const damage=Math.max(0,impactSpeed**2-damageFreeSpeed**2)/
-      (disablingSpeed**2-damageFreeSpeed**2);
+    const damage=Math.max(0,impactSpeed*impactSpeed-damageFreeSpeed*damageFreeSpeed)/
+      (disablingSpeed*disablingSpeed-damageFreeSpeed*damageFreeSpeed);
     state.damage=Math.min(1,(state.damage || 0)+damage);
     state.crashed=state.damage>=1;
     state.impactSpeed=impactSpeed;
-    state.impactEnergy=.5*this.parameters.mass*impactSpeed**2;
+    state.impactEnergy=.5*this.parameters.mass*impactSpeed*impactSpeed;
     state.impactSide=normal.x*(-sin)+normal.y*cos;
     // Wall friction follows the impulse into the wall. A constant speed cut
     // on every contact would brake a grazing slide repeatedly each frame.
@@ -175,7 +178,7 @@ window.VehicleDynamics = class VehicleDynamics {
     const dt = Math.min(seconds, 1 / 90);
     const gravity = 9.81;
     const grade=state.terrainSlope||{forward:0,right:0};
-    const gradeScale=gravity/Math.sqrt(1+grade.forward**2+grade.right**2);
+    const gradeScale=gravity/Math.sqrt(1+grade.forward*grade.forward+grade.right*grade.right);
     const gradeForward=-grade.forward*gradeScale,gradeRight=-grade.right*gradeScale;
     const suspension=state.suspension || this.createSuspension(state);
     const gas = Math.max(0, Math.min(1, input.gas));
@@ -246,7 +249,7 @@ window.VehicleDynamics = class VehicleDynamics {
     const predictedRearFy = p.mass * predictedAy * p.frontAxle / wheelbase;
     const lateralDemand = Math.max(Math.abs(p.rearCorneringStiffness * rearSlipAngle), Math.abs(predictedRearFy) * .65);
     const lateralReserve = Math.min(estimatedRearLimit, lateralDemand);
-    const availableDrive = Math.sqrt(Math.max(0, estimatedRearLimit ** 2 - lateralReserve ** 2)) * .95;
+    const availableDrive = Math.sqrt(Math.max(0, estimatedRearLimit * estimatedRearLimit - lateralReserve * lateralReserve)) * .95;
     const targetScale = p.tractionControlEnabled && rawDriveRequest > 1 ? Math.min(1, availableDrive / rawDriveRequest) : 1;
     const changeRate = targetScale < state.torqueScale ? 12 : 2.5;
     state.torqueScale += Math.max(-changeRate * dt, Math.min(changeRate * dt, targetScale - state.torqueScale));
@@ -270,7 +273,7 @@ window.VehicleDynamics = class VehicleDynamics {
     const frontLoadShare = totalLoad > 0 ? frontLoad / totalLoad : p.rearAxle / wheelbase;
     const frontBrakeBias = Math.max(.65, Math.min(.90, frontLoadShare + .10));
     const rearBrakeReserve = Math.min(rearLimit * .95, lateralDemand);
-    const rearBrakeCapacity = Math.sqrt(Math.max(0, rearLimit ** 2 - rearBrakeReserve ** 2));
+    const rearBrakeCapacity = Math.sqrt(Math.max(0, rearLimit * rearLimit - rearBrakeReserve * rearBrakeReserve));
     // Existing brake-distribution assistance reserves rear lateral capacity.
     // Front combined-slip saturation below must still allow a steering force,
     // trading braking force for cornering rather than cancelling cornering.
@@ -337,3 +340,4 @@ window.VehicleDynamics = class VehicleDynamics {
     this.stepSuspension(state,dt);
   }
 };
+})();

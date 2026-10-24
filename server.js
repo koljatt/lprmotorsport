@@ -9,7 +9,9 @@ function createServer({production=false}={}) {
   const base=production?path.join(root,'dist'):root;
   let allowed=new Set([...gameFiles,'shared/track-document.js','shared/track-objects.js','data/track-objects.json']);
   let manifestStamp=fs.statSync(path.join(root,'scripts/build.cjs')).mtimeMs;
-  if(!production)for(const name of ['editor.html','editor.js','editor.css'])allowed.add(`tools/track-editor/${name}`);
+  // Development-only helpers: the track editor and the browser side of the determinism check.
+  const devFiles=['editor.html','editor.js','editor.css'].map(name=>`tools/track-editor/${name}`).concat('tests/determinism-scenario.js');
+  if(!production)for(const name of devFiles)allowed.add(name);
   return http.createServer(async(request,response)=>{
     const pathname=new URL(request.url,'http://localhost').pathname;
     const reply=(code,text)=>{response.writeHead(code,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});response.end(text);};
@@ -45,8 +47,7 @@ function createServer({production=false}={}) {
       if(stamp!==manifestStamp){
         delete require.cache[require.resolve('./scripts/build.cjs')];
         const current=require('./scripts/build.cjs');
-        allowed=new Set([...current.gameFiles,'shared/track-document.js','shared/track-objects.js','data/track-objects.json',
-          ...['editor.html','editor.js','editor.css'].map(file=>`tools/track-editor/${file}`)]);
+        allowed=new Set([...current.gameFiles,'shared/track-document.js','shared/track-objects.js','data/track-objects.json',...devFiles]);
         manifestStamp=stamp;
       }
     }

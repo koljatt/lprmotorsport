@@ -1,5 +1,7 @@
 /* Shared mature-tree geometry for campus woods and editor objects. */
 window.LPRTreeGeometry = (() => {
+  // Shared physics must give bit-identical results in the browser and on the verification server.
+  const Math = window.LPRMath || globalThis.Math;
   function build(trees,{quad,tri=(a,b,c,color)=>quad(a,b,c,c,color),groundShadow=()=>{},beginTree=()=>{},endTree=()=>{}},seed=17) {
     let treeSeed=seed;
     const treeRandom=()=>{treeSeed=(treeSeed*1664525+1013904223)>>>0;return treeSeed/4294967296;};
@@ -182,6 +184,7 @@ window.LPRTreeGeometry = (() => {
 
 /* Shared editor document and geometry; world units are 10 per metre. */
 window.LPRTrackObjects = (() => {
+  const Math = window.LPRMath || globalThis.Math;
   const {types,validate,wallFootprint,asphaltOutline,onAsphaltObject}=window.LPRTrackDocument;
   const objects=validate(window.LPRTrackData);
   const terrain=window.LPRTerrain?.create(objects);
