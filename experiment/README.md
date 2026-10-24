@@ -86,8 +86,9 @@ mittaa health-vastauksen ja tekee yhden sekä kaksi yhtäaikaista tarkastusta.
 Aloitusviive kuvaa kylmäkäynnistystä vain, jos palvelin todella oli nukkumassa.
 Raportti syntyy `artifacts/replay-probe/remote-report.json`-tiedostoon.
 
-Jatkuva ajonaikainen varmennus vaatii vielä session, järjestetyt syöte-erät,
-palvelinkellon rajat, katkojen käsittelyn ja luotetun lähtötilan.
+Jatkuva kokeiluprotokolla, järjestetyt syöte-erät, palvelinkellon rajat ja
+katkojen käsittely on toteutettu tämän ohjeen lopussa kuvattuun testisivuun.
+Varsinaisen 3D-pelin integrointi ja sen vastaavuuden todennus ovat erillinen vaihe.
 
 ## Mainiin yhdistämisen ehdot
 
@@ -165,7 +166,7 @@ Tämä yksi kuormakoe osoittaa, että kaksi kokonaista tallennetta voitiin käsi
 kierroksen kestoa lyhyemmässä ajassa. Se ei mittaa jatkuvaa ajonaikaista protokollaa,
 pitkän kuormituksen vakautta tai kaikkien ratojen ja ajotapojen laskentabudjettia.
 Kokonaisen kierroksen lähetys maalissa aiheuttaa edelleen yllä näkyvän odotuksen.
-Seuraava vaihe on palvelimen luotettuun lähtötilaan sidottu jatkuva syötevirta.
+Jatkuva syötevirta on nyt toteutettu alla kuvattuun kokeiluun; sen ajonaikainen mittaus tehdään erikseen.
 
 Health-pyyntö vei mittauksessa 5,28 sekuntia, mutta palvelin oli jo käynnissä.
 Ilmaispalvelimen 15 minuutin käyttämättömyyden jälkeistä kylmäkäynnistystä ei
@@ -174,3 +175,53 @@ mitattu. Tästä luvusta ei voi päätellä ensimmäisen pelaajan lämmittelyn p
 Julkinen testisivu palautti 200; avaimeton /verify palautti 401. Avainta ei
 kirjoiteta raportteihin tai versionhallintaan. Testin LAB_TOKEN löytyy ylläpitäjän
 Render-ympäristöasetuksista. Julkaistu 3D-peli ja sen leaderboard ovat ennallaan.
+
+## Jatkuva tarkastus
+
+Testisivulla jatkuva tarkastus on oletuksena käytössä. Palvelimen herätys ja
+session valmistelu tehdään ennen kuin selain aloittaa uuden ajon luotetusta
+lähtöruudusta. Selain lähettää normaalisti 60 tickin (0,5 s) erän. Jonon kasvaessa
+se voi yhdistää enintään 120 tickiä yhteen erään. Erät käsitellään järjestyksessä;
+palvelin säilyttää auton ja rataympäristön tilan omassa worker-threadissa.
+
+- `POST /sessions`: testipalvelimen LAB_TOKEN, simulation revision. Palauttaa
+  satunnaisen session ID:n, erillisen session salaisuuden ja lähtötilan.
+- `POST /sessions/:id/inputs`: session oma Bearer-tunnus, revision, seq, fromTick
+  ja ohjausarvot. Sama erä palauttaa saman kuittauksen myös verkkokatkon jälkeen.
+  Jo kuitattua sisältöä ei voi vaihtaa eikä järjestysaukkoja ohittaa.
+- `GET /sessions/:id`: session omistajalle tila ja viimeinen kuitattu tick.
+- `DELETE /sessions/:id`: sulkee session ja vapauttaa laskentatyöntekijän.
+
+Palvelimen monotoninen kello sallii enintään 250 ms:n etenemisen etuajassa.
+Yli 8 sekunnin viive tai 15 sekunnin toimettomuus katkaisee varmennuksen.
+Palvelin säilyttää korkeintaan kaksi aktiivista sessiota; vanha /verify jakaa
+saman kahden työn budjetin. Session kesto, eräkoko, aloitustaajuus, muistijälki,
+kuitit ja yhden erän laskenta-aika on rajattu. Selaimen kelloa ja aikaväitteitä ei
+käytetä virallisen koetuloksen laskemiseen. Valmis kierros vapauttaa threadin,
+mutta loppukuittausta voi yrittää uudelleen rajatun ajan.
+
+Verkkovirheessä selain yrittää samaa erää uudelleen. Jonon ylittyminen, piilotettu
+sivu, palvelimen uudelleenkäynnistys ja session päättyminen vaihtavat ajon
+harjoitteluksi. Varmennettua ajoa ei palauteta selaimen tarjoamasta auton tilasta.
+Maaliin tullessa lähetetään myös viimeinen vajaa erä; käyttöliittymä ilmoittaa
+varmennuksesta vasta palvelimen lopullisen kuittauksen jälkeen.
+
+Uudet tarkistukset:
+
+```sh
+npm run test:live-sessions
+npm run test:live-client
+npm run test:live-lab
+```
+
+Koko kierroksen protokollatesti käyttää testin omaa nopeutettua palvelinkelloa;
+se ei ole suorituskykymittaus. Todellinen kahden asiakkaan ajonaikainen koe:
+aseta `REPLAY_BASE_URL` ja `LAB_TOKEN`, ja aja `npm run measure:live-remote`.
+Se lähettää synteettisen 96,175 sekunnin tallenteen oikeassa ajassa kahdesta
+Node-asiakkaasta ja mittaa maaliintulon jälkeisen odotuksen. Se ei korvaa oikean
+selaimen tai varsinaisen 3D-pelin integraatiotestiä.
+
+Kokeilu ei edelleenkään kirjoita julkiseen leaderboardiin. Luotetut sessiot
+ovat tässä muistissa: palvelimen uudelleenkäynnistys keskeyttää keskeneräiset
+ajot turvallisesti. Julkiseen pelaajakäyttöön tarvitaan vielä käyttäjäkohtainen
+pääsy ja tulosten pysyvä, vain palvelimelle sallittu tallennus.

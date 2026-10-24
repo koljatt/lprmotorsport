@@ -20,6 +20,10 @@
     "measure:replay": "node scripts/measure-replay-experiment.cjs",
     "test:collision-index": "node tests/collision-index.test.cjs",
     "measure:replay-remote": "node scripts/check-replay-remote.cjs",
-    "test:asphalt-index": "node tests/asphalt-index.test.cjs"
+    "test:asphalt-index": "node tests/asphalt-index.test.cjs",
+    "test:live-sessions": "node tests/live-sessions.test.cjs",
+    "test:live-client": "node tests/live-client.test.cjs",
+    "measure:live-remote": "node scripts/measure-live-remote.cjs",
+    "test:live-lab": "node tests/live-lab.test.cjs"
   }
 }
