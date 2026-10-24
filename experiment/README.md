@@ -225,3 +225,31 @@ Kokeilu ei edelleenkään kirjoita julkiseen leaderboardiin. Luotetut sessiot
 ovat tässä muistissa: palvelimen uudelleenkäynnistys keskeyttää keskeneräiset
 ajot turvallisesti. Julkiseen pelaajakäyttöön tarvitaan vielä käyttäjäkohtainen
 pääsy ja tulosten pysyvä, vain palvelimelle sallittu tallennus.
+
+## Jatkuvan tarkastuksen Render-koe 24.10.2026
+
+Sovelluscommit `8cf36f27dbc2a02ea48589bb757354b82c678c7b`, Render Free,
+Frankfurt, deploy `dep-dbecaojncjis73dpqd40` (live).
+Kaksi Node-asiakasta lähetti saman 96,175 sekunnin synteettisen ajon oikeassa
+ajassa, erillisissä palvelinsessioissa. Molemmat tulokset täsmäsivät paikalliseen
+koko kierroksen vertailuun, mukaan lukien sektorit ja auton lopputila.
+
+| Mittaus | Pelaaja 1 | Pelaaja 2 |
+| --- | ---: | ---: |
+| Lähetetyt fysiikka-askeleet | 11 541 | 11 541 |
+| Käsitellyt erät | 184 | 187 |
+| Kierrosaika | 96,175 s | 96,175 s |
+| Lopullinen kuittaus maaliintulon jälkeen | 0,160 s | 0,148 s |
+| Suurin havaittu kuittauksen viive ajon aikana | 1,117 s | 1,111 s |
+| Worker-threadin yhteenlaskettu CPU-aika | 3,55 s | 3,13 s |
+
+Tarkat luvut: [live-render-measurement.json](live-render-measurement.json).
+Kaikki 13 GitHub Actions -testikokonaisuutta läpäisivät sovelluscommitin.
+Myös paikalliset uudet sessio-, asiakas- ja käyttöliittymätestit sekä
+replay-, tuloslista-, suorituskyky-, palvelin- ja build-tarkistukset läpäisivät.
+
+Tämä on yksi onnistunut kahden reaaliajassa tahdistetun Node-asiakkaan koe,
+ei lupaus kaikkien yhteyksien viiveestä tai pidemmän kuormituksen kapasiteetista.
+Oikean selaimen, ihmisen ohjauksen ja varsinaisen 3D-pelin integraatiota ei ole
+vielä todennettu. Julkinen leaderboard ei käytä kokeilua eikä sitä ole muutettu.
+Ilmainen palvelin ja sen enintään kahden laskentatyön raja säilyvät ennallaan.
