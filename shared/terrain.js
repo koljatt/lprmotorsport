@@ -3,6 +3,8 @@
  * stamps join by maximum height instead of growing with pointer-event count. */
 (function(root){
   'use strict';
+  // Shared physics must give bit-identical results in the browser and on the verification server.
+  const Math = root.LPRMath || globalThis.Math;
   function create(objects){
     const hills=objects.filter(o=>o.type==='hill'),cells=new Map(),cellSize=200;
     const radius=o=>200*o.scale;
@@ -20,7 +22,7 @@
       for(const hill of cells.get(`${Math.floor(x/cellSize)},${Math.floor(y/cellSize)}`)||[]){
         const r=radius(hill),a=x-hill.x,b=y-hill.y,q=(a*a+b*b)/(r*r);
         if(q>=1)continue;
-        const peak=(hill.height??3)*10,value=peak*(1-q)**2;
+        const peak=(hill.height??3)*10,value=peak*(1-q)*(1-q);
         if(value>height){height=value;dx=-4*peak*a*(1-q)/(r*r);dy=-4*peak*b*(1-q)/(r*r);}
       }
       return {height,dx,dy};

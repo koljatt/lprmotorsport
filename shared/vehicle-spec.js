@@ -1,5 +1,7 @@
 /* Supplied inputs in SI units; estimates are identified below. Tyre sizes are nominal. */
 (function(root) {
+  // Shared physics must give bit-identical results in the browser and on the verification server.
+  const Math = root.LPRMath || globalThis.Math;
   const spec = Object.freeze({
     metresPerWorldUnit: .1,
     mass: 450, driverMass: 80, massWithoutDriver: 370,

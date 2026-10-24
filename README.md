@@ -216,6 +216,20 @@ Parametrit (massa, akseliväli, teho, rengaspito, vetotapa) ovat alustavia. Käy
 
 Jarrujen enimmäisvoima on 4500 N, ja voima jaetaan akselien käytettävissä olevan pidon mukaan. Jarru vähentää kaasun vetovoimaa, joten kaasun pitäminen pohjassa ei heikennä täyttä jarrutusta. Simulaatiotestissä suora pysähtyminen kuivalla asfaltilla nopeudesta 100 km/h kestää noin 1,76 sekuntia ja 24 metriä. Nurmella pysähtymismatka on pidempi. Tarkistukset: `node tests/braking.test.cjs`.
 
+## Deterministinen fysiikka
+
+Palvelinpuolinen ajon varmennus simuloi kuljettajan syötteet uudelleen ja vertaa tilaa selaimen tilaan. ECMAScript määrittelee tarkasti vain `+ - * /` ja `Math.sqrt`; `Math.sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `log`, `pow`, `tanh` ja `hypot` saavat erota viimeisessä bitissä selaimen ja Node.js:n V8-versioiden välillä, ja kaoottisessa ajomallissa yksi bitti kasvaa senteiksi minuutissa. Siksi `shared/dmath.js` toteuttaa nämä funktiot fdlibm-algoritmeilla pelkillä tarkasti määritellyillä operaatioilla ja julkaisee ne nimellä `window.LPRMath`. Fysiikkatiedostot (`shared/vehicle-spec.js`, `campus.js`, `shared/track-document.js`, `shared/terrain.js`, `shared/track-objects.js`, `vehicle.js`) varjostavat `Math`-olion tällä, joten ne on ladattava `shared/dmath.js`:n jälkeen; `**`-operaattoria ei fysiikassa käytetä, koska se ohittaa varjostuksen. Renderöinti ja muu peli käyttävät edelleen natiivia `Math`ia. Tulokset ovat enintään 1 ulp:n päässä natiivista (`tanh` ja `hypot` 2 ulp), eli ajotuntuma ei muutu. `LPRMath` heittää virheen funktioista, joille ei ole deterministista toteutusta (esim. `random`, `asin`), jotta ne eivät päädy fysiikkaan huomaamatta.
+
+Tarkistus: `npm run test:determinism`. Testi vertaa tuloksia natiiviin `Math`iin, ECMAScript-erikoisarvoihin sekä Chromiumissa tallennettuihin sormenjälkiin: `LPRMath.fingerprint()`-tiivisteisiin ja `tests/determinism-scenario.js`-tiedoston 30 sekunnin törmäilevän ajoskenaarion tilatiivisteeseen. Node.js:ssä läpäisevä testi todistaa, että selain ja varmennuspalvelin laskevat bitilleen samoin. Selaimessa saman voi tarkistaa kehityspalvelimella (`npm run dev`) pelin konsolissa:
+
+```js
+JSON.stringify(window.LPRMath.fingerprint());
+await new Promise(r => { const s = document.createElement('script'); s.onload = r; s.src = '/tests/determinism-scenario.js'; document.head.append(s); });
+window.LPRDeterminismScenario(window).hash; // lataa peli uudelleen tämän jälkeen
+```
+
+Jos ajomallia muutetaan tarkoituksella, skenaariotiiviste `EXPECTED_SCENARIO` tiedostossa `tests/dmath.test.cjs` tallennetaan uudelleen selaimessa yllä olevalla komennolla ennen testin päivittämistä.
+
 # Kielen vaihtaminen
 
 Yläpalkin FI/EN-valinnalla voi vaihtaa suomen ja englannin välillä myös kesken kierroksen. Vaihto säilyttää pelitilanteen ja tallentuu selaimeen seuraavaa pelikertaa varten. Käyttöliittymä, ohjeet, kalibrointi ja saunan keskustelut seuraavat valittua kieltä. Saunan puhe käyttää valitun kielen ääntä, jos selain tarjoaa sen.

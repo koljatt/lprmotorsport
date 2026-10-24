@@ -1,5 +1,7 @@
 (function(root) {
   'use strict';
+  // Shared physics must give bit-identical results in the browser and on the verification server.
+  const Math = root.LPRMath || globalThis.Math;
   const types={
     cone:{name:'Kartio',w:6,d:6,h:8,color:[1,.4,.05]},
     barrier:{name:'Suojakaide',w:40,d:8,h:12,color:[.48,.52,.54]},

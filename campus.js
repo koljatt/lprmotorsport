@@ -1,6 +1,8 @@
 /* Stylised campus, traced from the supplied route screenshot. Not a survey.
  * Screenshot coordinates share one transform for roads and architecture. */
 window.LPRCampus = (() => {
+  // Shared physics must give bit-identical results in the browser and on the verification server.
+  const Math = window.LPRMath || globalThis.Math;
   const scale = 5;
   const road = { halfWidth: 33, kerbOuter: 39, shoulderOuter: 41 };
   const world = (x, y) => ({ x: (x - 100) * scale + 200, y: (y - 100) * scale + 200 });
@@ -450,7 +452,7 @@ window.LPRCampus = (() => {
     b.direction={x:-n.x,y:-n.y};
     if(b.kind==='tree') b.bendVelocity+=Math.min(2,impulse/18000);
     if(inverseMass) {
-      const inertia=b.mass*((b.width*spec.metresPerWorldUnit)**2+(b.depth*spec.metresPerWorldUnit)**2)/12;
+      const inertia=b.mass*(Math.pow(b.width*spec.metresPerWorldUnit,2)+Math.pow(b.depth*spec.metresPerWorldUnit,2))/12;
       b.spin+=Math.max(-2,Math.min(2,((px-b.x)*-n.y-(py-b.y)*-n.x)*spec.metresPerWorldUnit*impulse/inertia));
     }
     if(severity>0 && b.kind!=='person' && b.kind!=='tree') {
