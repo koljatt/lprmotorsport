@@ -1,5 +1,7 @@
 // Conservative broad phase; preserves obstacle order for collision tie-breaking.
 (function(root){
+ // Shared physics must give bit-identical results in the browser and on the verification server.
+ const Math=root.LPRMath||globalThis.Math;
  function createCollisionIndex(bounds,cellSize=160){
   const cells=new Map(),dynamic=[],order=new Map();
   bounds.forEach((b,i)=>{

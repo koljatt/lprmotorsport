@@ -1,5 +1,7 @@
 /* Deterministic spectator collision model, shared with the renderer. */
 (function(root){
+  // Shared physics must give bit-identical results in the browser and on the verification server.
+  const Math=root.LPRMath||globalThis.Math;
   function create() {
     const campus=root.LPRCampus,site=campus.saunaSite;
     const forwardX=-Math.cos(Math.PI/4),forwardZ=-Math.sin(Math.PI/4),rightX=-forwardZ,rightZ=forwardX;

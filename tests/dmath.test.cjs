@@ -112,6 +112,20 @@ const EXPECTED_SCENARIO = '307c8dd4';
     'EXPECTED_SCENARIO in a browser as described in README (Deterministinen fysiikka) before updating this constant.');
 }
 
+// Verification server world: the exact code path verification/world.cjs compiles for
+// the session worker must also reproduce the Chromium recording (autopilot lap).
+const EXPECTED_VERIFIED_LAP = { hash: 'f1bf0cb2', laps: 1, lapTicks: [10046] };
+if (fs.existsSync(path.join(root, 'verification/world.cjs'))) {
+  const { createWorld, files } = require('../verification/world.cjs');
+  assert.equal(files[0], 'shared/dmath.js', 'verification world must compile dmath.js before the physics');
+  const created = createWorld();
+  assert.ok(created.math && created.math.deterministic, 'createWorld must expose LPRMath');
+  const lap = require('./determinism-scenario.js').verifiedLap(created);
+  assert.deepEqual({ hash: lap.hash, laps: lap.laps, lapTicks: lap.lapTicks }, EXPECTED_VERIFIED_LAP,
+    'Verification world diverged from the browser recording; see README (Deterministinen fysiikka).');
+  assert.equal(lap.damage, 0);
+}
+
 // Without LPRMath the physics must still run (tests use native Math), but production must load it first.
 {
   const context = { window: { LPRVehicleSpec: require('../shared/vehicle-spec.js') } };

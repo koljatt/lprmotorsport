@@ -27,6 +27,32 @@
     campus.resetObstacles();
     return { hash: hash.toString(16).padStart(8, '0'), impacts, x: car.x, y: car.y };
   }
+  // Verification-server world (verification/world.cjs createWorld): a deterministic
+  // autopilot follows the circuit at ~40 km/h for 100 s, completing a full timed lap.
+  function verifiedLap({ world, api, math }) {
+    const M = math, track = world.track;
+    const f64 = new Float64Array(1), u32 = new Uint32Array(f64.buffer);
+    let hash = 0, laps = 0;
+    const lapTicks = [];
+    for (let i = 0; i < 12000; i++) {
+      const s = world.result().state, near = world.nearestTrack(s.x, s.y);
+      const target = track[(near.index + 4) % track.length];
+      let error = M.atan2(target.y - s.y, target.x - s.x) - s.angle;
+      error = M.atan2(M.sin(error), M.cos(error));
+      const steer = Math.max(-1, Math.min(1, error * 2.2));
+      const brake = M.hypot(s.vx, s.vy) > 11 ? .5 : 0;
+      const event = world.step(api.decode([brake ? 0 : .6, brake, steer, true, false, true]));
+      if (event.completed) { laps++; lapTicks.push(event.completed.lapTicks); }
+      const r = world.result();
+      for (const key of ['x', 'y', 'angle', 'vx', 'vy', 'yawRate', 'damage']) {
+        f64[0] = r.state[key];
+        hash = (Math.imul(hash ^ u32[0], 2654435761) ^ u32[1]) >>> 0;
+      }
+      hash = (Math.imul(hash ^ r.stage, 2654435761) ^ r.lap) >>> 0;
+    }
+    return { hash: hash.toString(16).padStart(8, '0'), laps, lapTicks, damage: world.result().state.damage };
+  }
+  run.verifiedLap = verifiedLap;
   if (typeof module === 'object' && module.exports) module.exports = run;
   else root.LPRDeterminismScenario = run;
 })(typeof window === 'object' ? window : globalThis);

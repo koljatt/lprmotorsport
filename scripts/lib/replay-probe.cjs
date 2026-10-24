@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const root = path.resolve(__dirname, '../..');
-const files = ['shared/vehicle-spec.js', 'campus.js', 'shared/track-document.js',
+const files = ['shared/dmath.js', 'shared/vehicle-spec.js', 'campus.js', 'shared/track-document.js',
   'shared/terrain.js', 'shared/track-objects.js', 'vehicle.js', 'shared/collision-index.js'];
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const game = read('game.js');

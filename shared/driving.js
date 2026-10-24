@@ -1,5 +1,7 @@
 /* Authoritative 120 Hz driving rules. No renderer, wall clock or browser storage. */
 (function(root){
+  // Shared physics must give bit-identical results in the browser and on the verification server.
+  const Math=root.LPRMath||globalThis.Math;
   const hz=120;
   function create({car,dynamics=new root.VehicleDynamics(),onImpact=()=>{},indexed=true}={}) {
     const LPRCampus=root.LPRCampus,window=root;
@@ -17,7 +19,7 @@
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy)));
-      const distance = (x - a.x - t * dx) ** 2 + (y - a.y - t * dy) ** 2;
+      const distance = (x - a.x - t * dx) * (x - a.x - t * dx) + (y - a.y - t * dy) * (y - a.y - t * dy);
       if (distance < bestDist) {
         bestDist = distance; index = i;
         along=trackDistances[i]+t*(trackDistances[i+1]-trackDistances[i]);

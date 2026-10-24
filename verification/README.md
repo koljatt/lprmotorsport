@@ -95,6 +95,16 @@ edelleen omasta simulaatiostaan; asiakkaan aika- ja sijaintiväitteisiin
 ei luoteta. Toleranssin muutos ei korjaa mahdollisia varsinaisia
 simulaatioiden eroja; raportoi toistuva poikkeama ennen julkaisemista.
 
+Tunnettu syy `state_difference`-poikkeamalle on ollut JavaScript-moottorien
+matematiikkaero: `Math.sin`, `cos`, `pow` ja vastaavat saavat ECMAScript-
+määrittelyn mukaan poiketa viimeisessä bitissä selaimen ja Node.js:n välillä,
+ja ajomalli kasvattaa eron noin `1e-5` yksikköön minuutissa. Siksi jaettu
+fysiikka käyttää `shared/dmath.js`-tiedoston deterministisiä toteutuksia
+(`window.LPRMath`), ja `verification/world.cjs` kääntää sen ensimmäisenä.
+`npm run test:determinism` vertaa sekä funktioita että palvelinmaailman
+autopilottikierrosta Chromiumissa tallennettuun tiivisteeseen; katso
+README:n kohta Deterministinen fysiikka.
+
 ## Tarkistukset
 
 ```sh
