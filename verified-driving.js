@@ -19,7 +19,7 @@
   lights.hidden=false;lights.dataset.phase='green';lightsLabel.textContent=window.LPRI18n?.t('AJA!')||'AJA!';
   lightsTimer=setTimeout(clearLights,900);
  }
- let client=null,generation=0,preparing=false,hooks=null,identity=null,connectionUnavailable=false,retryTimer=null;
+ let client=null,generation=0,preparing=false,hooks=null,identity=null,connectionUnavailable=false,retryTimer=null,recovering=false;
  const snapshots=new Map(),pending=[];
  const key=()=>`lpr-verified-receipts:${identity?.token}`;
  const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{}};
@@ -63,7 +63,7 @@
  function cancel(message='Harjoittelu käynnissä. Aloita uudelleen aloittaaksesi uuden ajon.'){
   clearLights();
   clearTimeout(retryTimer);retryTimer=null;
-  generation++;preparing=false;snapshots.clear();
+  generation++;preparing=false;recovering=false;snapshots.clear();
   const old=client;client=null;if(old)void old.cancel();
   if(message)say(message);
  }
@@ -99,11 +99,13 @@
     onUpdate:ack=>{
      if(attempt!==generation)return;
      if(ack.phase==='ready')return;
+     if(ack.phase==='recovering'){recovering=true;say('Yhteyttä tarkistuspalvelimeen palautetaan…');return;}
      const expected=snapshots.get(ack.ackTick);
      if(!expected||Object.keys(expected.state).some(k=>Math.abs(expected.state[k]-ack.result.state[k])>1e-7)||expected.stage!==ack.result.stage||expected.lap!==ack.result.lap){cancel();return;}
      for(const tick of snapshots.keys())if(tick<=ack.ackTick)snapshots.delete(tick);
+     if(recovering){recovering=false;say('');}
      for(const lap of ack.laps||[]){pending.push(lap.receipt);persist();void save();}
-    },onLost:()=>{connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');retrySoon();}});
+    },onLost:message=>{console.warn('LPR verification lost:',message);connectionUnavailable=true;cancel('Harjoittelu käynnissä – tarkistusyhteys katkesi.');retrySoon();}});
    await next.start();
    if(attempt!==generation){await next.cancel();return;}
    await lightsReady;
@@ -123,7 +125,7 @@
   step(input,result,event){
    if(!client?.active)return;
    snapshots.set(result.ticks,result);
-   if(snapshots.size>960){cancel();return;}
+   if(snapshots.size>2400){cancel('Harjoittelu käynnissä – tarkistuspalvelin jäi liian kauas jälkeen.');return;}
    client.enqueue(window.LPRDriving.encode(input));
    if(event.completed){void client.flush(true).catch(()=>{});say('Tallennetaan kierrosaikaa…');}
   }
