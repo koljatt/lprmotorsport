@@ -19,6 +19,7 @@
     "test:replay-browser": "node scripts/check-replay-browser.cjs",
     "measure:replay": "node scripts/measure-replay-experiment.cjs",
     "test:collision-index": "node tests/collision-index.test.cjs",
-    "measure:replay-remote": "node scripts/check-replay-remote.cjs"
+    "measure:replay-remote": "node scripts/check-replay-remote.cjs",
+    "test:asphalt-index": "node tests/asphalt-index.test.cjs"
   }
 }

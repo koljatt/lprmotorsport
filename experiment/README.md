@@ -122,3 +122,18 @@ tuloksen. Yhden tapauksen indeksihyöty on noin 5 %, ei vielä suuri optimointi.
 Rinnakkaiskoe hyötyi tämän koneen useista ytimistä; tulos ei takaa ilmaisen
 Render-instanssin kapasiteettia tai ajonaikaista viivettä. Tarkat luvut:
 [local-measurement.json](local-measurement.json).
+
+## Asfalttihaun optimointi 24.10.2026
+
+Ensimmäinen Render Free -koe ylitti 60 sekunnin laskentarajan sekä yhdellä että
+kahdella tarkastuksella. Sen jälkeen asfalttipalojen haku indeksoitiin
+`shared/track-objects.js`-tiedostossa. Indeksi rajaa ehdokkaat, mutta pyöristettyjen
+ja käännettyjen palojen tarkka kuulumistesti säilyy ennallaan. 19 316 pistettä
+verrattiin alkuperäiseen täyteen hakuun, ja vanhan tallenteen koko lopputila sekä
+sektorit säilyivät täsmälleen samoina.
+
+Uusi paikallinen 96,175 sekunnin tallenne: indeksoitu toisto 1,54 s ja yksi
+HTTP-tarkastus 1,63 s. Kaksi HTTP-tarkastusta valmistui yhdessä 1,95 sekunnissa.
+Tarkat luvut: [local-measurement-after-asphalt.json](local-measurement-after-asphalt.json).
+Kaikki kymmenen testikokonaisuutta sekä build ja build:worker läpäisivät.
+Uuden version Render-mittaus tehdään erikseen ennen kapasiteettipäätelmiä.
