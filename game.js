@@ -45,9 +45,9 @@
   const keyboard = new Set();
   const touchPointers = new Map();
   let activePad = null;
-  let best = Number(localStorage.getItem('lpr-best-time-lut-20261011-v3')) || 0;
+  let best = Number(localStorage.getItem('lpr-best-time-lut-20261024-v4')) || 0;
   let storedSectors = null;
-  try { storedSectors = JSON.parse(localStorage.getItem('lpr-best-sectors-lut-20261011-v3')); } catch {}
+  try { storedSectors = JSON.parse(localStorage.getItem('lpr-best-sectors-lut-20261024-v4')); } catch {}
   const timing = new LPRLapTiming(storedSectors?.lapTime === best ? storedSectors.sectors : null);
   const sectorUI = document.querySelector('#sector-time');
 
@@ -532,9 +532,9 @@
           if (timing.sectors.length === 3) window.LPRLeaderboard?.submit(lapTime, timing.sectors.slice());
           if (!best || lapTime < best) {
             best = lapTime;
-            localStorage.setItem('lpr-best-time-lut-20261011-v3', String(best));
+            localStorage.setItem('lpr-best-time-lut-20261024-v4', String(best));
             timing.best = timing.sectors.slice();
-            localStorage.setItem('lpr-best-sectors-lut-20261011-v3', JSON.stringify({ lapTime: best, sectors: timing.best }));
+            localStorage.setItem('lpr-best-sectors-lut-20261024-v4', JSON.stringify({ lapTime: best, sectors: timing.best }));
             ui.best.textContent = formatTime(best);
             showNotice(t("record", { time: formatTime(lapTime) }), 3500);
           } else showNotice(t("lapResult", { time: formatTime(lapTime) }), 2500);

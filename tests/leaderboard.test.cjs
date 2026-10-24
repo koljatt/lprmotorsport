@@ -6,13 +6,15 @@ const { pathToFileURL } = require('node:url');
 
 (async () => {
   const real = (await import(pathToFileURL(path.join(__dirname, '../cloudflare/worker.mjs')).href)).default;
-  // Simulate a consenting browser: record the lap in analytics before submitting it.
-  const analyticsEvent = async (lapMs, env) => {
-    const token = require('node:crypto').randomBytes(32).toString('hex'), now = Date.now();
+  // Simulate a consenting browser: the session starts the lap, then records its completion.
+  const analyticsEvent = async (lapMs, env, { start = true, late = 0 } = {}) => {
+    const token = require('node:crypto').randomBytes(32).toString('hex'), now = Date.now(), id = () => require('node:crypto').randomBytes(32).toString('hex');
+    const events = [{ id: id(), type: 'lap_complete', state: 'driving', input: 'keyboard', nickname: '', at: now, lapMs }];
+    if (start) events.unshift({ id: id(), type: 'lap_start', state: 'driving', input: 'keyboard', nickname: '', at: now - lapMs + late });
     const response = await real.fetch(new Request('https://example.com/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, session: 'd'.repeat(64), version: 'lut-20261011-v3', consentAt: now,
+      body: JSON.stringify({ token, session: 'd'.repeat(64), version: 'lut-20261024-v4', consentAt: now,
         meta: { device: 'desktop', browser: 'Chrome', os: 'Windows', width: 1, height: 1, language: 'fi', referrer: '' },
-        events: [{ id: require('node:crypto').randomBytes(32).toString('hex'), type: 'lap_complete', state: 'driving', input: 'keyboard', nickname: '', at: now, lapMs }] }) }), env);
+        events }) }), env);
     assert.equal(response.status, 200);
     return token;
   };
@@ -28,7 +30,7 @@ const { pathToFileURL } = require('node:url');
   const schema = fs.readFileSync(path.join(__dirname, '../cloudflare/schema.sql'), 'utf8');
   db.exec(schema.split('-- Every completed lap')[0]);
   db.prepare('INSERT INTO best_laps(version,player_hash,nickname,lap_ms,sector1,sector2,sector3) VALUES (?,?,?,?,?,?,?)')
-    .run('lut-20261011-v3','legacy-player','Panu',69698,16237,17170,36291);
+    .run('lut-20261024-v4','legacy-player','Panu',69698,16237,17170,36291);
   const env = { DB: { async batch(statements) {
     db.exec('BEGIN');
     try { const results=[];for(const statement of statements)results.push(await statement.run());db.exec('COMMIT');return results; }
@@ -43,7 +45,7 @@ const { pathToFileURL } = require('node:url');
     };
   } } };
   const origin = 'https://panulut.github.io';
-  const data = { version: 'lut-20261011-v3', nickname: 'Test Driver', lapMs: 40000, sectors: [10000, 10000, 20000] };
+  const data = { version: 'lut-20261024-v4', nickname: 'Test Driver', lapMs: 40000, sectors: [10000, 10000, 20000] };
   const request = (body, token = 'a'.repeat(64), extra = {}) => new Request('https://example.com/api/laps', {
     method: 'POST', headers: { Origin: origin, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...extra }, body: JSON.stringify(body)
   });
@@ -69,18 +71,20 @@ const { pathToFileURL } = require('node:url');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM laps').get().n,5,'Rerunning migration does not duplicate historical laps');
   db.exec('DELETE FROM submission_limits');
   for(let i=0;i<10;i++) {
-    const lapMs=10000+i*1000;
-    response=await worker.fetch(request({...data,lapMs,sectors:[3000,3000,lapMs-6000]}),env);
+    const lapMs=30000+i*500;
+    response=await worker.fetch(request({...data,lapMs,sectors:[8000,8000,lapMs-16000]}),env);
     assert.equal(response.status,200);
   }
   const top=(await (await worker.fetch(new Request('https://example.com/api/leaderboard'),env)).json()).results;
   assert.equal(top.length,10);assert(top.every(row=>row.nickname==='Test Driver'),'One driver can hold every TOP 10 place in one session');
-  assert.deepEqual(top.map(row=>row.lap_ms),Array.from({length:10},(_,i)=>10000+i*1000));
+  assert.deepEqual(top.map(row=>row.lap_ms),Array.from({length:10},(_,i)=>30000+i*500));
   const longLap={...data,lapMs:7200000,sectors:[10000,10000,7180000]};
   db.exec('DELETE FROM submission_limits');
   assert.equal((await worker.fetch(request(longLap),env)).status,200,'A long break does not invalidate the lap');
   db.exec('DELETE FROM submission_limits');
   assert.equal((await worker.fetch(request({ ...data, sectors: [1, 2, 3] }), env)).status, 400);
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 29999, sectors: [9999, 10000, 10000] }), env)).status, 400, 'Implausibly fast lap is rejected');
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 40000, sectors: [4999, 15001, 20000] }), env)).status, 400, 'Implausibly fast sector is rejected');
   assert.equal((await worker.fetch(request({ ...data, version: 'old' }), env)).status, 400);
   assert.equal((await worker.fetch(request({ ...data, nickname: '<script>' }), env)).status, 400);
   assert.equal((await worker.fetch(request(null), env)).status, 400);
@@ -97,15 +101,21 @@ const { pathToFileURL } = require('node:url');
   assert.equal((await worker.fetch(request({ ...data, lapMs: 41000, sectors: [10000, 10000, 21000], analyticsToken: otherLap }), env)).status, 428, 'Analytics must contain the same lap');
   assert.equal((await worker.fetch(request({ ...data, lapMs: 42000, sectors: [10000, 10000, 22000], analyticsToken: otherLap }), env)).status, 200);
   assert.equal((await worker.fetch(request({ ...data, lapMs: 43000, sectors: [10000, 10000, 23000], analyticsToken: 'x' }), env)).status, 400);
+  const noStart = await analyticsEvent(44000, env, { start: false });
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 44000, sectors: [10000, 10000, 24000], analyticsToken: noStart }), env)).status, 428, 'Completion without a lap start in the same session is rejected');
+  const tooSoon = await analyticsEvent(44000, env, { late: 5000 });
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 44000, sectors: [10000, 10000, 24000], analyticsToken: tooSoon }), env)).status, 428, 'Lap start must precede completion by the lap time');
+  const jitter = await analyticsEvent(44000, env, { late: 1500 });
+  assert.equal((await worker.fetch(request({ ...data, lapMs: 44000, sectors: [10000, 10000, 24000], analyticsToken: jitter }), env)).status, 200, 'Frame and clock jitter within 2 s is tolerated');
   env.ANALYTICS_ADMIN_TOKEN = 'z'.repeat(40);
   const admin = (query = '', method = 'GET', token = env.ANALYTICS_ADMIN_TOKEN) => worker.fetch(new Request('https://example.com/api/admin/laps' + query, { method, headers: { Authorization: `Bearer ${token}`, ...(method === 'DELETE' ? { Origin: 'https://example.com' } : {}) } }), env);
   assert.equal((await admin('', 'GET', 'wrong'.repeat(8))).status, 401);
   assert.equal((await admin('?id=1', 'DELETE', 'wrong'.repeat(8))).status, 401);
   let listed = (await (await admin()).json()).results;
-  assert.equal(listed[0].lap_ms, 10000);assert.equal(listed[0].player_hash.length, 64);
+  assert.equal(listed[0].lap_ms, 30000);assert.equal(listed[0].player_hash.length, 64);
   assert.equal((await admin('?id=' + listed[0].id, 'DELETE')).status, 200);
   listed = (await (await admin()).json()).results;
-  assert.equal(listed[0].lap_ms, 11000, 'Single lap removed');
+  assert.equal(listed[0].lap_ms, 30500, 'Single lap removed');
   assert.equal((await admin('?id=999999', 'DELETE')).status, 404);
   assert.equal((await admin('?id=abc', 'DELETE')).status, 400);
   const legacy = listed.find(r => r.player_hash === 'legacy-player');
@@ -117,5 +127,5 @@ const { pathToFileURL } = require('node:url');
   assert((await (await admin()).json()).results.length > 0, 'Other players remain');
   assert.equal((await admin('', 'POST')).status, 405);
   db.close();
-  console.log('PASS: real SQLite schema, independent laps, top ten from one driver, idempotent retries, legacy migration, rank, public list, CORS, validation, body limits, submission throttling and admin lap removal');
+  console.log('PASS: real SQLite schema, independent laps, top ten from one driver, idempotent retries, legacy migration, rank, public list, CORS, validation, plausibility floors, analytics lap trail, body limits, submission throttling and admin lap removal');
 })().catch(error => { console.error(error); process.exitCode = 1; });

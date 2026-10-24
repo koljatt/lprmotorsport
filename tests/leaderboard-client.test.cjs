@@ -20,7 +20,7 @@ function setup(storage=new Map(),offline=false,lapResult={mode:'laps',saved:true
     document:{querySelector:node,createElement:()=>({textContent:''})},
     async fetch(url,options){calls.push({url,options});if(offline)throw new Error('offline');
       return {ok:true,json:async()=>url.endsWith('/api/laps')?lapResult:
-        {version:'lut-20261011-v3',results:Array.from({length:20},(_,i)=>({nickname:i?'Driver '+i:'<script>',lap_ms:12346+i*1000}))}};
+        {version:'lut-20261024-v4',results:Array.from({length:20},(_,i)=>({nickname:i?'Driver '+i:'<script>',lap_ms:12346+i*1000}))}};
     }};
   vm.createContext(context);vm.runInContext(source,context);
   return {board:context.window.LPRLeaderboard,node,calls,storage,celebrations};

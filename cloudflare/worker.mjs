@@ -1,5 +1,9 @@
 // Paste this entire module into the Cloudflare Worker editor. Bind D1 as DB.
-const VERSION = 'lut-20261011-v3';
+// v4 (24.10.2026): fixed-step physics and deterministic math; earlier laps stay stored but are not comparable.
+const VERSION = 'lut-20261024-v4';
+// Plausibility floor: the circuit cannot be lapped flat out in under 30 s, and no sector in under 5 s.
+// This blocks absurd submissions; it is not proof of driving (see verification/ for that).
+const MIN_LAP_MS = 30000, MIN_SECTOR_MS = 5000;
 const ORIGINS = new Set(['https://panulut.github.io', 'http://localhost:8000', 'http://127.0.0.1:8000']);
 const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(n => n.toString(16).padStart(2, '0')).join('');
 
@@ -73,8 +77,8 @@ export default {
       const sectors = data?.sectors;
       const lapId = data?.lapId ?? crypto.randomUUID().replaceAll('-', '');
       if (!/^[a-f0-9]{32,64}$/.test(lapId) || data?.version !== VERSION || !/^[\p{L}\p{N} _.-]{1,24}$/u.test(nickname) ||
-          !Number.isSafeInteger(data.lapMs) || data.lapMs <= 5000 || !analyticsToken(data.analyticsToken) ||
-          !Array.isArray(sectors) || sectors.length !== 3 || !sectors.every(n => Number.isSafeInteger(n) && n > 0) ||
+          !Number.isSafeInteger(data.lapMs) || data.lapMs < MIN_LAP_MS || !analyticsToken(data.analyticsToken) ||
+          !Array.isArray(sectors) || sectors.length !== 3 || !sectors.every(n => Number.isSafeInteger(n) && n >= MIN_SECTOR_MS) ||
           sectors.reduce((a, b) => a + b, 0) !== data.lapMs) return reply({ error: 'Invalid lap' }, 400);
       const now = Math.floor(Date.now() / 1000);
       const ip = await hash(request.headers.get('CF-Connecting-IP') ?? 'unknown');
@@ -82,10 +86,13 @@ export default {
       const limit = await env.DB.prepare(`INSERT INTO submission_limits(ip_hash, expires, attempts) VALUES (?, ?, 1)
         ON CONFLICT(ip_hash) DO UPDATE SET attempts = attempts + 1 RETURNING attempts`).bind(ip, now + 60).first();
       if (limit.attempts > 10) return reply({ error: 'Too many submissions; retry later' }, 429);
-      // Leaderboard entry requires analytics consent: the same lap must be in the analytics trail.
+      // Leaderboard entry requires analytics consent: the same lap must be in the analytics trail,
+      // and that session must have started the lap at least lapMs earlier (wall clock, 2 s slack).
       await ensureAnalytics(env.DB);
-      const tracked = await env.DB.prepare(`SELECT 1 FROM analytics_events WHERE player_hash = ? AND kind = 'lap_complete'
-        AND lap_ms = ? AND received >= ? LIMIT 1`).bind(await hash(data.analyticsToken), data.lapMs, Date.now() - 600000).first();
+      const tracked = await env.DB.prepare(`SELECT 1 FROM analytics_events c WHERE c.player_hash = ? AND c.kind = 'lap_complete'
+        AND c.lap_ms = ? AND c.received >= ? AND EXISTS (SELECT 1 FROM analytics_events s WHERE s.player_hash = c.player_hash
+          AND s.session_id = c.session_id AND s.kind = 'lap_start' AND s.at <= c.at - ?) LIMIT 1`)
+        .bind(await hash(data.analyticsToken), data.lapMs, Date.now() - 600000, data.lapMs - 2000).first();
       if (!tracked) return reply({ error: 'Analytics consent required' }, 428);
       const player = await hash(token);
       const result = await env.DB.prepare(`INSERT OR IGNORE INTO laps

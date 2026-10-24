@@ -39,7 +39,7 @@ function client(storage = new Map()) {
   const hash = value=>createHash('sha256').update(value).digest('hex');
   let sequence = 1;
   const event = (kind,extra={})=>({id:(sequence++).toString(16).padStart(64,'0'),at:now,type:kind,state:'driving',input:'keyboard',nickname:'Panu',...extra});
-  const payload = {token,session,version:'lut-20261011-v3',consentAt:now,meta:{device:'desktop',browser:'Firefox',os:'Linux',width:1280,height:720,language:'fi-FI',referrer:'example.com'},events:[event('session_start'),event('play_start'),event('lap_start'),event('time',{ms:30000}),event('lap_complete',{lapMs:40000})]};
+  const payload = {token,session,version:'lut-20261024-v4',consentAt:now,meta:{device:'desktop',browser:'Firefox',os:'Linux',width:1280,height:720,language:'fi-FI',referrer:'example.com'},events:[event('session_start'),event('play_start'),event('lap_start'),event('time',{ms:30000}),event('lap_complete',{lapMs:40000})]};
   const send = (p,extra={})=>worker.fetch(new Request('https://service.test/api/analytics/events',{method:'POST',headers:{Origin:'https://panulut.github.io','Content-Type':'application/json',...extra},body:JSON.stringify(p)}),env);
   const admin = (route='/api/admin/summary',secret=env.ANALYTICS_ADMIN_TOKEN,method='GET')=>worker.fetch(new Request('https://service.test'+route,{method,headers:{Authorization:'Bearer '+secret}}),env);
   assert.equal((await admin('/api/admin/summary','wrong')).status,401);
