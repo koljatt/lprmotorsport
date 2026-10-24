@@ -19,7 +19,7 @@
   lights.hidden=false;lights.dataset.phase='green';lightsLabel.textContent=window.LPRI18n?.t('AJA!')||'AJA!';
   lightsTimer=setTimeout(clearLights,900);
  }
- let client=null,generation=0,preparing=false,hooks=null,identity=null,connectionUnavailable=false,retryTimer=null,recovering=false;
+ let client=null,generation=0,preparing=false,hooks=null,identity=null,connectionUnavailable=false,retryTimer=null,recovering=false,autoRetryAllowed=true;
  const snapshots=new Map(),pending=[];
  const key=()=>`lpr-verified-receipts:${identity?.token}`;
  const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{}};
@@ -76,6 +76,9 @@
   },3000);
  }
  async function start({replace=false,reconnect=false}={}){
+  // Never teleport an already driving player back to the start after an error.
+  if(reconnect&&!autoRetryAllowed)return;
+  if(!reconnect)autoRetryAllowed=true;
   if(preparing&&!replace)return;
   const chosen=window.LPRLeaderboard.identity;
   if(!chosen)return;
@@ -101,11 +104,23 @@
      if(ack.phase==='ready')return;
      if(ack.phase==='recovering'){recovering=true;say('Yhteyttä tarkistuspalvelimeen palautetaan…');return;}
      const expected=snapshots.get(ack.ackTick);
-     if(!expected||Object.keys(expected.state).some(k=>Math.abs(expected.state[k]-ack.result.state[k])>1e-7)||expected.stage!==ack.result.stage||expected.lap!==ack.result.lap){cancel();return;}
+     if(!expected||!ack.result?.state||Object.keys(expected.state).some(k=>!Number.isFinite(ack.result.state[k])||Math.abs(expected.state[k]-ack.result.state[k])>1e-7)||expected.stage!==ack.result.stage||expected.lap!==ack.result.lap){
+      console.warn('LPR verified simulation mismatch',{ackTick:ack.ackTick,hasSnapshot:!!expected,expectedStage:expected?.stage,serverStage:ack.result?.stage,expectedLap:expected?.lap,serverLap:ack.result?.lap});
+      autoRetryAllowed=false;
+      cancel('Harjoittelu käynnissä – auton tila ei täsmännyt palvelimen tarkistukseen. Aloita uudelleen, kun haluat uuden virallisen ajon.');
+      return;
+     }
      for(const tick of snapshots.keys())if(tick<=ack.ackTick)snapshots.delete(tick);
      if(recovering){recovering=false;say('');}
      for(const lap of ack.laps||[]){pending.push(lap.receipt);persist();void save();}
-    },onLost:message=>{console.warn('LPR verification lost:',message);connectionUnavailable=true;cancel('Harjoittelu käynnissä – tarkistusyhteys katkesi.');retrySoon();}});
+    },onLost:(message,details={})=>{
+     console.warn('LPR verification lost:',{message,...details});
+     connectionUnavailable=true;
+     autoRetryAllowed=false;
+     const reason=details.code||'yhteysvirhe';
+     cancel('Harjoittelu käynnissä – varmennus keskeytyi ('+reason+'). Jatka ajamista tai aloita itse uusi virallinen ajo.');
+     // Do not automatically restart a driving player: the new session would reset the car.
+    }});
    await next.start();
    if(attempt!==generation){await next.cancel();return;}
    await lightsReady;
@@ -113,10 +128,10 @@
    await next.activate();
    if(attempt!==generation){await next.cancel();return;}
    client=next;preparing=false;
-   hooks.start();releaseLights();say('');
+   hooks.start();autoRetryAllowed=false;releaseLights();say('');
    restore();
    void save();
-  }catch(error){if(next)await next.cancel();if(attempt===generation){connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');retrySoon();}}
+  }catch(error){if(next)await next.cancel();if(attempt===generation){connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');if(autoRetryAllowed)retrySoon();}}
  }
  window.LPRVerifiedDriving={
   attach(value){hooks=value;},cancel,start,refresh:sync,
@@ -125,7 +140,7 @@
   step(input,result,event){
    if(!client?.active)return;
    snapshots.set(result.ticks,result);
-   if(snapshots.size>2400){cancel('Harjoittelu käynnissä – tarkistuspalvelin jäi liian kauas jälkeen.');return;}
+   if(snapshots.size>2400){console.warn('LPR verification snapshot backlog',{ticks:result.ticks,ackTick:client.tick,snapshots:snapshots.size});autoRetryAllowed=false;cancel('Harjoittelu käynnissä – palvelimen kuittaukset jäivät liian kauas jälkeen.');return;}
    client.enqueue(window.LPRDriving.encode(input));
    if(event.completed){void client.flush(true).catch(()=>{});say('Tallennetaan kierrosaikaa…');}
   }
@@ -134,10 +149,10 @@
  setInterval(()=>{if(!document.hidden&&document.querySelector('#settings-dialog').open)void sync();},15000);
  document.querySelector('#leaderboard-start-form').addEventListener('submit',()=>{restore();if(identity){void save();void start();}});
  document.addEventListener('visibilitychange',()=>{
-  if(document.hidden)cancel();
-  else if(connectionUnavailable&&window.LPRLeaderboard.identity)void start({reconnect:true});
+  if(document.hidden){autoRetryAllowed=false;cancel();}
+  else if(connectionUnavailable&&autoRetryAllowed&&window.LPRLeaderboard.identity)void start({reconnect:true});
  });
- window.addEventListener('online',()=>{if(identity)void save();if(connectionUnavailable&&!preparing)void start({reconnect:true});});
+ window.addEventListener('online',()=>{if(identity)void save();if(connectionUnavailable&&autoRetryAllowed&&!preparing)void start({reconnect:true});});
  say('');
  void refresh();
 })();
