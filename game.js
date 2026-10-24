@@ -590,7 +590,7 @@
       window.LPRAnalytics?.event('lap_complete',{lapMs:Math.round(lapMs)});
       audio.lap(false);timing.reset();ui.lap.textContent=String(car.lap);
       showNotice('Kierros '+formatTime(lapMs)+(window.LPRVerifiedDriving.active?'':' · harjoittelu'),3000);
-      if(!window.LPRVerifiedDriving.active){void window.LPRVerifiedDriving.start();return;}
+      // Do not reset a flying lap after verification was lost: stay in practice until the player explicitly restarts.
     }
     car.throttleInput=input.gas;car.brakeInput=input.brake;
     ui.time.textContent=formatTime(car.lapElapsedMs);
