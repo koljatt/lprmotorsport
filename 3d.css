@@ -220,7 +220,7 @@ dialog { touch-action: pan-y pinch-zoom; }
   list-style:none;
   counter-reset:standing;
 }
-#verified-list li li, #leaderboard-list li {
+#verified-list li, #leaderboard-list li {
   display:grid;
   grid-template-columns:18px minmax(0,1fr) auto;
   align-items:baseline;
@@ -231,7 +231,13 @@ dialog { touch-action: pan-y pinch-zoom; }
   font-variant-numeric:tabular-nums;
   overflow-wrap:anywhere;
 }
-#verified-list li::before li::before, #leaderboard-list li::before { content:counter(standing) "."; color:#769989; }
+#verified-list li::before, #leaderboard-list li::before { content:counter(standing) "."; color:#769989; }
+#verified-list li { grid-template-columns:22px minmax(0,1fr) auto; }
+#verified-list li:nth-child(-n+3)::before { font-size:14px; line-height:1; }
+#verified-list li:nth-child(1)::before { content:"🥇"; content:"🥇" / "1."; }
+#verified-list li:nth-child(2)::before { content:"🥈"; content:"🥈" / "2."; }
+#verified-list li:nth-child(3)::before { content:"🥉"; content:"🥉" / "3."; }
+#verified-list li:first-child { color:#ffd76a; font-weight:800; }
 .standing-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .standing-time { white-space:pre; }
 .leaderboard-start-form { padding:12px; }
@@ -252,7 +258,7 @@ dialog { touch-action: pan-y pinch-zoom; }
   .leaderboard-start-form { grid-column:1 / -1; grid-row:1; }
   .leaderboard-entry-grid h3 { font-size:12px; margin-bottom:5px; }
   #verified-list, #leaderboard-list { font-size:11px; }
-  #verified-list li li, #leaderboard-list li { padding:2px 0; font-size:11px; }
+  #verified-list li, #leaderboard-list li { padding:2px 0; font-size:11px; }
   .leaderboard-standings > p { display:none; }
   .leaderboard-start-form { padding:8px; }
   .leaderboard-start-form h3 { display:none; }
@@ -264,7 +270,7 @@ dialog { touch-action: pan-y pinch-zoom; }
 @media(max-height:700px) and (min-width:761px) {
   #settings-dialog .dialog-head h2 { font-size:30px; }
   .leaderboard-entry-grid { margin-top:10px; padding-top:10px; }
-  #verified-list li li, #leaderboard-list li { padding:2px 0; }
+  #verified-list li, #leaderboard-list li { padding:2px 0; }
 }
 
 @media(max-width:760px) and (max-height:700px) and (orientation:portrait) {
@@ -277,7 +283,7 @@ dialog { touch-action: pan-y pinch-zoom; }
   .leaderboard-start-form > fieldset, .leaderboard-start-form > button, #leaderboard-status { grid-column:1 / -1; }
   .leaderboard-start-form .analytics-settings details { margin-top:3px; }
   .analytics-settings summary { font-size:11px; padding:2px 0; }
-  #verified-list li li, #leaderboard-list li { padding:1px 0; line-height:1.25; }
+  #verified-list li, #leaderboard-list li { padding:1px 0; line-height:1.25; }
 }
 
 @media(max-width:760px) and (orientation:landscape) {
@@ -294,5 +300,5 @@ dialog { touch-action: pan-y pinch-zoom; }
   .leaderboard-start-form h3, .leaderboard-standings > p { display:none; }
   .leaderboard-start-form .analytics-settings { padding:6px; margin:6px 0; }
   .leaderboard-start-form .analytics-settings label { font-size:10px; line-height:1.3; }
-  #verified-list li li, #leaderboard-list li { padding:1px 0; font-size:11px; }
+  #verified-list li, #leaderboard-list li { padding:1px 0; font-size:11px; }
 }
