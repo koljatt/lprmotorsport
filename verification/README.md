@@ -70,6 +70,31 @@ Tämä varmistaa palvelimen fysiikan mukaisen ajon. Se ei tunnista ihmistä,
 estä fysiikan mukaista automaattiohjausta tai takaa julkisen palvelun saatavuutta.
 Pelaajatunnus on selainkohtainen satunnaisavain, ei varmennettu henkilöllisyys.
 
+## Jos ajo muuttuu harjoitteluksi fysiikkaeron vuoksi
+
+Tarkista pelin ilmoitus. `state_difference` tarkoittaa, että jonkin auton
+fysiikka-arvon ero ylitti hyvin pienen `1e-5` toleranssin; `lap_checkpoint_difference`
+tarkoittaa, että kierros-/sektoritila ei täsmännyt; `missing_snapshot`
+kertoo puuttuvasta paikallisesta tilatallenteesta.
+
+Kopioi diagnostiikka selaimen DevTools-konsolissa:
+
+```js
+window.LPRVerificationDiagnostics.lastMismatch
+```
+
+Raportti sisältää ensimmäisen havaitun poikkeaman tarkistustickin,
+poikkeavien kenttien selain- ja palvelinarvot sekä erot. Älä sisällytä
+pyynnön Authorization-otsakkeita, pelaajatunnuksia tai allekirjoitettuja
+kierroskuitteja raporttiin. Huomaa, että selainikkunan uudelleenlataus
+tyhjentää tämän viimeisen tapahtuman.
+
+Tilavertailun toleranssi koskee vain sitä, näytetäänkö paikallinen ajo
+palvelimen kanssa yhtäpitävänä. Palvelin laskee ja allekirjoittaa tulokset
+edelleen omasta simulaatiostaan; asiakkaan aika- ja sijaintiväitteisiin
+ei luoteta. Toleranssin muutos ei korjaa mahdollisia varsinaisia
+simulaatioiden eroja; raportoi toistuva poikkeama ennen julkaisemista.
+
 ## Tarkistukset
 
 ```sh
