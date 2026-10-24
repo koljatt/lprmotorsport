@@ -64,7 +64,7 @@ LAB_PUBLIC=1 vaatii vähintään 32-merkkisen LAB_TOKEN-avaimen. Render luo avai
 kopioi se vain testaajan käyttöliittymän avainkenttään. Avain ei tallennu selaimen
 localStorageen eikä versionhallintaan. Älä julkaise tätä avainta avoimille pelaajille.
 
-Täällä julkaisua ei ole tehty eikä Render-tiliä tai suorituskykyä ole todennettu.
+Palvelu on julkaistu 24.10.2026 Render Free -tasolle Frankfurtissa: https://lpr-replay-experiment.onrender.com. Se on luotu suoraan Render-liitännällä, ei Blueprint-synkkauksella. Automaattiset julkaisut ovat pois käytöstä; YAML on vaihtoehtoinen käyttöönottomalli, ei nykyisen palvelun aktiivinen hallintalähde.
 Ilmainen 512 Mt:n instanssi voi tarvita pienemmän rinnakkaisuusrajan kuin paikallinen
 koe: enintään kaksi tarkastusta on koodin katto, ei kapasiteettilupaus. Palvelin
 rajoittaa tallenteen 2 MiB:iin ja 240 sekuntiin simulaatiota sekä laskennan 60 sekuntiin.
@@ -136,4 +136,41 @@ Uusi paikallinen 96,175 sekunnin tallenne: indeksoitu toisto 1,54 s ja yksi
 HTTP-tarkastus 1,63 s. Kaksi HTTP-tarkastusta valmistui yhdessä 1,95 sekunnissa.
 Tarkat luvut: [local-measurement-after-asphalt.json](local-measurement-after-asphalt.json).
 Kaikki kymmenen testikokonaisuutta sekä build ja build:worker läpäisivät.
-Uuden version Render-mittaus tehdään erikseen ennen kapasiteettipäätelmiä.
+Uuden version Render-mittaus on kuvattu alla.
+
+## Render Free -tulos 24.10.2026
+
+Palvelu: `srv-dbebsrlg1s2s73f3ob60`, Frankfurt, `free`, yksi instanssi.
+Mitattu julkaisu: `6d6e217f554ff3e9b396633a9f07e701e99040d3`,
+deploy `dep-dbebvi3rjlhs73f6usd0` (live). Käytössä Node 24.22.1 ja 120 Hz:n
+kokeilusimulaatio. Sama 96,175 sekunnin synteettinen tallenne kuin paikallisessa
+vertailussa; kierrosaika, sektorit ja auton lopputila täsmäsivät kaikissa kolmessa
+Render-toistossa paikalliseen vertailuun.
+
+| Mittaus | Tulos |
+| --- | ---: |
+| Yksi tarkastus, HTTP-pyynnön kokonaisaika | 24,52 s |
+| Yksi tarkastus, palvelimen laskenta-aika | 23,49 s |
+| Yksi tarkastus, threadin CPU-aika | 2,98 s |
+| Kaksi tarkastusta yhtä aikaa, molemmat valmistuneet | 49,49 s |
+| Rinnakkaisten laskentojen seinäkelloajat | 43,80 / 41,01 s |
+| Rinnakkaisten threadien CPU-ajat | 3,15 / 3,00 s |
+
+Tarkat luvut: [render-measurement.json](render-measurement.json).
+Ennen asfalttioptimointia yhden ja kahden tarkastuksen kokeet ylittivät
+60 sekunnin laskentabudjetin. Rinnakkaiskokeen virhevastausten raportti:
+[render-baseline-measurement.json](render-baseline-measurement.json).
+
+Tämä yksi kuormakoe osoittaa, että kaksi kokonaista tallennetta voitiin käsitellä
+kierroksen kestoa lyhyemmässä ajassa. Se ei mittaa jatkuvaa ajonaikaista protokollaa,
+pitkän kuormituksen vakautta tai kaikkien ratojen ja ajotapojen laskentabudjettia.
+Kokonaisen kierroksen lähetys maalissa aiheuttaa edelleen yllä näkyvän odotuksen.
+Seuraava vaihe on palvelimen luotettuun lähtötilaan sidottu jatkuva syötevirta.
+
+Health-pyyntö vei mittauksessa 5,28 sekuntia, mutta palvelin oli jo käynnissä.
+Ilmaispalvelimen 15 minuutin käyttämättömyyden jälkeistä kylmäkäynnistystä ei
+mitattu. Tästä luvusta ei voi päätellä ensimmäisen pelaajan lämmittelyn pituutta.
+
+Julkinen testisivu palautti 200; avaimeton /verify palautti 401. Avainta ei
+kirjoiteta raportteihin tai versionhallintaan. Testin LAB_TOKEN löytyy ylläpitäjän
+Render-ympäristöasetuksista. Julkaistu 3D-peli ja sen leaderboard ovat ennallaan.
