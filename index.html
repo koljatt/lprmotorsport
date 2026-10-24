@@ -12,7 +12,7 @@
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
     <link rel="stylesheet" href="styles.css?v=single-line-topbar-20261015" />
-    <link rel="stylesheet" href="3d.css?v=verified-launch-20261025" />
+    <link rel="stylesheet" href="3d.css?v=verified-top10-20261025" />
     <script src="i18n.js?v=verified-launch-20261025" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
@@ -34,10 +34,10 @@
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
     <script src="analytics.js?v=verified-launch-20261025" defer></script>
-    <script src="leaderboard.js?v=verified-launch-20261025" defer></script>
+    <script src="leaderboard.js?v=verified-top10-20261025" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
-    <script src="verified-driving.js?v=verified-launch-20261025" defer></script>
+    <script src="verified-driving.js?v=verified-top10-20261025" defer></script>
     <script src="game.js?v=verified-launch-20261025" defer></script>
   </head>
   <body>
@@ -100,18 +100,14 @@
         </div>
       </div>
       <div class="leaderboard-entry-grid">
-      <section class="leaderboard-panel verified-standings" aria-label="Kierrosajat">
-        <h3>Kierrosajat</h3>
-        <p id="verification-status" role="status"></p>
-        <ol id="verified-list"></ol>
+      <section class="leaderboard-panel verified-standings" aria-label="Varmennettujen kierrosaikojen TOP 10">
+        <h3>TOP 10</h3>
+        <p id="verification-status" role="status" hidden></p>
+        <ol id="verified-list" aria-live="polite"></ol>
       </section>
-      <section id="leaderboard-panel" class="leaderboard-panel legacy-standings" aria-label="Tuloslista">
-        <h3>Aiemmat ajat</h3>
-          <div class="leaderboard-standings">
-            <div class="standings-heading"><h3>TOP 10</h3></div>
-            <p>Kymmenen nopeinta kierrosta. Sama kuljettaja voi saada useita sijoituksia.</p>
-            <ol id="leaderboard-list" aria-live="polite"><li>Ladataan tuloslistaa…</li></ol>
-          </div>
+      <section class="leaderboard-panel session-standings" aria-label="Tämän istunnon kierrosajat">
+        <h3>Tämän istunnon kierrosajat</h3>
+        <ol id="session-laps" aria-live="polite">Ei vielä ajettuja kierroksia.</ol>
       </section>
           <form id="leaderboard-start-form" class="leaderboard-panel leaderboard-start-form">
             <h3>Kuljettaja</h3>
