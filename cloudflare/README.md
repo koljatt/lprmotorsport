@@ -1,5 +1,7 @@
 # Tulosseurannan käyttöönotto
 
+> **Virallinen tuloslista on palvelimella varmennettu lista** (`cloudflare/verified-worker.mjs` + Render-palvelu); sen käyttöönotto on kuvattu tiedostossa [verification/README.md](../verification/README.md#julkaisua-varten). Tämä sivu kuvaa vanhan, selaimen ilmoittamiin aikoihin perustuvan listan, joka näkyy pelissä erillisenä arkistona, sekä analytiikan ja ylläpitosivun.
+
 1. Avaa Cloudflaressa **Storage & databases → D1 → lpr-times → Console**.
 2. Kopioi `schema.sql`-tiedoston sisältö konsoliin ja suorita. Jos konsoli hyväksyy vain yhden komennon kerrallaan, suorita neljä SQL-komentoa erikseen.
 3. Avaa **Compute → Workers & Pages → lpr-leaderboard → Edit code**.

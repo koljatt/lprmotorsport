@@ -1,4 +1,6 @@
 import {sign,verify,hash,protocol,validPlayer,validName} from '../verification/protocol.mjs';
+// npm run build:verified-worker inlines the protocol and the simulation revision into a pasteable bundle.
+const BUILD_REVISION='';
 
 // Separate table and endpoints: legacy times can never appear as verified results.
 export const schema=[
@@ -20,6 +22,7 @@ async function body(request){
 }
 export default {
  async fetch(request,env){
+  const revision=env.SIMULATION_REVISION||BUILD_REVISION;
   const origin=request.headers.get('Origin');
   const origins=new Set((env.GAME_ORIGINS||'https://panulut.github.io,http://localhost:8000,http://127.0.0.1:8000').split(','));
   const headers={'Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff'};
@@ -28,11 +31,11 @@ export default {
   if(origin&&!origins.has(origin))return reply({error:'Origin denied'},403);
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, OPTIONS'}});
   try{
-   if(!env.DB||!validPlayer(env.SIMULATION_REVISION)||typeof env.VERIFICATION_SECRET!=='string'||env.VERIFICATION_SECRET.length<32)return reply({error:'Verification not configured'},503);
+   if(!env.DB||!validPlayer(revision)||typeof env.VERIFICATION_SECRET!=='string'||env.VERIFICATION_SECRET.length<32)return reply({error:'Verification not configured'},503);
    const url=new URL(request.url);
    if(url.pathname==='/api/verified/leaderboard'&&request.method==='GET'){
-    const rows=await env.DB.prepare(`SELECT nickname,lap_ticks,sector1,sector2,sector3 FROM verified_laps WHERE revision=? ORDER BY lap_ticks,issued_ms,session_id,lap LIMIT 10`).bind(env.SIMULATION_REVISION).all();
-    return reply({protocol,revision:env.SIMULATION_REVISION,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
+    const rows=await env.DB.prepare(`SELECT nickname,lap_ticks,sector1,sector2,sector3 FROM verified_laps WHERE revision=? ORDER BY lap_ticks,issued_ms,session_id,lap LIMIT 10`).bind(revision).all();
+    return reply({protocol,revision:revision,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
    }
    if(!['/api/verified/start','/api/verified/laps'].includes(url.pathname))return reply({error:'Not found'},404);
    if(request.method!=='POST')return reply({error:'POST required'},405);
@@ -47,12 +50,12 @@ export default {
    await env.DB.prepare('DELETE FROM verified_limits WHERE expires < ?').bind(now).run();
    const data=await body(request);
    if(starting){
-    if(!validName(data?.nickname)||data.revision!==env.SIMULATION_REVISION)return reply({error:'Invalid start'},400);
+    if(!validName(data?.nickname)||data.revision!==revision)return reply({error:'Invalid start'},400);
     const nonce=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
-    return reply({protocol,ticket:await sign({kind:'start',protocol,revision:env.SIMULATION_REVISION,playerHash,nickname:data.nickname,nonce,issuedAt:now,expiresAt:now+120000},env.VERIFICATION_SECRET)});
+    return reply({protocol,ticket:await sign({kind:'start',protocol,revision:revision,playerHash,nickname:data.nickname,nonce,issuedAt:now,expiresAt:now+120000},env.VERIFICATION_SECRET)});
    }
    let lap;try{lap=await verify(data?.receipt,env.VERIFICATION_SECRET);}catch{return reply({error:'Invalid lap signature'},403);}
-   if(lap.kind!=='lap'||lap.protocol!==protocol||lap.revision!==env.SIMULATION_REVISION||lap.playerHash!==playerHash||!validName(lap.nickname)||
+   if(lap.kind!=='lap'||lap.protocol!==protocol||lap.revision!==revision||lap.playerHash!==playerHash||!validName(lap.nickname)||
     !/^[a-f0-9]{32}$/.test(lap.sessionId)||!Number.isSafeInteger(lap.lap)||lap.lap<1||
     !Number.isSafeInteger(lap.startTick)||lap.startTick<0||!Number.isSafeInteger(lap.endTick)||lap.endTick>72000||
     !Number.isSafeInteger(lap.lapTicks)||lap.lapTicks<=600||lap.endTick-lap.startTick!==lap.lapTicks||

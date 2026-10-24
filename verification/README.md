@@ -1,8 +1,9 @@
 # 3D-pelin palvelinvarmennus
 
-Toteutus on paikallisesti testattava kokonaisuus. Julkista Render-palvelua,
-Cloudflare Workeria, D1-asetuksia tai GitHub Pages -peliä ei ole tässä muutoksessa julkaistu.
-Tuotannon osoitteet ovat tarkoituksella tyhjinä `config.js`:ssä.
+Palvelin laskee jokaisen virallisen kierroksen itse kuljettajan ohjaussyötteistä ja
+allekirjoittaa tuloksen; selaimen ilmoittamaa aikaa ei käytetä mihinkään. Tuotannon osat ovat
+Render-palvelu `lpr-verification`, Cloudflare Worker `lpr-verified` ja GitHub Pages -peli;
+käyttöönotto on kuvattu kohdassa *Julkaisua varten*. Osoitteet ovat `config.js`:ssä.
 
 ## Kokeile
 
@@ -153,29 +154,49 @@ tulosten havaitsemiseen oli 97,87 sekuntia:
 ## Julkaisua varten
 
 Seuraavan julkaisun pelaajatiedote on [RELEASE_NOTES.md](../RELEASE_NOTES.md).
-Se on luonnos, kunnes koko ketju on julkisesti käytössä. Julkaisussa uusi
-tuloslista aloitetaan tyhjänä ja vanha lista poistetaan pelaajan normaalista
-tulosnäkymästä. Vanhoja tuloksia ei tarvitse poistaa tietokannasta: ne säilyvät
-arkistona, eikä niitä siirretä `verified_laps`-tauluun. Nollausta ja tiedotetta
-ei tehdä ennen uuden peliversion, ajovarmennuksen ja tuloslistan yhteistä käyttöönottoa.
+Julkaisussa uusi tuloslista aloitetaan tyhjänä ja vanha lista jää pelaajalle erilliseksi
+arkistoksi. Vanhoja tuloksia ei siirretä `verified_laps`-tauluun.
 
-- Palvelimen käynnistyskomento on `node verification/server.cjs`.
-  Aseta `VERIFICATION_PUBLIC=1`, `PORT`, `GAME_ORIGINS` ja vähintään 32-merkkinen
-  satunnainen `VERIFICATION_SECRET`. Salaisuus on eri kuin kokeilun LAB_TOKEN.
-- Julkaise `cloudflare/verified-worker.mjs` omana bundlattuna Workerina.
-  Se tuo yhteisen protokollan `verification/protocol.mjs`:stä.
-  Sido `DB` D1-tietokantaan ja suorita `cloudflare/verified-schema.sql`.
-  Aseta sama `VERIFICATION_SECRET`, `GAME_ORIGINS` ja `SIMULATION_REVISION`.
-- Revision saa komennolla `node -p "require('./verification/world.cjs').revision"`.
-  Rakennus luo saman version selaimen `verification/revision.js`:ään.
-  Rivinvaihdot normalisoidaan, joten Windows- ja Linux-checkoutit täsmäävät.
-- Aseta julkiset HTTPS-palveluosoitteet `verification/config.js`:ään ja rakenna
-  peli `npm run build` -komennolla. Allekirjoitusavainta ei koskaan julkaista.
-- Ennen julkista käyttöönottoa tarvitaan tällä uudella simulaatiolla todellinen
-  reaaliaikainen yhden ja kahden pelaajan kohdepalvelintesti, ihmisen 3D-ajo,
-  mobiiliohjainten tarkistus sekä kylmäkäynnistyksen ja hitaiden laitteiden koe.
-  Vanhan erilliskokeilun Render-mittaukset eivät todista tämän version kapasiteettia.
+### Käyttöönotto askel askeleelta
 
-Nykyinen käyttöönotto on yksi varmennusinstanssi: sessiot ovat sen muistissa.
-Horisontaalinen skaalaus edellyttää erikseen sessioreititystä ja yhteistä
-aloituslupien kertakäytön hallintaa. Älä käynnistä useita instansseja sellaisenaan.
+Kolme osaa, tässä järjestyksessä. Sama `VERIFICATION_SECRET` (vähintään 32 merkkiä) on
+Renderissä ja Cloudflaressa; se ei saa koskaan päätyä pelin tiedostoihin tai Gitiin.
+
+1. **Varmennuspalvelin Renderiin** (`render.yaml`, Free-taso). Render → *New* → *Blueprint*
+   → valitse tämä repositorio ja `render.yaml` → *Apply*. Palvelun nimi on `lpr-verification`
+   ja osoite `https://lpr-verification.onrender.com`; jos Render vaatii toisen nimen, vaihda sama
+   osoite `verification/config.js`-tiedostoon ennen pelin julkaisua. Render luo
+   `VERIFICATION_SECRET`-arvon automaattisesti: kopioi se palvelun *Environment*-välilehdeltä.
+   Tarkista `https://lpr-verification.onrender.com/health` → `{"ready":true,...,"streaming":true}`.
+   Free-palvelu nukahtaa käyttämättömänä; peli herättää sen itse ja ensimmäinen pelaaja
+   odottaa jopa minuutin. Kapasiteetti on kaksi samanaikaista virallista ajoa.
+2. **Varmennettu tuloslista Cloudflareen.** Aja `npm run build:verified-worker`; se kirjoittaa
+   `cloudflare/verified-worker.bundle.mjs`-tiedoston, johon on upotettu protokolla ja nykyinen
+   simulaatiorevisio. Cloudflare → *Workers & Pages* → *Create* → Worker nimellä **lpr-verified**
+   → *Edit code* → liitä koko bundle → *Deploy*. Sitten *Settings*: D1-binding **DB → lpr-times**
+   (sama tietokanta kuin vanhalla listalla) ja **Secret** `VERIFICATION_SECRET` = Renderin arvo.
+   Suorita `cloudflare/verified-schema.sql` D1-konsolissa kerran. Tarkista
+   `https://lpr-verified.panu-musakka.workers.dev/api/verified/leaderboard` → `{"protocol":"driving-v1","revision":"...","results":[]}`.
+   `GAME_ORIGINS` tarvitaan vain, jos pelillä on muu osoite kuin `https://panulut.github.io`.
+3. **Peli.** Pushaa `main`; GitHub Pages -työnkulku rakentaa `dist/`-kansion, johon syntyy
+   `verification/revision.js`. Avaa peli, vahvista nimimerkki ja analytiikka, *Aloita ajo*.
+   Tilarivin pitää näyttää valmistelu ja liikennevalot; kierroksen jälkeen aika ilmestyy
+   varmennettuun listaan.
+
+### Kun fysiikka muuttuu
+
+Simulaatiorevisio on tiiviste jaetuista fysiikkatiedostoista ja ratadatasta. Jokainen muutos
+niihin vaihtaa revision, ja silloin kaikki kolme osaa on päivitettävä samassa järjestyksessä:
+Render julkaisee automaattisesti `main`-pushista, Workeriin liitetään uusi
+`npm run build:verified-worker` -bundle, ja Pages rakentaa pelin. Väliaikaisesti eri versiot
+näkyvät pelaajalle ilmoituksena ”Varmennuspalvelun versio vaihtui”, ei väärinä tuloksina.
+Uusi revisio aloittaa varmennetun listan tyhjänä; vanhat rivit säilyvät taulussa.
+
+### Mitä tämä ei vielä ole
+
+Nykyinen käyttöönotto on yksi varmennusinstanssi: sessiot ovat sen muistissa, ja Renderin
+uudelleenkäynnistys muuttaa käynnissä olevat ajot harjoitteluksi. Horisontaalinen skaalaus
+edellyttää erikseen sessioreititysta ja aloituslupien kertakäytön jakamista; älä käynnistä
+useita instansseja sellaisenaan. Render Free -tason todellinen viive ja kapasiteetti kahdella
+yhtäaikaisella pelaajalla sekä mobiiliselainten käyttäytyminen on todennettava tuotannossa
+ennen kuin listaa mainostetaan.

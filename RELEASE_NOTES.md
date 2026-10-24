@@ -1,7 +1,4 @@
-# Seuraava julkaisu — luonnos
-
-Ei vielä julkaistu. Julkaise tämä tiedote vasta, kun uusi ajovarmennus ja
-tuloslista ovat käytössä julkisessa pelissä.
+# Julkaisu 25.10.2026 — palvelimella varmennettu tuloslista
 
 ## Uusi alku tuloslistalle
 
@@ -14,7 +11,12 @@ ohjaussyötteistä ja vahvistaa tuloksen ennen tallennusta.
 
 Pelaaminen toimii tuttuun tapaan. Valitse nimimerkki, hyväksy peli- ja
 käyttötietojen kerääminen ja lähde ajamaan. Jos ajon valmistelu kestää,
-voit harjoitella odottaessasi. Varsinainen ajo alkaa automaattisesti lähtöruudusta,
-kun yhteys on valmis.
+voit harjoitella odottaessasi. Virallinen ajo alkaa liikennevaloista, kun yhteys on
+valmis. Jos yhteys varmennuspalvelimeen katkeaa kesken ajon, auto ei pysähdy eikä
+palaa lähtöön: ajo jatkuu harjoitteluna, ja uuden virallisen ajon aloitat itse
+*Aloita uudelleen* -painikkeesta.
+
+Ajon tila näkyy koko ajan ruudulla. Ensimmäinen pelaaja saattaa odottaa palvelimen
+heräämistä jopa minuutin; samanaikaisesti virallisia ajoja mahtuu kaksi.
 
 Vanhat ajat eivät siirry uudelle tuloslistalle.

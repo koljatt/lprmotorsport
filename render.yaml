@@ -1,0 +1,21 @@
+# Render Blueprint for the driving verification service (verification/server.cjs).
+# Deploy once: Render dashboard → New → Blueprint → this repository → render.yaml.
+# Copy the generated VERIFICATION_SECRET into the Cloudflare Worker (lpr-verified) afterwards.
+services:
+  - type: web
+    name: lpr-verification
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: node --check verification/server.cjs && node -p "require('./verification/world.cjs').revision"
+    startCommand: node verification/server.cjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: VERIFICATION_PUBLIC
+        value: "1"
+      - key: GAME_ORIGINS
+        value: https://panulut.github.io
+      - key: VERIFICATION_SECRET
+        generateValue: true

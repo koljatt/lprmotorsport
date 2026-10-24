@@ -15,6 +15,7 @@
     "test:leaderboard": "node tests/leaderboard-client.test.cjs && node tests/leaderboard-start.test.cjs && node tests/leaderboard.test.cjs",
     "test:analytics": "node tests/analytics.test.cjs",
     "build:worker": "node scripts/embed-admin.cjs",
+    "build:verified-worker": "node scripts/bundle-verified-worker.cjs",
     "dev:replay": "node experiment/server.cjs",
     "test:replay-service": "node tests/replay-service.test.cjs",
     "test:replay-browser": "node scripts/check-replay-browser.cjs",
