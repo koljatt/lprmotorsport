@@ -62,9 +62,9 @@
      this.onUpdate({...ack,bufferedTicks:this.queue.length,recovered:retries>0});
      if(ack.verified){if(this.queue.length)throw Error('Inputs continue after the server finish');this.active=false;return ack;}
     }
-   }catch(error){this.lose(error.message);throw error;}
+   }catch(error){this.lose(error.message,{code:error.code||error.name||'request_failed',seq:this.seq,ackTick:this.tick,bufferedTicks:this.queue.length});throw error;}
   }
-  lose(message){const wasActive=this.active;this.active=false;this.generation++;this.queue=[];if(wasActive){this.onLost(message);void this.cancel();}}
+  lose(message,details={}){const wasActive=this.active;this.active=false;this.generation++;this.queue=[];if(wasActive){this.onLost(message,details);void this.cancel();}}
   async cancel(){
    this.active=false;this.generation++;this.queue=[];
    if(this.session)try{await this.request(this.base+'/sessions/'+this.session.id,{method:'DELETE',headers:{Authorization:'Bearer '+this.session.sessionToken},keepalive:true,signal:AbortSignal.timeout(5000)});}catch{}
