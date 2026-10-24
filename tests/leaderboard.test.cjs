@@ -98,7 +98,7 @@ const { pathToFileURL } = require('node:url');
   assert.equal((await worker.fetch(request({ ...data, lapMs: 42000, sectors: [10000, 10000, 22000], analyticsToken: otherLap }), env)).status, 200);
   assert.equal((await worker.fetch(request({ ...data, lapMs: 43000, sectors: [10000, 10000, 23000], analyticsToken: 'x' }), env)).status, 400);
   env.ANALYTICS_ADMIN_TOKEN = 'z'.repeat(40);
-  const admin = (query = '', method = 'GET', token = env.ANALYTICS_ADMIN_TOKEN) => worker.fetch(new Request('https://example.com/api/admin/laps' + query, { method, headers: { Authorization: `Bearer ${token}` } }), env);
+  const admin = (query = '', method = 'GET', token = env.ANALYTICS_ADMIN_TOKEN) => worker.fetch(new Request('https://example.com/api/admin/laps' + query, { method, headers: { Authorization: `Bearer ${token}`, ...(method === 'DELETE' ? { Origin: 'https://example.com' } : {}) } }), env);
   assert.equal((await admin('', 'GET', 'wrong'.repeat(8))).status, 401);
   assert.equal((await admin('?id=1', 'DELETE', 'wrong'.repeat(8))).status, 401);
   let listed = (await (await admin()).json()).results;

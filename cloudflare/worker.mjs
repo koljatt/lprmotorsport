@@ -32,11 +32,12 @@ export default {
     const headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Vary': 'Origin' };
     if (ORIGINS.has(origin)) headers['Access-Control-Allow-Origin'] = origin;
     const reply = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
-    if (origin && !ORIGINS.has(origin)) return reply({ error: 'Origin denied' }, 403);
+    const url = new URL(request.url);
+    // Browsers send Origin on same-origin DELETE/POST too, e.g. from the /admin page.
+    if (origin && !ORIGINS.has(origin) && origin !== url.origin) return reply({ error: 'Origin denied' }, 403);
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: { ...headers, 'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } });
     }
-    const url = new URL(request.url);
     if (url.pathname.startsWith('/api/analytics/') || url.pathname.startsWith('/api/admin/') || url.pathname === '/admin') {
       try { return await analyticsRoute(request, env, url, reply); }
       catch (error) { console.error('Analytics operation failed', error.message); return reply({ error: 'Analytics unavailable' }, 503); }
