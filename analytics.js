@@ -54,7 +54,9 @@
     const events = queue.slice(0, 40);
     const body = JSON.stringify({ token, session, version, consentAt: Number(read(consentAt)) || Date.now(), meta, events });
     // Keep events until acknowledgement. A beacon and a retry share event IDs.
-    if (beacon) { try { navigator.sendBeacon(endpoint + '/api/analytics/events', new Blob([body], { type: 'application/json' })); } catch {} return; }
+    // sendBeacon always includes credentials, which the cross-origin worker's CORS reply does
+    // not allow; a keepalive fetch survives page hide without credentials.
+    if (beacon) { try { void fetch(endpoint + '/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {}); } catch {} return; }
     if (sending) return;
     sending = true;
     try {
