@@ -20,6 +20,32 @@
   lightsTimer=setTimeout(clearLights,900);
  }
  let client=null,generation=0,preparing=false,hooks=null,identity=null,connectionUnavailable=false,retryTimer=null,recovering=false,autoRetryAllowed=true;
+ // Sub-millimetre-scale numeric noise must not invalidate a verified browser run.
+ // This only compares presentation against server simulation; the server alone signs lap receipts.
+ const STATE_EPSILON=1e-5;
+ const diagnostics={lastMismatch:null};
+ function stateMismatch(expected,actual,tick) {
+  if(!expected||!expected.state)return {code:'missing_snapshot',tick};
+  if(!actual||!actual.state)return {code:'missing_server_state',tick};
+  const differences={};let largest=0,largestField=null;
+  for(const key of Object.keys(expected.state)){
+   const local=expected.state[key],remote=actual.state[key];
+   if(!Number.isFinite(local)||!Number.isFinite(remote)){
+    differences[key]={local,remote,delta:null};
+    largestField=key;continue;
+   }
+   const delta=Math.abs(local-remote);
+   if(delta>STATE_EPSILON){
+    differences[key]={local,remote,delta};
+    if(delta>largest){largest=delta;largestField=key;}
+   }
+  }
+  if(expected.stage!==actual.stage||expected.lap!==actual.lap){
+   return {code:'lap_checkpoint_difference',tick,localStage:expected.stage,serverStage:actual.stage,localLap:expected.lap,serverLap:actual.lap,differences,largestField,largest};
+  }
+  if(Object.keys(differences).length)return {code:'state_difference',tick,localStage:expected.stage,serverStage:actual.stage,localLap:expected.lap,serverLap:actual.lap,differences,largestField,largest};
+  return null;
+ }
  const snapshots=new Map(),pending=[];
  const key=()=>`lpr-verified-receipts:${identity?.token}`;
  const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{}};
@@ -104,10 +130,12 @@
      if(ack.phase==='ready')return;
      if(ack.phase==='recovering'){recovering=true;say('Yhteyttä tarkistuspalvelimeen palautetaan…');return;}
      const expected=snapshots.get(ack.ackTick);
-     if(!expected||!ack.result?.state||Object.keys(expected.state).some(k=>!Number.isFinite(ack.result.state[k])||Math.abs(expected.state[k]-ack.result.state[k])>1e-7)||expected.stage!==ack.result.stage||expected.lap!==ack.result.lap){
-      console.warn('LPR verified simulation mismatch',{ackTick:ack.ackTick,hasSnapshot:!!expected,expectedStage:expected?.stage,serverStage:ack.result?.stage,expectedLap:expected?.lap,serverLap:ack.result?.lap});
+     const mismatch=stateMismatch(expected,ack.result,ack.ackTick);
+     if(mismatch){
+      diagnostics.lastMismatch={...mismatch,seq:ack.seq,at:new Date().toISOString()};
+      console.warn('LPR verified simulation mismatch',diagnostics.lastMismatch);
       autoRetryAllowed=false;
-      cancel('Harjoittelu käynnissä – auton tila ei täsmännyt palvelimen tarkistukseen. Aloita uudelleen, kun haluat uuden virallisen ajon.');
+      cancel('Harjoittelu käynnissä – varmennuksen fysiikkaero ('+mismatch.code+', tick '+ack.ackTick+'). Tarkemmat erot: F12 → Console.');
       return;
      }
      for(const tick of snapshots.keys())if(tick<=ack.ackTick)snapshots.delete(tick);
@@ -133,6 +161,7 @@
    void save();
   }catch(error){if(next)await next.cancel();if(attempt===generation){connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');if(autoRetryAllowed)retrySoon();}}
  }
+ window.LPRVerificationDiagnostics=diagnostics;
  window.LPRVerifiedDriving={
   attach(value){hooks=value;},cancel,start,refresh:sync,
   get active(){return !!client?.active;},get preparing(){return preparing;},get ackTick(){return client?.tick??0;},
