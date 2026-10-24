@@ -28,7 +28,7 @@ function setup(storage=new Map(),options={}){
       return {ok:status>=200&&status<300,status,json:async()=>start?
         {mode:'timed-v1',lapId:body.requestId,startedAt:1,expiresAt:86400001}:
         finish?{mode:'laps',protection:'timed-v1',moderation:'approved',saved:true,rank:2,lapMs:body.lapMs,record:false,...network.result}:
-        {version:'lut-20261011-v3',results:Array.from({length:20},(_,i)=>({nickname:i?'Driver '+i:'<script>',lap_ms:12346+i*1000}))}};
+        {version:'lut-20261024-v4',results:Array.from({length:20},(_,i)=>({nickname:i?'Driver '+i:'<script>',lap_ms:12346+i*1000}))}};
     }};
   vm.createContext(context);vm.runInContext(source,context);
   const board=context.window.LPRLeaderboard;

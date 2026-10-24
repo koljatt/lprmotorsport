@@ -14,7 +14,7 @@
   const consent = document.querySelector('#analytics-consent');
   const status = document.querySelector('#analytics-status');
   const remove = document.querySelector('#analytics-delete');
-  let enabled = false, token, session, nickname = '', queue = [], sending = false;
+  let enabled = false, token, session, nickname = '', queue = [], sending = false, inflight = null;
   let state = 'menu', input = 'unknown', last = performance.now(), lastInput = last, focused = document.hasFocus();
   let buckets = {}, lastFlush = last, started = false;
   const metadata = () => {
@@ -49,6 +49,8 @@
   }
   async function flush(beacon = false) {
     if (!enabled) return;
+    // Leaderboard submissions need this flush to finish, not be skipped.
+    if (!beacon && inflight) await inflight;
     collect();
     if (!queue.length) return;
     const events = queue.slice(0, 40);
@@ -59,13 +61,16 @@
     if (beacon) { try { void fetch(endpoint + '/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {}); } catch {} return; }
     if (sending) return;
     sending = true;
-    try {
-      const response = await fetch(endpoint + '/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(10000) });
-      if (response.status === 410) {
-        enabled = false; consent.checked = false; window.LPRLeaderboard?.consentChanged?.(); write(key, 'no'); queue = []; buckets = {};
-      }
-      if (response.ok) { const ids = new Set(events.map(e => e.id)); queue = queue.filter(e => !ids.has(e.id)); }
-    } catch {} finally { sending = false; }
+    inflight = (async () => {
+      try {
+        const response = await fetch(endpoint + '/api/analytics/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(10000) });
+        if (response.status === 410) {
+          enabled = false; consent.checked = false; window.LPRLeaderboard?.consentChanged?.(); write(key, 'no'); queue = []; buckets = {};
+        }
+        if (response.ok) { const ids = new Set(events.map(e => e.id)); queue = queue.filter(e => !ids.has(e.id)); }
+      } catch {} finally { sending = false; inflight = null; }
+    })();
+    return inflight;
   }
   function enable() {
     if (enabled) return;
@@ -129,6 +134,7 @@
   window.LPRAnalytics = {
     identify(name) { nickname = name; started = true; event('play_start'); void flush(); },
     event,
+    proof() { return enabled ? token : null; },
     sample(next, gamepadActive = false, controlActive = false) {
       tick();
       if (state !== next) { state = next; event('state_change'); }
