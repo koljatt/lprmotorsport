@@ -3,6 +3,7 @@
  const config=window.LPRVerificationConfig,revision=window.LPRDrivingRevision;
  const status=document.querySelector('#verification-status');
  const list=document.querySelector('#verified-list');
+ const sessionList=document.querySelector('#session-laps');
  const lights=document.querySelector('#start-lights'),lightsLabel=document.querySelector('#start-lights-label');
  let lightsTimer=null,finishLights=null,lightsReady=Promise.resolve();
  function clearLights(){
@@ -47,6 +48,18 @@
   return null;
  }
  const snapshots=new Map(),pending=[];
+ const sessionLaps=[];
+ function renderSessionLaps(){
+  if(!sessionList||typeof document.createElement!=='function')return;
+  sessionList.textContent='';
+  for(const lap of [...sessionLaps].sort((a,b)=>a.lapMs-b.lapMs)){
+   const li=document.createElement('li'),name=document.createElement('span'),time=document.createElement('span');
+   name.className='standing-name';name.textContent=lap.nickname;
+   time.className='standing-time';time.textContent=` · ${(lap.lapMs/1000).toFixed(3)} s`;
+   li.append(name,time);sessionList.append(li);
+  }
+  if(!sessionLaps.length)sessionList.textContent='Ei vielä ajettuja kierroksia.';
+ }
  const key=()=>`lpr-verified-receipts:${identity?.token}`;
  const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{}};
  function restore(){
@@ -78,8 +91,12 @@
  async function save(){
   if(sending)return sending;
   sending=(async()=>{do{while(pending.length){
-   try{const reply=await api('/api/verified/laps',{receipt:pending[0]});
+   try{const receipt=pending[0];const reply=await api('/api/verified/laps',{receipt});
     if(!reply.verified||reply.protocol!=='driving-v1')throw Error('Virheellinen tallennuskuittaus.');
+    if(!sessionLaps.some(lap=>lap.receipt===receipt)){
+     sessionLaps.push({receipt,nickname:identity.nickname,lapMs:reply.lapMs});
+     renderSessionLaps();
+    }
     pending.shift();persist();say(`Kierrosaika ${(reply.lapMs/1000).toFixed(3)} s tallennettu.`);hooks?.saved?.(reply.lapMs);
    }catch(error){if([400,401,403,409,413,415,422].includes(error.status)){pending.shift();persist();say('Kierrosaikaa ei voitu tallentaa tuloslistalle.');continue;}
     say('Kierrosaika odottaa tallennusta.');return;}
