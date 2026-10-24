@@ -87,6 +87,7 @@
     return response.json();
   }
   async function refresh() {
+    if (!list) return false; // The visible TOP 10 is now the server-verified list.
     list.textContent = t('Ladataan tuloslistaa…');
     list.setAttribute('aria-busy', 'true');
     try {
@@ -114,6 +115,7 @@
     } finally { list.setAttribute('aria-busy', 'false'); }
   }
   async function flushPending() {
+    if (!list) return; // Do not submit old, unverified laps from the retired leaderboard.
     if (sending) return sending;
     if (!token || !pending.length) return;
     sending = (async () => {
