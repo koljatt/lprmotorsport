@@ -31,22 +31,24 @@ const {chromium}=require('playwright'),{driver}=require('../tests/helpers-drivin
   const started=performance.now();
   await Promise.all(players.map(async player=>{await player.page.click('#leaderboard-start');await player.page.waitForFunction(()=>window.LPRVerifiedDriving.active,null,{timeout:40000});}));
   console.log('Two real-time 3D browser sessions started');
-  for(let second=0;second<180;second++){
+  for(let second=0;second<300;second++){
    await new Promise(r=>setTimeout(r,1000));
    const states=await Promise.all(players.map(player=>player.page.evaluate(()=>({active:window.LPRVerifiedDriving.active,tick:window.LPRVerifiedDriving.ackTick,
     simulated:window.__verifiedGame.world?.result().ticks||0,status:document.querySelector('#verification-status').textContent,hidden:document.hidden}))));
    if(second%15===0)console.log(JSON.stringify({elapsedSeconds:second+1,states}));
    for(const state of states)assert(state.active,state.status);
-   if(board.db.prepare('SELECT COUNT(*) n FROM verified_laps').get().n>=2){
+   // Each real browser must complete its standing lap AND the following flying lap.
+   const verifiedCounts=board.db.prepare('SELECT nickname,COUNT(*) n FROM verified_laps GROUP BY nickname').all();
+   if(verifiedCounts.length===2&&verifiedCounts.every(row=>row.n>=2)){
     assert.deepEqual(errors,[]);
     const report={generatedAt:new Date().toISOString(),revision,browser:browser.version(),wallMs:performance.now()-started,
-     scope:'Two simultaneous local Chrome clients, real 3D rendering, synthetic controls, real server clock; no remote capacity claim',
+     scope:'Two simultaneous local Chrome clients, two consecutive real-time laps each, real 3D rendering and server clock; no remote capacity claim',
      states,laps:board.db.prepare('SELECT nickname,lap,lap_ticks,sector1,sector2,sector3 FROM verified_laps ORDER BY nickname').all(),errors};
     const directory=path.resolve(__dirname,'../artifacts/verification');fs.mkdirSync(directory,{recursive:true});
     fs.writeFileSync(path.join(directory,'realtime-report.json'),JSON.stringify(report,null,2));
     console.log(JSON.stringify(report));return;
    }
   }
-  throw Error('Two real-time laps did not complete in three minutes');
+  throw Error('Both players did not complete two consecutive verified real-time laps');
  }finally{if(browser)await browser.close();await service.sessions.close();await Promise.all([game,service,board].map(server=>new Promise(r=>server.close(r))));}
 })().catch(error=>{console.error(error);process.exitCode=1;});
