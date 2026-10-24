@@ -1,7 +1,7 @@
 (function(root){
  class LiveClient {
-  constructor({revision,token='',ticket,armed=false,base='',fetch:request=root.fetch.bind(root),onUpdate=()=>{},onLost=()=>{},maxBufferedTicks=720}={}){
-   Object.assign(this,{revision,token,ticket,armed,base,request,onUpdate,onLost,maxBufferedTicks});this.active=false;this.queue=[];this.seq=0;this.tick=0;this.generation=0;this.flushThrough=0;
+  constructor({revision,token='',ticket,armed=false,base='',fetch:request=root.fetch.bind(root),onUpdate=()=>{},onLost=()=>{},maxBufferedTicks=2400,recoveryWindowMs=15000,requestTimeoutMs=5000}={}){
+   Object.assign(this,{revision,token,ticket,armed,base,request,onUpdate,onLost,maxBufferedTicks,recoveryWindowMs,requestTimeoutMs});this.active=false;this.queue=[];this.seq=0;this.tick=0;this.generation=0;this.flushThrough=0;
   }
   async start(){
    // Wake a sleeping free service before allocating the timed driving session.
@@ -38,24 +38,28 @@
    try{
     while(this.active&&generation===this.generation&&(this.queue.length>=60||(this.tick<this.flushThrough&&this.queue.length))){
      const inputs=this.queue.slice(0,120),payload={revision:this.revision,seq:this.seq,fromTick:this.tick,inputs};
-     const body=JSON.stringify(payload),deadline=performance.now()+5500;
-     let ack;
+     const body=JSON.stringify(payload),deadline=performance.now()+this.recoveryWindowMs;
+     let ack,retries=0;
      for(;;){
       if(!this.active||generation!==this.generation)return;
       try{
-       const response=await this.request(this.base+'/sessions/'+this.session.id+'/inputs',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+this.session.sessionToken},body,signal:AbortSignal.timeout(6500)});
+       const remaining=deadline-performance.now();
+       if(remaining<=0)throw Object.assign(Error('Verification connection could not recover in time'),{retryable:false,code:'recovery_timeout'});
+       const response=await this.request(this.base+'/sessions/'+this.session.id+'/inputs',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+this.session.sessionToken},body,signal:AbortSignal.timeout(Math.max(1,Math.min(this.requestTimeoutMs,Math.ceil(remaining))))});
        ack=await response.json();
-       if(!response.ok){const error=Object.assign(Error(ack.error||'Input verification failed'),{retryable:response.status===429||ack.retryable,retryAfterMs:ack.retryAfterMs});throw error;}
+       if(!response.ok){const error=Object.assign(Error(ack.error||'Input verification failed'),{retryable:[425,429,502,503,504].includes(response.status)||ack.retryable===true,retryAfterMs:ack.retryAfterMs,code:ack.code||'http_'+response.status});throw error;}
        break;
       }catch(error){
        if(error.retryable===false||performance.now()>=deadline)throw error;
+       retries++;
+       this.onUpdate({phase:'recovering',ackTick:this.tick,bufferedTicks:this.queue.length,attempt:retries,code:error.code||error.name||'network'});
        await new Promise(r=>setTimeout(r,Math.min(750,Math.max(200,error.retryAfterMs||250))));
       }
      }
      if(!this.active||generation!==this.generation)return;
      if(ack.seq!==this.seq||ack.ackTick!==this.tick+inputs.length)throw Error('Invalid server acknowledgment');
      this.queue.splice(0,inputs.length);this.tick=ack.ackTick;this.seq++;
-     this.onUpdate({...ack,bufferedTicks:this.queue.length});
+     this.onUpdate({...ack,bufferedTicks:this.queue.length,recovered:retries>0});
      if(ack.verified){if(this.queue.length)throw Error('Inputs continue after the server finish');this.active=false;return ack;}
     }
    }catch(error){this.lose(error.message);throw error;}
