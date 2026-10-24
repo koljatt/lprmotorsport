@@ -58,6 +58,9 @@ pelikäyttöliittymä enää lähetä harjoitteluaikoja vanhaan tuloslistaan.
    tauluun tallentamista. Sama session ja kierroksen pari tallentuu vain kerran.
    Vanhoja tuloksia ei siirretä varmennettujen joukkoon.
 
+
+Kesken virallisen ajon tapahtuva varmennuksen menetys ei enää käynnistä peliä uudelleen eikä siirrä autoa lähtöruutuun. Ajo jatkuu harjoitteluna, kunnes pelaaja käynnistää itse uuden virallisen ajon. Virheluokka näkyy pelissä ja tarkemmat tiedot löytyvät selaimen konsolista. Tämä ei hyväksy keskeneräistä kierrosta tuloslistalle.
+
 Selaimen piilottaminen, valikkoon tai sisätilaan siirtyminen, simulaatioero,
 kaatuminen, palvelimen uudelleenkäynnistys ja yhteyskatkos vaihtavat ajon
 harjoitteluksi. Varmennusta ei jatketa selaimen tarjoamasta auton tilasta.
