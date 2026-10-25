@@ -1,3 +1,14 @@
+# Seuraava julkaisu — luonnos
+
+Ei vielä julkaistu. Julkaise vasta, kun uusi `lpr-verified`-Worker on käytössä.
+
+## Oma nimimerkki salasanalla
+
+- Nimimerkki varataan salasanalla: kukaan muu ei voi ajaa sillä nimellä.
+- Samalla nimimerkillä ja salasanalla kirjaudut millä tahansa laitteella, ja kirjautuminen muistetaan.
+- Tuloslista alkaa taas alusta: TOP 10:ssä näkyvät vain tileillä ajetut kierrokset.
+- Salasanaa ei voi palauttaa. Unohtuneen salasanan nimimerkin voi vapauttaa ylläpito.
+
 # Julkaisu 25.10.2026 — palvelimella varmennettu tuloslista
 
 ## Uusi alku tuloslistalle

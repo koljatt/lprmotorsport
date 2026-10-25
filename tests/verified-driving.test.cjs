@@ -8,9 +8,11 @@ const {driver}=require('./helpers-driving.cjs');
  const board=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({secret,revision});
  await new Promise(r=>service.listen(0,'127.0.0.1',r));await new Promise(r=>board.listen(0,'127.0.0.1',r));
  const serviceURL=`http://127.0.0.1:${service.address().port}`,boardURL=`http://127.0.0.1:${board.address().port}`;
- const token='a'.repeat(64);
+ let token;
  const post=(base,path,data,credential=token)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+credential},body:JSON.stringify(data)});
+ const signUp=async nickname=>(await(await fetch(boardURL+'/api/verified/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname,password:'salasana',create:true})})).json()).token;
  try{
+  token=await signUp('Driver');const otherToken=await signUp('Other');
   const begin=await post(boardURL,'/api/verified/start',{nickname:'Driver',revision});assert.equal(begin.status,200);
   const {ticket}=await begin.json();
   const start=()=>post(serviceURL,'/sessions',{ticket,revision,armed:true});
@@ -45,7 +47,7 @@ const {driver}=require('./helpers-driving.cjs');
   assert.equal(firstLap.playerHash,await hash(token));assert.equal(flying.startTick,firstLap.endTick,'Flying lap preserves authoritative state');
   assert(firstLap.lapTicks>600);assert.notEqual(firstLap.lapTicks*1000/120,1,'Client time claims are ignored');
   for(const receipt of receipts){
-   assert.equal((await post(boardURL,'/api/verified/laps',{receipt},'b'.repeat(64))).status,403,'Receipt is player-bound');
+   assert.equal((await post(boardURL,'/api/verified/laps',{receipt},otherToken)).status,403,'Receipt is player-bound');
    const tampered=receipt.slice(0,-2)+(receipt.at(-2)==='A'?'B':'A')+receipt.at(-1);
    assert.equal((await post(boardURL,'/api/verified/laps',{receipt:tampered})).status,403,'Forged signature fails');
    const saved=await post(boardURL,'/api/verified/laps',{receipt});assert.equal(saved.status,200);assert.equal((await saved.json()).saved,true);

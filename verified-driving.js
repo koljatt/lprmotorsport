@@ -122,7 +122,7 @@
    connectionUnavailable=false;
    if(attempt!==generation)return;
    if(lights.hidden)prepareLights();
-   const {ticket}=await api('/api/verified/start',{nickname:identity.nickname,revision});
+   const {ticket}=await api('/api/verified/start',{nickname:identity.nickname,revision}).catch(error=>{throw Object.assign(error,{signIn:error.status===401});});
    if(attempt!==generation)return;
    next=new window.LPRLiveClient({revision,ticket,armed:true,base:config.service,
     onUpdate:ack=>{
@@ -159,7 +159,9 @@
    hooks.start();autoRetryAllowed=false;releaseLights();say('');
    restore();
    void save();
-  }catch(error){if(next)await next.cancel();if(attempt===generation){connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');if(autoRetryAllowed)retrySoon();}}
+  }catch(error){if(next)await next.cancel();if(attempt===generation){
+   if(error.signIn){autoRetryAllowed=false;cancel('Kirjaudu uudelleen.');window.LPRLeaderboard.signOut?.('Kirjautuminen vanheni. Kirjaudu uudelleen nimimerkilläsi ja salasanallasi.');return;}
+   connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');if(autoRetryAllowed)retrySoon();}}
  }
  window.LPRVerificationDiagnostics=diagnostics;
  window.LPRVerifiedDriving={
@@ -176,7 +178,7 @@
  };
  function sync(){restore();return save();}
  setInterval(()=>{if(!document.hidden&&document.querySelector('#settings-dialog').open)void sync();},15000);
- document.querySelector('#leaderboard-start-form').addEventListener('submit',()=>{restore();if(identity){void save();void start();}});
+ window.LPRVerifiedDriving.identityReady=()=>{restore();if(identity){void save();void start();}};
  document.addEventListener('visibilitychange',()=>{
   if(document.hidden){autoRetryAllowed=false;cancel();}
   else if(connectionUnavailable&&autoRetryAllowed&&window.LPRLeaderboard.identity)void start({reconnect:true});

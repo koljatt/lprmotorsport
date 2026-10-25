@@ -6,3 +6,7 @@ CREATE TABLE IF NOT EXISTS verified_laps (
   PRIMARY KEY(session_id,lap));
 CREATE INDEX IF NOT EXISTS verified_order ON verified_laps(revision,lap_ticks,issued_ms,session_id,lap);
 CREATE TABLE IF NOT EXISTS verified_limits (key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires INTEGER NOT NULL);
+-- One account owns one nickname; passwords are stored only as PBKDF2-SHA-256 hashes.
+CREATE TABLE IF NOT EXISTS verified_accounts (
+  name_key TEXT PRIMARY KEY,nickname TEXT NOT NULL,player_hash TEXT NOT NULL UNIQUE,credential_salt TEXT NOT NULL,
+  password_salt TEXT NOT NULL,password_hash TEXT NOT NULL,iterations INTEGER NOT NULL,created_ms INTEGER NOT NULL);

@@ -2,11 +2,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 function fixture(){
  const nodes=new Map(),storage=new Map(),requests=[],clients=[];let hidden=false,healthResolve,offline=false;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',dataset:{},disabled:false,handlers:{},append(){},addEventListener(name,fn){this.handlers[name]=fn;}});return nodes.get(id);};
- const identity={nickname:'Driver',token:'a'.repeat(64)};
+ const identity={nickname:'Driver',token:'a'.repeat(64)};let startStatus=200;const signOuts=[];
  const fetch=async(url,options)=>{
   requests.push({url,options});
   if(url.endsWith('/health')){if(offline)throw Error('offline');return new Promise(resolve=>{healthResolve=()=>resolve({ok:true,json:async()=>({revision:'rev',protocol:'driving-v1'})});});}
-  if(url.endsWith('/start'))return {ok:true,json:async()=>({ticket:'signed-start'})};
+  if(url.endsWith('/start'))return startStatus===200?{ok:true,json:async()=>({ticket:'signed-start'})}:{ok:false,status:startStatus,json:async()=>({})};
   if(url.endsWith('/laps'))return {ok:true,json:async()=>({protocol:'driving-v1',verified:true,lapMs:90000})};
   return {ok:true,json:async()=>({protocol:'driving-v1',revision:'rev',results:[]})};
  };
@@ -18,13 +18,13 @@ function fixture(){
   enqueue(){} async flush(){}
  }
  const document={get hidden(){return hidden;},querySelector:node,addEventListener(name,fn){this[name]=fn;}};
- const window={LPRVerificationConfig:{service:'service',leaderboard:'board'},LPRDrivingRevision:'rev',LPRLeaderboard:{identity},
+ const window={LPRVerificationConfig:{service:'service',leaderboard:'board'},LPRDrivingRevision:'rev',LPRLeaderboard:{identity,signOut:message=>signOuts.push(message)},
   LPRLiveClient:Client,LPRDriving:{encode:i=>i},addEventListener(){}};
  const countdowns=[];let retry;
  const context={window,document,fetch,AbortSignal,console,setInterval(){},setTimeout(fn,ms){if(ms===3000){retry=fn;return null;}countdowns.push(ms);return setImmediate(fn);},clearTimeout(handle){if(handle)clearImmediate(handle);},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../verified-driving.js'),'utf8'),context);
  let starts=0,prepares=0;window.LPRVerifiedDriving.attach({prepare(){prepares++;},start(){starts++;}});
- return {api:window.LPRVerifiedDriving,nodes,node,storage,requests,clients,identity,document,countdowns,
+ return {api:window.LPRVerifiedDriving,nodes,node,storage,requests,clients,identity,document,countdowns,signOuts,setStartStatus(value){startStatus=value;},
   ready:()=>healthResolve(),retry:()=>retry(),setOffline(value){offline=value;},hide(){hidden=true;document.visibilitychange();},get starts(){return starts;},get prepares(){return prepares;}};
 }
 const settle=()=>new Promise(r=>setImmediate(r));
@@ -35,10 +35,10 @@ const settle=()=>new Promise(r=>setImmediate(r));
  assert.equal(a.starts,0);assert.equal(a.clients.length,0,'Hiding while waking cannot allocate a new timed session later');
  const b=fixture();
  b.storage.set(`lpr-verified-receipts:${b.identity.token}`,JSON.stringify(['signed-old-lap']));
- b.node('#leaderboard-start-form').handlers.submit();await settle();
- assert(b.requests.some(r=>r.url.endsWith('/laps')&&JSON.parse(r.options.body).receipt==='signed-old-lap'),'Reloaded signed receipts retry after naming, without requiring a new driving session');
+ b.api.identityReady();await settle();
+ assert(b.requests.some(r=>r.url.endsWith('/laps')&&JSON.parse(r.options.body).receipt==='signed-old-lap'),'Reloaded signed receipts retry after signing in, without requiring a new driving session');
  assert.equal(JSON.parse(b.storage.get(`lpr-verified-receipts:${b.identity.token}`)).length,0);
- assert(b.api.preparing,'Confirming the nickname automatically prepares verification');
+ assert(b.api.preparing,'Signing in automatically prepares verification');
  assert.equal(b.starts,0,'Driving waits for server readiness');
  b.ready();for(let i=0;i<8;i++)await settle();assert(b.api.active);assert.equal(b.starts,1);
  assert(!b.api.waitingForStart,'The official start releases the car');
@@ -82,6 +82,11 @@ const settle=()=>new Promise(r=>setImmediate(r));
  assert.equal(d.node('#start-lights').dataset.phase,'red');
  assert.equal(d.node('#start-lights').hidden,false);
  d.ready();await slowStart;assert(d.api.active);assert(!d.api.waitingForStart);
+ const revoked=fixture();revoked.setStartStatus(401);const revokedStart=revoked.api.start();revoked.ready();await revokedStart;
+ assert(!revoked.api.active);assert.equal(revoked.signOuts.length,1,'A rejected account signs the player out instead of retrying');
+ assert(!revoked.requests.some(r=>r.url==='service/sessions'),'No verification session is opened without an accepted account');
+ const busy=fixture();busy.setStartStatus(503);const busyStart=busy.api.start();busy.ready();await busyStart;
+ assert.equal(busy.signOuts.length,0,'Temporary leaderboard errors keep the player signed in');
  const gameSource=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8');
  const drivingUpdate=gameSource.split('function updateDriving(now) {')[1]?.split('window.LPRVerifiedDriving?.attach(')[0];
  assert(drivingUpdate,'Game exposes an authenticated driving update path');
