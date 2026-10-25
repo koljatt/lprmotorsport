@@ -57,11 +57,11 @@ function setup(storage=new Map(),options={}){
   vm.createContext(context);vm.runInContext(source,context);
   const board=context.window.LPRLeaderboard;
   return {board,node,calls,storage,celebrations,network,handlers,identified,
-    // Signs in, claiming the nickname when the server reports it free.
+    // Select the explicit sign-in or account-creation flow.
     async login(name='Panu',password='salasana'){
+      if(!storage.get('lpr-account'))node(serverAccounts.has(name.trim().normalize('NFC').toLowerCase())?'#leaderboard-login':'#leaderboard-create').trigger('click');
       node('#leaderboard-name').value=name;node('#leaderboard-password').value=password;
       await node('#leaderboard-start-form').trigger('submit');
-      if(node('#leaderboard-start-label').textContent==='Varaa nimimerkki')await node('#leaderboard-start-form').trigger('submit');
     },
     account:()=>JSON.parse(storage.get('lpr-account')??'null'),
     starts:()=>calls.filter(c=>c.url.endsWith('/api/laps/start')),
@@ -73,6 +73,8 @@ function setup(storage=new Map(),options={}){
   const app=setup(),{board,node,storage}=app;
   board.beginSession();await board.refresh();
   assert(node('#settings-dialog').open);assert(board.requiresName);
+  assert.equal(node('#leaderboard-account-fields').hidden,true,'Start menu hides credentials until a flow is selected');
+  assert.equal(node('#leaderboard-choices').hidden,false);
   assert.equal(node('#leaderboard-list').children.length,10);
   assert.equal(node('#leaderboard-list').children[0].textContent,'<script> · 0:12.346');
   let prevented=false;node('#settings-dialog').trigger('cancel',{preventDefault(){prevented=true;}});assert(prevented);
@@ -80,12 +82,17 @@ function setup(storage=new Map(),options={}){
   node('#leaderboard-name').value='Panu';node('#leaderboard-start-form').trigger('submit');
   assert(board.requiresName,'Leaderboard entry still requires a password');assert.equal(board.identity,null);assert.deepEqual(app.identified,[]);
   await app.login('   ');assert(board.requiresName);assert(node('#leaderboard-name').reported);assert.deepEqual(app.identified,[]);
+  node('#leaderboard-back').trigger('click');
+  assert(node('#leaderboard-account-fields').hidden);
+  node('#leaderboard-login').trigger('click');
   node('#leaderboard-password').value='1234567';node('#leaderboard-name').value='Panu';await node('#leaderboard-start-form').trigger('submit');
   assert(board.requiresName);assert(node('#leaderboard-password').reported,'Short passwords are rejected before contacting the server');assert.equal(accountCalls.length,0);
   node('#leaderboard-password').value='salasana';node('#leaderboard-name').value=' Panu ';await node('#leaderboard-start-form').trigger('submit');
   assert(board.requiresName,'A free nickname is never claimed without confirmation');
-  assert.equal(node('#leaderboard-start-label').textContent,'Varaa nimimerkki');assert.equal(accountCalls.at(-1).create,false);
-  node('#leaderboard-name').trigger('input');assert.equal(node('#leaderboard-start-label').textContent,'Aja leaderboardiin','Editing the name cancels the claim');
+  assert.equal(node('#leaderboard-start-label').textContent,'Kirjaudu sisään');assert.equal(accountCalls.at(-1).create,false);
+  await node('#leaderboard-start-form').trigger('submit');
+  assert.equal(accountCalls.at(-1).create,false,'Retrying sign-in never creates an account');
+  node('#leaderboard-name').trigger('input');assert.equal(node('#leaderboard-start-label').textContent,'Kirjaudu sisään');
   await app.login(' Panu ');assert(!board.requiresName);assert(!node('#settings-dialog').open);
   assert.equal(accountCalls.at(-1).create,true);assert.equal(accountCalls.at(-1).nickname,'Panu');
   assert.deepEqual(app.identified,['Panu']);assert(node('#leaderboard-name').readOnly);assert(node('#leaderboard-start').hidden);
@@ -138,8 +145,7 @@ function setup(storage=new Map(),options={}){
   assert(wrong.board.requiresName);assert.match(wrong.node('#leaderboard-status').textContent,/Väärä salasana/);assert.equal(wrong.account(),null);
   const caseless=setup();await caseless.login('pAnU','salasana');
   assert.equal(caseless.board.identity.nickname,'Panu','The account keeps its original spelling');assert.equal(caseless.board.identity.token,token);
-  const race=setup();race.node('#analytics-consent').checked=true;race.node('#leaderboard-name').value='Kilpa';race.node('#leaderboard-password').value='12345678';
-  await race.node('#leaderboard-start-form').trigger('submit');assert.equal(race.node('#leaderboard-start-label').textContent,'Varaa nimimerkki');
+  const race=setup();race.node('#leaderboard-create').trigger('click');race.node('#analytics-consent').checked=true;race.node('#leaderboard-name').value='Kilpa';race.node('#leaderboard-password').value='12345678';
   accountReply({nickname:'kilpa',password:'toinen12',create:true});
   await race.node('#leaderboard-start-form').trigger('submit');
   assert(race.board.requiresName);assert.match(race.node('#leaderboard-status').textContent,/jo varattu/,'A nickname claimed meanwhile is not overwritten');

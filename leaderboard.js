@@ -21,10 +21,13 @@
   const passwordRow = [document.querySelector('#leaderboard-password-label'), password, document.querySelector('#leaderboard-password-hint')];
   const logoutButton = document.querySelector('#leaderboard-logout');
   const startLabel = document.querySelector('#leaderboard-start-label');
+  const choices = document.querySelector('#leaderboard-choices');
+  const accountFields = document.querySelector('#leaderboard-account-fields');
+  const accountTitle = document.querySelector('#leaderboard-account-title');
   const accountEndpoint = () => window.LPRVerificationConfig?.leaderboard;
   const accountKey = 'lpr-account';
   let sessionChosen = false;
-  let token, activeName = '', account = null, claimName = null, signingIn = false;
+  let token, activeName = '', account = null, authMode = null, signingIn = false;
   let pending = [], sending = null;
   let activeLap = null;
   const pendingKey = () => `lpr-pending-laps:${token}`;
@@ -40,13 +43,38 @@
   function showAccount() {
     // A remembered sign-in skips the password, but every page load still needs Aloita ajo.
     const remembered = !!account;
+    const showFields = remembered || !!activeName || !!authMode;
+    if (choices) choices.hidden = showFields;
+    if (accountFields) accountFields.hidden = !showFields;
+    const backButton = document.querySelector('#leaderboard-back');
+    if (backButton) backButton.hidden = remembered || !!activeName;
+    startButton.hidden = !showFields || !!activeName;
+    nickname.disabled = !showFields;
+    password.disabled = !showFields || remembered || !!activeName;
     nickname.readOnly = !!account || !!activeName;
     for (const element of passwordRow) if (element) element.hidden = !!account || !!activeName;
     if (logoutButton) logoutButton.hidden = !remembered;
-    if (startLabel) startLabel.textContent = t(claimName ? 'Varaa nimimerkki' : 'Aja leaderboardiin');
+    password.autocomplete = authMode === 'create' ? 'new-password' : 'current-password';
+    const label = remembered || activeName ? 'Aja leaderboardiin' : authMode === 'create' ? 'Luo käyttäjätunnus' : 'Kirjaudu sisään';
+    if (startLabel) startLabel.textContent = t(label);
+    if (accountTitle) accountTitle.textContent = t(remembered || activeName ? 'Kuljettaja' : label);
+    const hint = document.querySelector('#leaderboard-password-hint');
+    if (hint) hint.hidden = remembered || !!activeName || authMode !== 'create';
   }
+  function chooseAuth(mode) {
+    if (signingIn) return;
+    authMode = mode;
+    password.value = '';
+    nickname.setCustomValidity(''); password.setCustomValidity('');
+    status.textContent = '';
+    showAccount();
+    if (mode) nickname.focus?.();
+  }
+  document.querySelector('#leaderboard-login')?.addEventListener('click', () => chooseAuth('login'));
+  document.querySelector('#leaderboard-create')?.addEventListener('click', () => chooseAuth('create'));
+  document.querySelector('#leaderboard-back')?.addEventListener('click', () => chooseAuth(null));
   function forget() {
-    account = null; claimName = null;
+    account = null; authMode = null;
     try { localStorage.removeItem(accountKey); } catch {}
   }
   async function signIn(name, secret, create) {
@@ -60,7 +88,7 @@
     if (!validName(data?.nickname) || nameKey(data.nickname) !== nameKey(name) || !validToken(data.token) || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= Date.now()) throw new Error('Invalid account response');
     return { nickname: data.nickname, token: data.token, expiresAt: data.expiresAt };
   }
-  const signInError = (status, name) => status === 404 ? t('nameFree', { name })
+  const signInError = (status, name) => status === 404 ? t('Tunnusta ei löytynyt. Valitse Luo käyttäjätunnus luodaksesi uuden tunnuksen.')
     : status === 401 ? t('Väärä salasana tälle nimimerkille.')
     : status === 409 ? t('Nimimerkki on jo varattu. Kirjaudu sen salasanalla tai valitse toinen nimimerkki.')
     : status === 429 ? t('Liian monta kirjautumisyritystä. Odota hetki ja yritä uudelleen.')
@@ -68,7 +96,7 @@
     : t('Kirjautuminen ei onnistunut juuri nyt. Yritä uudelleen.');
   nickname.addEventListener('input', () => {
     nickname.setCustomValidity('');
-    if (claimName) { claimName = null; status.textContent = ''; showAccount(); }
+    status.textContent = '';
   });
   password.addEventListener('input', () => password.setCustomValidity(''));
   logoutButton?.addEventListener('click', async () => {
@@ -90,6 +118,7 @@
   startForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (signingIn) return;
+    if (!account && !activeName && !authMode) return;
     const name = activeName || nickname.value.trim().normalize('NFC');
     if (!validName(name)) {
       nickname.setCustomValidity(t('Kirjoita 1–24 merkin nimimerkki. Käytä kirjaimia, numeroita, välilyöntiä, pistettä, viivaa tai alaviivaa.'));
@@ -107,14 +136,13 @@
       signingIn = true; startButton.disabled = true;
       status.textContent = t('Kirjaudutaan…');
       try {
-        identity = await signIn(name, password.value, claimName === nameKey(name));
+        identity = await signIn(name, password.value, authMode === 'create');
       } catch (error) {
-        claimName = error.status === 404 ? nameKey(name) : null;
         status.textContent = signInError(error.status, name);
         showAccount();
         return;
       } finally { signingIn = false; startButton.disabled = false; }
-      password.value = ''; claimName = null; status.textContent = '';
+      password.value = ''; authMode = null; status.textContent = '';
       account = identity;
       try { localStorage.setItem(accountKey, JSON.stringify(account)); localStorage.setItem('lpr-nickname', account.nickname); } catch {}
     }
@@ -142,10 +170,10 @@
   document.querySelector('#leaderboard-practice')?.addEventListener('click', () => {
     if (signingIn) return;
     sessionChosen = true; activeName = ''; token = undefined; pending = []; activeLap = null;
-    password.value = ''; claimName = null; status.textContent = '';
+    password.value = ''; authMode = null; status.textContent = '';
     window.LPRVerifiedDriving?.identityCleared?.();
     window.LPRAnalytics?.identify('');
-    showAccount(); startButton.hidden = false; closeButton.hidden = false;
+    showAccount(); closeButton.hidden = false;
     dialog.classList.remove('session-start'); dialog.close();
     document.querySelector('#restart-button')?.click?.();
   });
@@ -276,7 +304,7 @@
         // load requires an explicit confirmation before any driving can start.
         dialog.classList.add('session-start');
         closeButton.hidden = true;
-        startButton.hidden = false;
+        showAccount();
         if (!dialog.open) dialog.showModal();
         refresh();
       },

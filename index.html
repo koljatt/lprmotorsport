@@ -120,7 +120,14 @@
       </section>
           <form id="leaderboard-start-form" class="leaderboard-panel leaderboard-start-form">
             <h3>Kuljettaja</h3>
-            <button id="leaderboard-practice" class="leaderboard-start" type="button">Pelaa ilman leaderboardia</button>
+            <button id="leaderboard-practice" class="leaderboard-start" type="button">Harjoittele ilman kirjautumista</button>
+            <div id="leaderboard-choices" class="leaderboard-choices">
+              <button id="leaderboard-login" class="leaderboard-choice" type="button">Kirjaudu sisään</button>
+              <button id="leaderboard-create" class="leaderboard-choice" type="button">Luo käyttäjätunnus</button>
+            </div>
+            <div id="leaderboard-account-fields" hidden>
+            <button id="leaderboard-back" class="leaderboard-back" type="button">Takaisin valikkoon</button>
+            <h4 id="leaderboard-account-title">Kirjaudu sisään</h4>
             <p>Leaderboardiin osallistuminen tallentaa nimimerkin, varmennetut kierrosajat ja ajon tarkastamiseen tarvittavat tiedot. Kehitysanalytiikka on vapaaehtoinen.</p>
             <label for="leaderboard-name">Nimimerkki</label>
             <input id="leaderboard-name" required maxlength="24" autocomplete="username" autocapitalize="off" enterkeyhint="next" placeholder="Nimimerkki" />
@@ -128,12 +135,16 @@
             <label id="leaderboard-password-label" for="leaderboard-password">Salasana</label>
             <input id="leaderboard-password" type="password" minlength="8" maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Vähintään 8 merkkiä" />
             <p id="leaderboard-password-hint" class="leaderboard-password-hint">Salasana varaa nimimerkin sinulle. Salasanaa ei voi palauttaa.</p>
+            </div>
+            <details class="leaderboard-options">
+            <summary>Lisäasetukset</summary>
             <label class="chat-visibility"><input id="chat-visible" type="checkbox" /> <span>Näytä chat ajon aikana</span></label>
             <fieldset class="analytics-settings" aria-label="Analytiikka / Analytics">
               <label><input id="analytics-consent" type="checkbox" /> <span id="analytics-label"></span></label>
               <details><summary>Tiedot / Details</summary><p id="analytics-info"></p><a href="privacy.html" target="_blank" rel="noopener">Tietosuoja / Privacy</a><br><button id="analytics-delete" type="button">Poista analytiikkatietoni</button><p id="analytics-status" role="status"></p></details>
             </fieldset>
-            <button id="leaderboard-start" class="leaderboard-start" type="submit"><span id="leaderboard-start-label">Aja leaderboardiin</span> <span aria-hidden="true">→</span></button>
+            </details>
+            <button id="leaderboard-start" class="leaderboard-start" type="submit" hidden><span id="leaderboard-start-label">Kirjaudu sisään</span> <span aria-hidden="true">→</span></button>
             <p id="leaderboard-status" role="status"></p>
           </form>
       </div>

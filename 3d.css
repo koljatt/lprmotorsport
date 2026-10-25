@@ -253,6 +253,14 @@ dialog { touch-action: pan-y pinch-zoom; }
 .leaderboard-start-form .leaderboard-logout { display:block; min-height:0; margin:-2px 0 8px; padding:0; border:0; background:none; color:#9cefc2; font-size:12px; text-decoration:underline; cursor:pointer; }
 .leaderboard-start-form .leaderboard-start #leaderboard-start-label { font-size:inherit; }
 .leaderboard-start-form .leaderboard-start:disabled { opacity:.6; cursor:wait; }
+.leaderboard-choices { display:grid; gap:10px; margin-top:10px; }
+.leaderboard-panel .leaderboard-choice { width:100%; padding:12px; text-align:left; font:inherit; font-weight:700; cursor:pointer; }
+.leaderboard-panel .leaderboard-choice:hover { background:#1d3d2e; border-color:#78e4ac; }
+.leaderboard-panel .leaderboard-back { margin-top:14px; padding:4px 0; border:0; background:none; color:#9cefc2; text-decoration:underline; cursor:pointer; }
+#leaderboard-account-title { margin:8px 0; font-size:18px; }
+.leaderboard-options { margin:18px 0 12px; border-top:1px solid #35584a; padding-top:12px; }
+.leaderboard-options > summary { cursor:pointer; color:#aec9bb; font-size:12px; }
+.leaderboard-choices, #leaderboard-account-fields, .leaderboard-options { grid-column:1 / -1; min-width:0; }
 .leaderboard-start-form .leaderboard-start { min-height:44px; padding:8px 12px; }
 
 @media(max-width:760px) {

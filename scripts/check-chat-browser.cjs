@@ -26,8 +26,8 @@ const {chromium}=require('playwright');
     return route.fulfill({contentType:'text/javascript',body:source});
    });
    await page.goto(origin);await page.waitForFunction(()=>window.__chatGame,null,{polling:50});
-   await page.locator('#leaderboard-name').fill(name);await page.locator('#leaderboard-password').fill('chat-browser-password');await page.locator('#leaderboard-start').click();
-   await page.waitForFunction(()=>document.querySelector('#leaderboard-start-label').textContent==='Varaa nimimerkki',null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),config:await page.evaluate(()=>window.LPRVerificationConfig),errors});throw error;});
+   await page.locator('#leaderboard-create').click();
+   await page.locator('#leaderboard-name').fill(name);await page.locator('#leaderboard-password').fill('chat-browser-password');
    await page.locator('#leaderboard-start').click();await page.waitForFunction(()=>!window.LPRLeaderboard.requiresName,null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),errors});throw error;});
    await page.locator('#chat-button').click();return page;
   }
