@@ -24,7 +24,7 @@ const ensureAccounts=db=>{
 };
 // Cloudflare Workers caps PBKDF2 at 100 000 iterations. If sign-ins exceed the plan's CPU limit,
 // set PASSWORD_ITERATIONS lower; each account is rehashed at its next successful sign-in.
-const PASSWORD_MIN=5,PASSWORD_MAX=128;
+const PASSWORD_MIN=8,PASSWORD_MAX=128;
 const passwordIterations=env=>{const n=Number(env.PASSWORD_ITERATIONS??100000);return Number.isSafeInteger(n)&&n>=10000&&n<=100000?n:100000;};
 const textEncoder=new TextEncoder();
 const hex=bytes=>[...new Uint8Array(bytes)].map(n=>n.toString(16).padStart(2,'0')).join('');

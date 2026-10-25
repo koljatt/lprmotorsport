@@ -90,8 +90,8 @@
     let identity = activeName ? { nickname: activeName, token }
       : account && nameKey(account.nickname) === nameKey(name) ? account : null;
     if (!identity) {
-      if ([...password.value].length < 5) {
-        password.setCustomValidity(t('Kirjoita vähintään 5 merkin salasana.'));
+      if ([...password.value].length < 8) {
+        password.setCustomValidity(t('Kirjoita vähintään 8 merkin salasana.'));
         password.reportValidity();
         return;
       }

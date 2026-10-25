@@ -13,7 +13,7 @@ Node 24.x, ei palvelimen npm-riippuvuuksia:
 npm run dev:verified
 ```
 
-Avaa http://127.0.0.1:8000, kirjoita nimimerkki ja salasana (vähintään 5 merkkiä), hyväksy nimimerkkiin yhdistettyjen
+Avaa http://127.0.0.1:8000, kirjoita nimimerkki ja salasana (vähintään 8 merkkiä), hyväksy nimimerkkiin yhdistettyjen
 peli- ja käyttötietojen kerääminen ja paina **Aloita ajo**. Vapaan nimimerkin kohdalla peli pyytää
 vahvistuksen (**Varaa nimimerkki**), ennen kuin nimi varataan tälle salasanalle. Kirjautuminen
 muistetaan selaimessa; **Vaihda kuljettajaa** unohtaa sen. Varmennus valmistellaan
@@ -194,7 +194,7 @@ Renderissä ja Cloudflaressa; se ei saa koskaan päätyä pelin tiedostoihin tai
    `https://lpr-verified.panu-musakka.workers.dev/api/verified/leaderboard` → `{"protocol":"driving-v1","revision":"...","results":[]}`.
    `GAME_ORIGINS` tarvitaan vain, jos pelillä on muu osoite kuin `https://panulut.github.io`.
    **Testaa kirjautuminen ennen pelin julkaisua**: luo testitili esimerkiksi selaimen konsolista
-   `fetch('https://lpr-verified.panu-musakka.workers.dev/api/verified/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'Testi',password:'testi123',create:true})}).then(r=>r.status)`
+   `fetch('https://lpr-verified.panu-musakka.workers.dev/api/verified/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'Testi',password:'testi1234',create:true})}).then(r=>r.status)`
    → `201`. Jos vastaus on `503` tai Cloudflare näyttää virheen 1102 (CPU-raja ylittyi), lisää
    Workerin *Settings → Variables* -kohtaan `PASSWORD_ITERATIONS` = `20000` (sallittu 10 000–100 000)
    tai siirrä Worker maksulliseen tasoon. Tilit tiivistetään uudelleen seuraavalla kirjautumisella.
