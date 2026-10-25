@@ -8,7 +8,7 @@ async function createLocalLeaderboard({secret,revision,database=':memory:',origi
   bind(...args){values=args;return this;},async first(){return db.prepare(sql).get(...values)||null;},
   async all(){return {results:db.prepare(sql).all(...values)};},
   async run(){return {meta:{changes:Number(db.prepare(sql).run(...values).changes)}};}
- };}};
+ };},async batch(statements){db.exec('BEGIN');try{const results=[];for(const stmt of statements)results.push(await stmt.run());db.exec('COMMIT');return results;}catch(error){db.exec('ROLLBACK');throw error;}}};
  const env={DB:binding,VERIFICATION_SECRET:secret,SIMULATION_REVISION:revision,GAME_ORIGINS:origins,...(passwordIterations?{PASSWORD_ITERATIONS:String(passwordIterations)}:{})};
  const server=http.createServer(async(req,res)=>{
   try{

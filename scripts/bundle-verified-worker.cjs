@@ -12,7 +12,8 @@ const protocol = read('verification/protocol.mjs').replace(/^export /gm, '');
 let worker = read('cloudflare/verified-worker.mjs');
 const importLine = /^import \{[^}]*\} from '\.\.\/verification\/protocol\.mjs';\n/m;
 if (!importLine.test(worker)) throw Error('verified-worker.mjs must import ../verification/protocol.mjs');
-worker = worker.replace(importLine, '');
+worker = worker.replace(importLine, '').replace(/^import \{[^}]*\} from '\.\/championship\.mjs';\n/m, '');
+const championshipCode=read('cloudflare/championship.mjs').replace(/^export /gm,'');
 if (!worker.includes("const BUILD_REVISION='';")) throw Error('verified-worker.mjs must define BUILD_REVISION');
 worker = worker.replace("const BUILD_REVISION='';", `const BUILD_REVISION=${JSON.stringify(revision)};`);
 worker = worker.replace(/^export const schema=/m, 'const schema=');
@@ -24,6 +25,7 @@ fs.writeFileSync(output, [
   `// Simulation revision ${revision} (rebuild and repaste whenever the physics changes).`,
   '// --- verification/protocol.mjs ---',
   protocol.trim(),
+  championshipCode.trim(),
   '// --- cloudflare/verified-worker.mjs ---',
   worker.trim(),
   ''

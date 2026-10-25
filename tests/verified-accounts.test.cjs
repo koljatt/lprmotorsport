@@ -48,7 +48,7 @@ const {revision}=require('../verification/world.cjs');
    async first(){return board.db.prepare(sql).get(...values)||null;},
    async run(){if(sql.startsWith('INSERT OR IGNORE INTO verified_laps'))board.db.prepare('DELETE FROM verified_login_sessions WHERE token_hash=?').run(await hash(raceToken));
     return {meta:{changes:Number(board.db.prepare(sql).run(...values).changes)}};}
-  };}};
+  };},async batch(statements){const results=[];for(const stmt of statements)results.push(await stmt.run());return results;}};
   const racingReceipt=await receipt(stored.player_hash,'Panu','7'.repeat(32),8000);
   const racing=await worker.fetch(new Request(base+'/api/verified/laps',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+raceToken},body:JSON.stringify({receipt:racingReceipt})}),
    {DB:raceBinding,SIMULATION_REVISION:revision,VERIFICATION_SECRET:secret});

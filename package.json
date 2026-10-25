@@ -28,6 +28,8 @@
     "measure:live-remote": "node scripts/measure-live-remote.cjs",
     "test:live-lab": "node tests/live-lab.test.cjs",
     "dev:verified": "node scripts/dev-verified.cjs",
+    "test:championship": "node tests/championship.test.cjs",
+    "test:championship-browser": "node scripts/check-championship-browser.cjs",
     "test:verified": "node tests/verified-driving.test.cjs && node tests/verified-accounts.test.cjs && node tests/verified-client.test.cjs",
     "test:verified-browser": "node scripts/check-verified-browser.cjs",
     "test:verified-realtime": "node scripts/check-verified-realtime.cjs"

@@ -2,6 +2,21 @@
 (() => {
   'use strict';
   const english = {
+  "Päivän kisa": "Daily race",
+  "Uusi kisa joka päivä Suomen aikaa. Vain varmennetut kierrokset.": "A new race every Helsinki calendar day. Verified laps only.",
+  "Kisapäivä": "Race day",
+  "Tänään": "Today",
+  "Päivitä": "Refresh",
+  "Päivän nopeimmat": "Daily fastest",
+  "Eniten kierroksia": "Most laps",
+  "Kuukauden pistekisa": "Monthly championship",
+  "Mistä pisteitä saa?": "How do I earn points?",
+  "Nopeuskisan sijat 1–10: 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 pistettä.": "Fastest lap places 1–10: 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 points.",
+  "Kierrosmääräkisan sijat 1–8: 10, 8, 6, 5, 4, 3, 2, 1 pistettä.": "Lap count places 1–8: 10, 8, 6, 5, 4, 3, 2, 1 points.",
+  "Päivän ensimmäinen kierros: 5 pistettä. Rajapyykit 5, 15 ja 30 kierrosta: kukin +2 pistettä.": "First lap of the day: 5 points. Milestones at 5, 15 and 30 laps: +2 points each.",
+  "Ajoputki: yksi varmennettu kierros päivässä. Bonus 1 piste per peräkkäinen päivä, enintään 7 pistettä päivässä. Väliin jäänyt päivä aloittaa putken alusta.": "Streak: one verified lap per day. One bonus point per consecutive day, up to 7 points daily. Missing a day resets the streak.",
+  "Tasatulokset jakavat sijan ja pisteet. Päivän pisteet vahvistuvat heti keskiyöllä Suomen aikaa. Kuukausikisaan lasketaan vain vahvistetut päivät. Myöhäisemmät tallennukset pääsevät edelleen kaikkien aikojen listalle.": "Ties share places and points. Daily points become final at Helsinki midnight. Monthly points include finalized days only. Later uploads can still enter the all-time leaderboard.",
+
   "Valmistaudu": "Get ready",
   "AJA!": "GO!",
   "Kierrosta ei hyväksytty verkkotuloslistalle. Paikallinen aika säilyy.": "The lap was not accepted for the online leaderboard. Your local time is preserved.",

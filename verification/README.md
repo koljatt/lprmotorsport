@@ -259,3 +259,47 @@ DELETE FROM verified_login_sessions WHERE player_hash IN
 ```
 
 Tunniste on edelleen selaimen localStoragessa. Tämä muutos ei toteuta HttpOnly-evästeitä eikä muuta salasanatiivisteen työmäärää.
+
+## Daily championship
+
+`feature/daily-championship` builds on `feature/password-accounts` (including independent,
+expiring, revocable login sessions). Deploy the matching Worker and frontend together.
+`npm run build:verified-worker` includes `cloudflare/championship.mjs` in the pasteable bundle.
+The Worker creates the new competition table and indexes idempotently on first use;
+`cloudflare/verified-schema.sql` also contains the explicit migration.
+No simulation or Render service change is required. Existing all-time lap rows are not
+backfilled: points and streaks start with laps accepted after deploying this feature.
+
+- `/api/verified/championship?day=YYYY-MM-DD` is public. Optional Bearer authentication
+  includes only that account's personal streak and selected day's point breakdown.
+  Stable account IDs and credentials are never returned in standings.
+- One Helsinki calendar day per race, switching immediately at local midnight. DST
+  days can be 23 or 25 hours. Use `Europe/Helsinki`, never a fixed UTC offset.
+- The authoritative signed receipt's completion timestamp determines the race day.
+  Entry must reach the database before that day's midnight. A database-side time
+  check prevents requests queued before midnight from changing a finalized day.
+  Late uploads still enter the all-time leaderboard, but receive no daily entry.
+- Original lap and daily entry are saved in one D1 batch transaction, with one daily
+  entry per `(session_id, lap)`. Retrying receipts cannot increase lap counts.
+- Speed places 1–10: 25/18/15/12/10/8/6/4/2/1. Lap-count places 1–8:
+  10/8/6/5/4/3/2/1. Ties share place and points (competition ranking).
+- First verified lap earns 5 participation points. Milestones at 5/15/30 laps each
+  add 2 points. The day's consecutive-day streak adds 1–7 points (capped at 7).
+  No unlimited points per lap. Missing a day resets the streak; an active streak
+  remains visible on the following day until the player has a chance to extend it.
+- Monthly totals include finalized days only, reset by calendar month and preserve
+  prior months through the day picker. Streaks continue across month/year boundaries.
+  Selected live day scores remain provisional as other drivers join and improve.
+- Bot-driven but server-valid laps receive the same treatment as human-driven laps.
+- Rules are versioned in source. Changing point rules recalculates historical totals;
+  freeze or version scoring rules before changing them in a later release.
+- Competition history is tied to the account. To erase an account, also remove its
+  `championship_laps` rows along with `verified_laps` and account/session records.
+  This initial version has no separate moderation UI; if a lap is removed manually,
+  a database trigger deletes its competition row automatically. A second trigger
+  removes daily entries when the account is deleted. Daily/monthly standings then recompute.
+
+Validation: `npm run test:championship`, `npm run test:verified`,
+`npm run test:leaderboard`, `npm run test:championship-browser`,
+`npm run build:verified-worker`, `npm run build`.
+The browser check expects Chrome, or `CHROMIUM_EXECUTABLE_PATH` pointing to Chromium.

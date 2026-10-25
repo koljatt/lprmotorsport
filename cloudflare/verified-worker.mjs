@@ -1,3 +1,4 @@
+import {championshipSchema,championship,championshipEntry} from './championship.mjs';
 import {sign,verify,hash,protocol,validPlayer,validName} from '../verification/protocol.mjs';
 // npm run build:verified-worker inlines the protocol and the simulation revision into a pasteable bundle.
 const BUILD_REVISION='';
@@ -26,13 +27,13 @@ export const schema=[
   PRIMARY KEY(session_id,lap))`,
  'CREATE INDEX IF NOT EXISTS verified_order ON verified_laps(revision,lap_ticks,issued_ms,session_id,lap)',
  'CREATE TABLE IF NOT EXISTS verified_limits (key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires INTEGER NOT NULL)',
- accountSchema,sessionSchema,sessionIndex
+ accountSchema,sessionSchema,sessionIndex,...championshipSchema
 ];
 const accountsReady=new WeakSet();
 const ensureAccounts=async db=>{
  if(accountsReady.has(db))return;
  // Cache completion only: never share request-owned I/O promises across Worker requests.
- for(const sql of [accountSchema,sessionSchema,sessionIndex])await db.prepare(sql).run();
+ for(const sql of [accountSchema,sessionSchema,sessionIndex,...championshipSchema])await db.prepare(sql).run();
  accountsReady.add(db);
 };
 // Cloudflare Workers caps PBKDF2 at 100 000 iterations. If sign-ins exceed the plan's CPU limit,
@@ -77,6 +78,17 @@ export default {
     const rows=await env.DB.prepare(`SELECT a.nickname,l.lap_ticks,l.sector1,l.sector2,l.sector3 FROM verified_laps l
      JOIN verified_accounts a ON a.player_hash=l.player_hash WHERE l.revision=? ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision).all();
     return reply({protocol,revision:revision,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
+   }
+   if(url.pathname==='/api/verified/championship'&&request.method==='GET'){
+    const credential=request.headers.get('Authorization')?.replace(/^Bearer /,'');
+    let playerHash=null;
+    if(validPlayer(credential)){
+     const owner=await env.DB.prepare(`SELECT a.player_hash FROM verified_login_sessions s
+      JOIN verified_accounts a ON a.player_hash=s.player_hash WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=?`)
+      .bind(await hash(credential),Date.now(),await hash(env.VERIFICATION_SECRET)).first();
+     playerHash=owner?.player_hash||null;
+    }
+    return reply(await championship(env.DB,url,Date.now(),playerHash));
    }
    const limit=async(id,max,windowMs)=>{
     const result=await env.DB.prepare('INSERT INTO verified_limits(key,attempts,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(id,Date.now()+windowMs).first();
@@ -152,11 +164,13 @@ export default {
     !Number.isSafeInteger(lap.lapTicks)||lap.lapTicks<=600||lap.endTick-lap.startTick!==lap.lapTicks||
     !Array.isArray(lap.sectorTicks)||lap.sectorTicks.length!==3||!lap.sectorTicks.every(n=>Number.isSafeInteger(n)&&n>0)||lap.sectorTicks.reduce((a,b)=>a+b,0)!==lap.lapTicks||
     !Number.isSafeInteger(lap.issuedAt)||lap.issuedAt>now+5000)return reply({error:'Invalid verified lap'},403);
-   const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO verified_laps
+   const insertLap=env.DB.prepare(`INSERT OR IGNORE INTO verified_laps
     (session_id,lap,revision,player_hash,nickname,start_tick,end_tick,lap_ticks,sector1,sector2,sector3,issued_ms) SELECT ?,?,?,?,?,?,?,?,?,?,?,?
     WHERE EXISTS (SELECT 1 FROM verified_login_sessions s JOIN verified_accounts a ON a.player_hash=s.player_hash
      WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=? AND a.player_hash=?)`)
-    .bind(lap.sessionId,lap.lap,lap.revision,lap.playerHash,lap.nickname,lap.startTick,lap.endTick,lap.lapTicks,...lap.sectorTicks,lap.issuedAt,tokenHash,Date.now(),secretHash,playerHash).run();
+    .bind(lap.sessionId,lap.lap,lap.revision,lap.playerHash,lap.nickname,lap.startTick,lap.endTick,lap.lapTicks,...lap.sectorTicks,lap.issuedAt,tokenHash,Date.now(),secretHash,playerHash);
+   const entry=championshipEntry(env.DB,lap,Date.now());
+   const [inserted]=await env.DB.batch(entry?[insertLap,entry]:[insertLap]);
    // Revocation/expiry can occur while reading the body or checking the signature.
    // The write above validates the session atomically; distinguish this from a duplicate lap.
    if(!inserted.meta.changes&&!await env.DB.prepare(`SELECT 1 FROM verified_login_sessions s

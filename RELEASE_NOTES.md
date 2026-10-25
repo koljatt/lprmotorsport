@@ -39,3 +39,11 @@ Ajon tila näkyy koko ajan ruudulla. Ensimmäinen pelaaja saattaa odottaa palvel
 heräämistä jopa minuutin; samanaikaisesti virallisia ajoja mahtuu kaksi.
 
 Vanhat ajat eivät siirry uudelle tuloslistalle.
+
+
+## Daily championship
+- Daily fastest lap and most-laps standings, Helsinki midnight turnover and date history.
+- Participation, lap milestones and consecutive-day streak bonuses; monthly points.
+- Password account identity across devices; optional analytics remains independent.
+- Finalizes at midnight immediately. Late receipts retain all-time eligibility only.
+- No bot exclusions beyond the existing authoritative driving verification.

@@ -84,7 +84,7 @@
    try{const reply=await api('/api/verified/laps',{receipt:pending[0]},login);
     if(identity?.token!==login.token)return;
     if(!reply.verified||reply.protocol!=='driving-v1')throw Error('Virheellinen tallennuskuittaus.');
-    pending.shift();persist();say(`Kierrosaika ${(reply.lapMs/1000).toFixed(3)} s tallennettu.`);hooks?.saved?.(reply.lapMs);
+    pending.shift();persist();say(`Kierrosaika ${(reply.lapMs/1000).toFixed(3)} s tallennettu.`);hooks?.saved?.(reply.lapMs);document.dispatchEvent(new Event('lpr-lap-saved'));
    }catch(error){if(identity?.token!==login.token)return;
     if(error.status===401){window.LPRLeaderboard.signOut?.('Kirjautuminen vanheni. Kirjaudu uudelleen nimimerkilläsi ja salasanallasi.');return;}
     if([400,403,409,413,415,422].includes(error.status)){pending.shift();persist();say('Kierrosaikaa ei voitu tallentaa tuloslistalle.');continue;}

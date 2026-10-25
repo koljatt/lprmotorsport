@@ -3,3 +3,5 @@
 /artifacts/replay-probe/
 
 /artifacts/verification/
+
+/cloudflare/verified-worker.bundle.mjs

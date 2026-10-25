@@ -15,3 +15,14 @@ CREATE TABLE IF NOT EXISTS verified_accounts (
 CREATE TABLE IF NOT EXISTS verified_login_sessions (
  token_hash TEXT PRIMARY KEY,player_hash TEXT NOT NULL,secret_hash TEXT NOT NULL,created_ms INTEGER NOT NULL,expires_ms INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS verified_login_expiry ON verified_login_sessions(expires_ms);
+
+-- Accepted daily entries. Old lap rows are intentionally not backfilled.
+CREATE TABLE IF NOT EXISTS championship_laps (
+ session_id TEXT NOT NULL,lap INTEGER NOT NULL,day TEXT NOT NULL,player_hash TEXT NOT NULL,
+ revision TEXT NOT NULL,lap_ticks INTEGER NOT NULL,PRIMARY KEY(session_id,lap));
+CREATE INDEX IF NOT EXISTS championship_days ON championship_laps(day,player_hash,lap_ticks);
+CREATE INDEX IF NOT EXISTS championship_player_days ON championship_laps(player_hash,day);
+CREATE TRIGGER IF NOT EXISTS championship_delete_lap AFTER DELETE ON verified_laps BEGIN
+ DELETE FROM championship_laps WHERE session_id=OLD.session_id AND lap=OLD.lap; END;
+CREATE TRIGGER IF NOT EXISTS championship_delete_account AFTER DELETE ON verified_accounts BEGIN
+ DELETE FROM championship_laps WHERE player_hash=OLD.player_hash; END;
