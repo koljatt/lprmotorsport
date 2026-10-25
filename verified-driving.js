@@ -48,11 +48,14 @@
  }
  const snapshots=new Map(),pending=[];
  const key=()=>`lpr-verified-receipts:${identity?.token}`;
- const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{}};
+ const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{
+  // A full browser store must never discard a signed score. Recordings remain in memory for this tab.
+  try{localStorage.setItem(key(),JSON.stringify(pending.map(v=>typeof v==='string'?v:v.receipt)));}catch{}
+ }};
  function restore(){
   const chosen=window.LPRLeaderboard.identity;if(!chosen)return;
   identity=chosen;
-  try{const saved=JSON.parse(localStorage.getItem(key())||'[]');if(Array.isArray(saved))for(const receipt of saved.filter(v=>typeof v==='string'&&v.length<=4096).slice(0,20))if(!pending.includes(receipt))pending.push(receipt);}catch{}
+  try{const saved=JSON.parse(localStorage.getItem(key())||'[]');if(Array.isArray(saved))for(const receipt of saved.filter(v=>typeof v==='string'?v.length<=4096:v&&typeof v.receipt==='string'&&v.receipt.length<=4096&&typeof v.replay==='string'&&v.replay.length<=900000).slice(0,20))if(!pending.some(v=>(typeof v==='string'?v:v.receipt)===(typeof receipt==='string'?receipt:receipt.receipt)))pending.push(receipt);}catch{}
  }
  const say=text=>{status.textContent=text;document.querySelector('#verification-state').textContent=text;};
  async function api(path,data){
@@ -69,7 +72,12 @@
     const li=document.createElement('li'),name=document.createElement('span'),time=document.createElement('span');
     name.className='standing-name';name.textContent=row.nickname;name.title=row.nickname;
     time.className='standing-time';time.textContent=` · ${(row.lap_ms/1000).toFixed(3)} s`;
-    li.append(name,time);list.append(li);
+    li.append(name,time);
+    if(row.replay_available&&/^[a-f0-9]{32}$/.test(row.session_id)&&Number.isSafeInteger(row.lap)){
+     const replay=document.createElement('a');replay.textContent='Katso uusinta';replay.className='replay-link';
+     replay.href='replay.html?session='+row.session_id+'&lap='+row.lap;replay.target='_blank';replay.rel='noopener';li.append(replay);
+    }
+    list.append(li);
    }
    if(!data.results.length)list.textContent='Ei vielä kierrosaikoja.';
   }catch{list.textContent='Tuloslista ei ole juuri nyt saatavilla.';}
@@ -78,7 +86,7 @@
  async function save(){
   if(sending)return sending;
   sending=(async()=>{do{while(pending.length){
-   try{const reply=await api('/api/verified/laps',{receipt:pending[0]});
+   try{const reply=await api('/api/verified/laps',(typeof pending[0]==='string'?{receipt:pending[0]}:pending[0]));
     if(!reply.verified||reply.protocol!=='driving-v1')throw Error('Virheellinen tallennuskuittaus.');
     pending.shift();persist();say(`Kierrosaika ${(reply.lapMs/1000).toFixed(3)} s tallennettu.`);hooks?.saved?.(reply.lapMs);
    }catch(error){if([400,401,403,409,413,415,422].includes(error.status)){pending.shift();persist();say('Kierrosaikaa ei voitu tallentaa tuloslistalle.');continue;}
@@ -140,7 +148,7 @@
      }
      for(const tick of snapshots.keys())if(tick<=ack.ackTick)snapshots.delete(tick);
      if(recovering){recovering=false;say('');}
-     for(const lap of ack.laps||[]){pending.push(lap.receipt);persist();void save();}
+     for(const lap of ack.laps||[]){pending.push(lap.replay?{receipt:lap.receipt,replay:lap.replay}:lap.receipt);persist();void save();}
     },onLost:(message,details={})=>{
      console.warn('LPR verification lost:',{message,...details});
      connectionUnavailable=true;

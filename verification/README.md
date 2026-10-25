@@ -200,3 +200,8 @@ edellyttää erikseen sessioreititysta ja aloituslupien kertakäytön jakamista;
 useita instansseja sellaisenaan. Render Free -tason todellinen viive ja kapasiteetti kahdella
 yhtäaikaisella pelaajalla sekä mobiiliselainten käyttäytyminen on todennettava tuotannossa
 ennen kuin listaa mainostetaan.
+
+## Kierrosten uusinnat
+
+Tallennus, TOP 10 -uusinnat, ylläpidon tarkastusjono ja käyttöönotto:
+[REPLAYS.md](REPLAYS.md).

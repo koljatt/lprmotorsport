@@ -92,7 +92,10 @@ class Sessions {
    if(message.result.ticks!==endTick)throw fail(422,'ticks','Simulation tick mismatch');
    s.ticks=endTick;s.nextSeq++;s.lastAccepted=this.clock();
    const laps=[];
-   for(const lap of message.laps||[])laps.push({lap,receipt:await this.signLap(s,lap)});
+   for(const value of message.laps||[]){
+    const {replay,...lap}=value;
+    laps.push({lap,receipt:await this.signLap(s,{...lap,...(replay?{replayHash:replay.hash}:{})}),...(replay?{replay:replay.payload}:{})});
+   }
    const reply={sessionId:s.id,seq:data.seq,ackTick:s.ticks,phase:'running',result:message.result,
     wallMs:message.wallMs,serverElapsedMs:this.clock()-s.started,laps};
    s.receipts.set(data.seq,{digest,reply});

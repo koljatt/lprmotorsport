@@ -6,3 +6,10 @@ CREATE TABLE IF NOT EXISTS verified_laps (
   PRIMARY KEY(session_id,lap));
 CREATE INDEX IF NOT EXISTS verified_order ON verified_laps(revision,lap_ticks,issued_ms,session_id,lap);
 CREATE TABLE IF NOT EXISTS verified_limits (key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires INTEGER NOT NULL);
+
+
+CREATE TABLE IF NOT EXISTS verified_replays (
+ session_id TEXT NOT NULL,lap INTEGER NOT NULL,payload TEXT NOT NULL,payload_hash TEXT NOT NULL,
+ expires_ms INTEGER NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,review TEXT NOT NULL DEFAULT 'unreviewed',
+ PRIMARY KEY(session_id,lap));
+CREATE INDEX IF NOT EXISTS replay_expiry ON verified_replays(pinned,review,expires_ms);

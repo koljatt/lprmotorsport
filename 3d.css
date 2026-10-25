@@ -302,3 +302,6 @@ dialog { touch-action: pan-y pinch-zoom; }
   .leaderboard-start-form .analytics-settings label { font-size:10px; line-height:1.3; }
   #verified-list li, #leaderboard-list li { padding:1px 0; font-size:11px; }
 }
+
+
+#verified-list .replay-link{font-size:.72rem;color:#d1ef85;text-decoration:underline;margin-left:auto;white-space:nowrap;padding:8px}#verified-list li{flex-wrap:wrap}
