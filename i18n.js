@@ -2,6 +2,21 @@
 (() => {
   'use strict';
   const english = {
+  "Varikkochat": "Paddock chat",
+  "Näytä chat ajon aikana": "Show chat while driving",
+  "Sulje chat": "Close chat",
+  "Chat-viestit": "Chat messages",
+  "Yhteinen chat · viestit ovat julkisia. Älä jaa henkilötietoja.": "Shared chat · messages are public. Do not share personal information.",
+  "Viesti": "Message",
+  "Kirjoita varikolle…": "Message the paddock…",
+  "Lähetä": "Send",
+  "Yhteys kunnossa": "Connected",
+  "Vahvista nimimerkki ennen lähettämistä.": "Confirm your nickname before sending.",
+  "Chat ei saa yhteyttä. Yritetään uudelleen…": "Chat cannot connect. Retrying…",
+  "Lähetetään…": "Sending…",
+  "Viesti lähetetty": "Message sent",
+  "Liikaa viestejä. Odota minuutti.": "Too many messages. Wait a minute.",
+  "Viestiä ei lähetetty. Yritä uudelleen.": "Message was not sent. Try again.",
   "Valmistaudu": "Get ready",
   "AJA!": "GO!",
   "Kierrosta ei hyväksytty verkkotuloslistalle. Paikallinen aika säilyy.": "The lap was not accepted for the online leaderboard. Your local time is preserved.",
@@ -210,7 +225,7 @@
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (node.parentElement.closest('script, style, .language-switcher')) continue;
+      if (node.parentElement.closest('script, style, .language-switcher, #chat-messages')) continue;
       const translated = t(node.nodeValue);
       if (translated !== node.nodeValue) node.nodeValue = translated;
     }

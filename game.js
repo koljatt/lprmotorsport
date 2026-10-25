@@ -381,6 +381,7 @@
   }
 
   function readInput() {
+    if(window.LPRChat?.typing)return {steer:0,gas:0,brake:0,analog:false,wheel:false};
     const pad = currentPad();
     if (pad && (!activePad || activePad.id !== pad.id)) {
       activePad = pad;
@@ -589,7 +590,7 @@
       const lapMs=event.completed.lapTicks*1000/120;
       window.LPRAnalytics?.event('lap_complete',{lapMs:Math.round(lapMs)});
       audio.lap(false);timing.reset();ui.lap.textContent=String(car.lap);
-      showNotice('Kierros '+formatTime(lapMs)+(window.LPRVerifiedDriving.active?'':' · harjoittelu'),3000);
+      showNotice('Kierros '+formatTime(lapMs)+(window.LPRVerifiedDriving.lapEligible?' · tarkistetaan':' · harjoittelu'),3000);
       // Do not reset a flying lap after verification was lost: stay in practice until the player explicitly restarts.
     }
     car.throttleInput=input.gas;car.brakeInput=input.brake;
@@ -699,6 +700,7 @@
     event.preventDefault(); keyboard.delete(event.code); syncHeld();
   });
   window.addEventListener('blur', clearInput);
+  window.addEventListener('lpr-chat-focus', clearInput);
   // Older iOS Safari versions also emit proprietary pinch gesture events.
   // Restrict the fallback to gameplay so settings retain normal touch behavior.
   const gameSurface = document.querySelector('.app');

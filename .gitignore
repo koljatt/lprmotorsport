@@ -3,3 +3,7 @@
 /artifacts/replay-probe/
 
 /artifacts/verification/
+*.log
+.env
+.env.*
+!.env.example

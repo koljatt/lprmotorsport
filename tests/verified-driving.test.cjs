@@ -56,7 +56,12 @@ const {driver}=require('./helpers-driving.cjs');
   const wrongTicket=await sign({...await verify(ticket,secret),revision:'b'.repeat(64)},secret);
   assert.equal((await post(serviceURL,'/sessions',{ticket:wrongTicket,revision})).status,401);
   clock+=9000;
-  assert.equal((await send({revision,seq,fromTick:last.ackTick,inputs:[idle]})).status,410,'A long disconnection invalidates verification');
+  const recovered=await send({revision,seq,fromTick:last.ackTick,inputs:[idle]});
+  assert.equal(recovered.status,200,'A nine-second interruption preserves the trusted session');
+  const practice=await recovered.json();assert.equal(practice.eligibility.eligible,false);
+  assert.equal(practice.laps.length,0,'Recovering inputs cannot create a signed lap');
+  clock=startedClock+practice.ackTick*1000/120+service.sessions.lagMs+1;
+  assert.equal((await send({revision,seq:seq+1,fromTick:practice.ackTick,inputs:[idle]})).status,410,'Exceeding the recovery limit closes the session');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_laps').get().n,2);
   console.log('PASS: real HTTP → signed start → authoritative 3D physics with people → standing/flying receipts → SQLite leaderboard; clock, ownership, sequence, replay, forgery, duplicates and disconnect');
  }finally{await service.sessions.close();await Promise.all([service,board].map(server=>new Promise(r=>server.close(r))));}

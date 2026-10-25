@@ -58,3 +58,11 @@
 
 .verification-state{position:absolute;z-index:3;top:65px;left:10px;max-width:calc(100% - 20px);margin:0;padding:5px 9px;border-radius:6px;background:#10241ee8;color:#d7f5e6;font-size:11px;pointer-events:none}
 .verification-state:empty{display:none}
+
+.chat-panel[hidden]{display:none}
+.leaderboard-start-form .chat-visibility{display:flex;align-items:center;gap:8px;grid-column:1 / -1;min-height:44px;margin:4px 0}.chat-visibility input[type=checkbox]{width:18px;height:18px;margin:0;accent-color:#00b47c}
+.chat-panel{position:fixed;z-index:20;right:max(12px,calc((100vw - 1260px)/2));top:94px;width:min(370px,calc(100vw - 24px));max-height:calc(100dvh - 110px);display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid #35634e;border-radius:14px;background:#0d2119f5;box-shadow:0 16px 50px #0009;touch-action:pan-y}
+.chat-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.chat-heading h2{margin:0;font:800 26px 'Barlow Condensed',Impact,sans-serif}.chat-heading .icon-button{margin:0;padding:4px 12px;font-size:24px}
+.chat-panel .hint{margin:0}.chat-panel ol{list-style:none;overflow:auto;overscroll-behavior:contain;margin:0;padding:0;min-height:70px;max-height:38dvh;touch-action:pan-y}.chat-panel li{padding:9px 0;border-bottom:1px solid #2c493b;overflow-wrap:anywhere;font-size:13px}.chat-panel time{float:right;color:#91ad9e;font-size:11px}.chat-panel li strong{color:#06cb8c}.chat-panel li p{margin:5px 0 0;white-space:pre-wrap}.chat-panel label{display:block;font-size:12px;margin-bottom:5px}.chat-compose{display:flex;gap:7px}.chat-compose input{min-width:0;flex:1;border:1px solid #35634e;border-radius:7px;background:#071910;color:#fff;padding:10px;font:16px Inter,Arial,sans-serif}.chat-compose button{border:1px solid #00b47c;border-radius:7px;background:#087c57;color:#fff;padding:9px;font-weight:700}.chat-compose button:disabled{opacity:.5}
+@media(max-width:700px){.chat-panel{top:64px;max-height:calc(100dvh - 78px)}.chat-panel ol{max-height:32dvh}.topbar{gap:4px}.topbar .logo{width:80px}}
+@media(max-width:380px){.topbar .logo{width:44px}.topbar .language-switcher{gap:0}.topbar .language-switcher button{min-width:36px;padding:3px}}

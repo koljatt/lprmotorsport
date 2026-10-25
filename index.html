@@ -11,9 +11,9 @@
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
-    <link rel="stylesheet" href="styles.css?v=single-line-topbar-20261015" />
+    <link rel="stylesheet" href="styles.css?v=chat-visibility-20261025" />
     <link rel="stylesheet" href="3d.css?v=top10-medals-20261025" />
-    <script src="i18n.js?v=verified-launch-20261025" defer></script>
+    <script src="i18n.js?v=chat-visibility-20261025" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
     <script src="campus.js?v=deterministic-math-20261024" defer></script>
@@ -27,7 +27,7 @@
     <script src="shared/driving.js?v=verified-launch-20261025" defer></script>
     <script src="verification/revision.js" defer></script>
     <script src="verification/config.js?v=verified-launch-20261025" defer></script>
-    <script src="experiment/live-client.js?v=verified-launch-20261025" defer></script>
+    <script src="experiment/live-client.js?v=lap-realtime-20261025" defer></script>
     <script src="sale.js?v=solid-shelves-long-checkout-20261013" defer></script>
     <script src="renderer3d.js?v=verified-launch-20261025" defer></script>
     <script src="vehicle.js?v=deterministic-math-20261024" defer></script>
@@ -38,7 +38,8 @@
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
     <script src="verified-driving.js?v=verified-single-top10-20261025" defer></script>
-    <script src="game.js?v=verified-launch-20261025" defer></script>
+    <script src="chat.js?v=chat-visibility-20261025" defer></script>
+    <script src="game.js?v=chat-20261025" defer></script>
   </head>
   <body>
     <main class="app">
@@ -47,6 +48,7 @@
         <div class="topbar-title"><span>FORMULA STUDENT</span><strong>SKINNARILA GRAND PRIX</strong></div>
         <button id="sound-button" class="icon-button" type="button" aria-label="Äänet: päällä" aria-pressed="true">♫<span>Äänet: päällä</span></button>
         <button id="leaderboard-button" class="icon-button" type="button" aria-label="Tuloslista">🏆</button>
+        <button id="chat-button" class="icon-button" type="button" aria-label="Varikkochat" aria-expanded="false" aria-controls="chat-panel">💬</button>
         <button id="restart-button" class="icon-button" type="button" aria-label="Aloita uudelleen">↺ <span>Aloita uudelleen</span></button>
         <div class="language-switcher" role="group" aria-label="Kieli / Language">
           <button type="button" data-language="fi" aria-label="Suomi" aria-pressed="true" title="Suomi" lang="fi"><svg viewBox="0 0 36 22" aria-hidden="true"><path fill="#fff" d="M0 0h36v22H0z"/><path fill="#003580" d="M10 0h6v22h-6zM0 8h36v6H0z"/></svg></button>
@@ -54,6 +56,16 @@
         </div>
       </header>
 
+      <aside id="chat-panel" class="chat-panel" aria-labelledby="chat-title" hidden>
+        <div class="chat-heading"><h2 id="chat-title">Varikkochat</h2><button id="chat-close" class="icon-button" type="button" aria-label="Sulje chat">×</button></div>
+        <p class="hint">Yhteinen chat · viestit ovat julkisia. Älä jaa henkilötietoja.</p>
+        <ol id="chat-messages" aria-label="Chat-viestit" aria-live="polite" aria-relevant="additions"></ol>
+        <form id="chat-form">
+          <label for="chat-input">Viesti</label>
+          <div class="chat-compose"><input id="chat-input" type="text" maxlength="280" placeholder="Kirjoita varikolle…" autocomplete="off" required /><button type="submit">Lähetä</button></div>
+        </form>
+        <p id="chat-status" class="hint" role="status"></p>
+      </aside>
       <section class="game-shell" aria-label="Ajopeli">
         <p id="verification-state" role="status" class="verification-state"></p>
         <div id="start-lights" class="start-lights" data-phase="" role="status" hidden>
@@ -109,6 +121,7 @@
             <h3>Kuljettaja</h3>
             <label for="leaderboard-name">Nimimerkki</label>
             <input id="leaderboard-name" required maxlength="24" autocomplete="nickname" autocapitalize="off" enterkeyhint="go" placeholder="Nimimerkki" />
+            <label class="chat-visibility"><input id="chat-visible" type="checkbox" /> <span>Näytä chat ajon aikana</span></label>
             <fieldset class="analytics-settings" aria-label="Analytiikka / Analytics">
               <label><input id="analytics-consent" type="checkbox" required /> <span id="analytics-label"></span></label>
               <details><summary>Tiedot / Details</summary><p id="analytics-info"></p><a href="privacy.html" target="_blank" rel="noopener">Tietosuoja / Privacy</a><br><button id="analytics-delete" type="button">Poista analytiikkatietoni</button><p id="analytics-status" role="status"></p></details>

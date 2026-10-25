@@ -1,5 +1,32 @@
 # 3D-pelin palvelinvarmennus
 
+## Varikkochat
+
+Kuljettaja voi valita aloitus- ja tuloslistanäkymässä **Näytä chat ajon aikana**.
+Saman valinnan voi vaihtaa ajossa 💬-painikkeesta ja chatin sulkupainikkeesta.
+Valinta muistetaan selaimessa seuraaville pelikerroille; oletuksena chat on piilossa.
+Chatin näyttäminen ei kohdista kirjoituskenttää, joten viestejä voi lukea ajaessa.
+
+Pelin 💬-painike avaa kaikille yhteisen chatin. Chat käyttää samaa Render-palvelua
+kuin ajovarmennus (`verification/server.cjs`) ja pelissä vahvistettua nimimerkkiä.
+Julkaise päivitetty palvelin sekä `npm run build` -komennon tuottama peli.
+Cloudflare Workeria tai tietokantaa ei tarvitse muuttaa. Paikallisesti molemmat
+käynnistyvät komennolla `npm run dev:verified`.
+
+Chat päivittyy kolmen sekunnin välein vain sen ollessa näkyvissä. Kirjoittaminen
+vapauttaa ajonäppäimet ja lähettää neutraalin ohjaussyötteen; kierros jatkuu normaalisti.
+Viestissä saa olla enintään 280 merkkiä. Raja on kuusi viestiä minuutissa
+pelaajatunnistetta ja 30 viestiä minuutissa yhdistävää IP-osoitetta kohti.
+Käänteisen välityspalvelimen takana jälkimmäinen raja voi olla yhteinen kaikille.
+Nimimerkit eivät ole yksilöllisiä tai varmennettuja henkilöllisyyksiä.
+
+Palvelin pitää muistissa viimeiset 100 viestiä enintään 24 tuntia. Historia
+tyhjenee uudelleenkäynnistyksessä. Käytä yhtä palvelininstanssia: eri instansseilla
+on omat huoneensa. Viestit näkyvät julkisesti; pelaajatunnisteita ja IP-osoitteita
+ei palauteta chatissa. Viestien sisältöä ei lähetetä analytiikkaan.
+
+Tarkistukset: `npm run test:chat`, `npm run test:chat-browser`.
+
 Palvelin laskee jokaisen virallisen kierroksen itse kuljettajan ohjaussyötteistä ja
 allekirjoittaa tuloksen; selaimen ilmoittamaa aikaa ei käytetä mihinkään. Tuotannon osat ovat
 Render-palvelu `lpr-verification`, Cloudflare Worker `lpr-verified` ja GitHub Pages -peli;

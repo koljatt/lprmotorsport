@@ -2,6 +2,8 @@
   "name": "lpr-lap-challenge",
   "private": true,
   "scripts": {
+    "test:chat": "node tests/chat.test.cjs",
+    "test:chat-browser": "node scripts/check-chat-browser.cjs",
     "dev": "node server.js",
     "build": "node scripts/build.cjs",
     "preview": "node server.js --production",
@@ -28,7 +30,7 @@
     "measure:live-remote": "node scripts/measure-live-remote.cjs",
     "test:live-lab": "node tests/live-lab.test.cjs",
     "dev:verified": "node scripts/dev-verified.cjs",
-    "test:verified": "node tests/verified-driving.test.cjs && node tests/verified-client.test.cjs",
+    "test:verified": "node tests/verified-driving.test.cjs && node tests/verified-realtime-policy.test.cjs && node tests/verified-client.test.cjs",
     "test:verified-browser": "node scripts/check-verified-browser.cjs",
     "test:verified-realtime": "node scripts/check-verified-realtime.cjs"
   }

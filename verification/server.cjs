@@ -1,6 +1,7 @@
 const http=require('node:http');
 const {Sessions}=require('./sessions.cjs');
 const {revision}=require('./world.cjs');
+const {createChat}=require('./chat.cjs');
 async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],sessionsOptions={}}={}) {
  const {sign,verify,protocol,validPlayer,validName}=await import('./protocol.mjs');
  if(typeof secret!=='string'||secret.length<32)throw Error('VERIFICATION_SECRET must contain at least 32 characters');
@@ -8,6 +9,7 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
  const sessions=new Sessions({...sessionsOptions,signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
   sessionId:s.id,playerHash:s.identity.playerHash,nickname:s.identity.nickname,...lap,issuedAt:Date.now()},secret)});
  const allowed=new Set(origins);
+ const chat=createChat();
  const server=http.createServer(async(req,res)=>{
   const origin=req.headers.origin;
   const headers={'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff'};
@@ -19,6 +21,13 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
   if(req.method==='GET'&&url.pathname==='/health')return reply(200,{ready:true,protocol,revision,hz:120,streaming:true,activeSessions:sessions.activeCount});
   const route=url.pathname.match(/^\/sessions\/([a-f0-9]{32})(\/inputs|\/start)?$/);
   try{
+   if(url.pathname==='/api/chat'){
+    if(req.method==='GET')return reply(200,chat.list());
+    if(req.method!=='POST')return reply(405,{error:'Method not allowed'});
+    // Trust the connecting socket; client-supplied forwarding headers can be forged.
+    const data=await readJSON(req,2048);
+    return reply(201,chat.post(req.headers.authorization?.replace(/^Bearer /,''),req.socket.remoteAddress||'unknown',data));
+   }
    if(url.pathname==='/sessions'&&req.method==='POST'){
     const data=await readJSON(req),now=Date.now();
     let identity;try{identity=await verify(data.ticket,secret);}catch{throw fail(401,'Invalid start ticket');}
@@ -51,10 +60,10 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
  return server;
 }
 function fail(status,message){return Object.assign(Error(message),{status});}
-async function readJSON(req){
+async function readJSON(req,maxBytes=16384){
  if(!req.headers['content-type']?.startsWith('application/json'))throw fail(415,'JSON required');
  let size=0;const chunks=[];
- for await(const chunk of req){size+=chunk.length;if(size>16384)throw fail(413,'Body too large');chunks.push(chunk);}
+ for await(const chunk of req){size+=chunk.length;if(size>maxBytes)throw fail(413,'Body too large');chunks.push(chunk);}
  try{return JSON.parse(Buffer.concat(chunks).toString());}catch{throw fail(400,'Invalid JSON');}
 }
 module.exports={createServer};

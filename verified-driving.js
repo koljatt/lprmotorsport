@@ -20,6 +20,8 @@
   lightsTimer=setTimeout(clearLights,900);
  }
  let client=null,generation=0,preparing=false,hooks=null,identity=null,connectionUnavailable=false,retryTimer=null,recovering=false,autoRetryAllowed=true;
+ let lapEligibility=null;
+ const practiceMessage='Harjoittelukierros – ajo jäi jälkeen reaaliajasta. Varmennus voi jatkua seuraavalta maalilinjalta.';
  // Sub-millimetre-scale numeric noise must not invalidate a verified browser run.
  // This only compares presentation against server simulation; the server alone signs lap receipts.
  const STATE_EPSILON=1e-5;
@@ -80,7 +82,7 @@
   sending=(async()=>{do{while(pending.length){
    try{const reply=await api('/api/verified/laps',{receipt:pending[0]});
     if(!reply.verified||reply.protocol!=='driving-v1')throw Error('Virheellinen tallennuskuittaus.');
-    pending.shift();persist();say(`Kierrosaika ${(reply.lapMs/1000).toFixed(3)} s tallennettu.`);hooks?.saved?.(reply.lapMs);
+    pending.shift();persist();say(lapEligibility?.eligible===false?practiceMessage:`Kierrosaika ${(reply.lapMs/1000).toFixed(3)} s tallennettu.`);hooks?.saved?.(reply.lapMs);
    }catch(error){if([400,401,403,409,413,415,422].includes(error.status)){pending.shift();persist();say('Kierrosaikaa ei voitu tallentaa tuloslistalle.');continue;}
     say('Kierrosaika odottaa tallennusta.');return;}
   }await refresh();}while(pending.length);})();
@@ -89,7 +91,7 @@
  function cancel(message='Harjoittelu käynnissä. Aloita uudelleen aloittaaksesi uuden ajon.'){
   clearLights();
   clearTimeout(retryTimer);retryTimer=null;
-  generation++;preparing=false;recovering=false;snapshots.clear();
+  generation++;preparing=false;recovering=false;lapEligibility=null;snapshots.clear();
   const old=client;client=null;if(old)void old.cancel();
   if(message)say(message);
  }
@@ -140,6 +142,12 @@
      }
      for(const tick of snapshots.keys())if(tick<=ack.ackTick)snapshots.delete(tick);
      if(recovering){recovering=false;say('');}
+     if(ack.eligibility){
+      const wasPractice=lapEligibility?.eligible===false;
+      lapEligibility=ack.eligibility;
+      if(!lapEligibility.eligible)say(practiceMessage);
+      else if(wasPractice||ack.practiceLaps?.length)say('Uusi kierros on tuloskelpoinen – aika hyväksytään palvelimen tarkistuksen jälkeen.');
+     }
      for(const lap of ack.laps||[]){pending.push(lap.receipt);persist();void save();}
     },onLost:(message,details={})=>{
      console.warn('LPR verification lost:',{message,...details});
@@ -165,13 +173,14 @@
  window.LPRVerifiedDriving={
   attach(value){hooks=value;},cancel,start,refresh:sync,
   get active(){return !!client?.active;},get preparing(){return preparing;},get ackTick(){return client?.tick??0;},
+  get lapEligible(){return !!client?.active&&!recovering&&lapEligibility?.eligible!==false;},
   get waitingForStart(){return preparing&&!connectionUnavailable;},
   step(input,result,event){
    if(!client?.active)return;
    snapshots.set(result.ticks,result);
    if(snapshots.size>2400){console.warn('LPR verification snapshot backlog',{ticks:result.ticks,ackTick:client.tick,snapshots:snapshots.size});autoRetryAllowed=false;cancel('Harjoittelu käynnissä – palvelimen kuittaukset jäivät liian kauas jälkeen.');return;}
    client.enqueue(window.LPRDriving.encode(input));
-   if(event.completed){void client.flush(true).catch(()=>{});say('Tallennetaan kierrosaikaa…');}
+   if(event.completed){void client.flush(true).catch(()=>{});say(lapEligibility?.eligible===false?practiceMessage:'Tarkistetaan kierrosaikaa…');}
   }
  };
  function sync(){restore();return save();}

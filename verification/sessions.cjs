@@ -7,8 +7,8 @@ const hz=120;
 const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,code,...extra});
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
- constructor({clock=()=>performance.now(),maxSessions=2,leadMs=250,lagMs=16000,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
-  Object.assign(this,{clock,maxSessions,leadMs,lagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
+ constructor({clock=()=>performance.now(),maxSessions=2,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
+  Object.assign(this,{clock,maxSessions,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
   this.timer=setInterval(()=>this.sweep(),1000);this.timer.unref();
  }
  get activeCount(){return [...this.sessions.values()].filter(s=>s.slot).length;}
@@ -22,12 +22,12 @@ class Sessions {
   // Bound completed receipt caches even when starts fail or clients disappear.
   for(const [id,s] of this.sessions){if(!s.slot&&this.sessions.size>=8)this.sessions.delete(id);}
   const id=randomBytes(16).toString('hex'),token=randomBytes(32).toString('hex');
-  const s={id,token,identity,phase:'starting',slot:true,nextSeq:0,ticks:0,receipts:new Map(),lastAccepted:now,created:now,failures:0};
+  const s={id,token,identity,phase:'starting',slot:true,nextSeq:0,ticks:0,receipts:new Map(),lastAccepted:now,created:now,failures:0,lapEligible:true,eligibleFromTick:0};
   this.sessions.set(id,s);
   try{
    const initial=await this.spawn(s);
    s.started=this.clock();s.lastAccepted=s.started;s.phase=armed?'armed':'running';
-   return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs};
+   return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs,lapLagMs:this.lapLagMs};
   }catch(error){this.invalidate(s,'initialization');throw error;}
  }
  spawn(s){
@@ -78,10 +78,14 @@ class Sessions {
   }
   // Do not allow an attacker to wait and then upload an unbounded old replay.
   if(elapsed-s.ticks*1000/hz>this.lagMs){this.invalidate(s,'lag');throw fail(410,'lag','Verification fell too far behind; continue in practice mode');}
-  const promise=this.process(s,data,digest,endTick);s.inflight={seq:data.seq,digest,promise};
+  // Compare arrival with the END of this bounded batch: normal batching is not slowdown.
+  // Keep the original server clock forever; recovery cannot grant a fresh time budget.
+  const arrivalLagMs=elapsed-simMs;
+  if(arrivalLagMs>this.lapLagMs)s.lapEligible=false;
+  const promise=this.process(s,data,digest,endTick,arrivalLagMs);s.inflight={seq:data.seq,digest,promise};
   try{return await promise;}finally{s.inflight=null;}
  }
- async process(s,data,digest,endTick){
+ async process(s,data,digest,endTick,arrivalLagMs){
   try{
    const message=await new Promise((resolve,reject)=>{
     const id=data.seq,timer=setTimeout(()=>reject(fail(504,'budget','Input verification exceeded its time budget')),10000);
@@ -91,10 +95,23 @@ class Sessions {
    if(message.result.crashed)throw fail(422,'crashed','Car crashed; session is not a verified lap');
    if(message.result.ticks!==endTick)throw fail(422,'ticks','Simulation tick mismatch');
    s.ticks=endTick;s.nextSeq++;s.lastAccepted=this.clock();
-   const laps=[];
-   for(const lap of message.laps||[])laps.push({lap,receipt:await this.signLap(s,lap)});
+   const laps=[],practiceLaps=[];
+   for(const lap of message.laps||[]){
+    // Check the crossing itself as well as the batch end, so trailing inputs cannot
+    // hide a late finish. Only server-simulated boundaries can restore eligibility.
+    const crossingLagMs=arrivalLagMs+(endTick-lap.endTick)*1000/hz;
+    if(crossingLagMs>this.lapLagMs)s.lapEligible=false;
+    if(s.lapEligible)laps.push({lap,receipt:await this.signLap(s,lap)});
+    else practiceLaps.push(lap.lap);
+    // Catch-up laps never get receipts. Rejoin only at an exact, timely boundary;
+    // do not retroactively qualify the lap that is already underway in this batch.
+    if(!s.lapEligible&&lap.endTick===endTick&&crossingLagMs<=this.lapLagMs){
+     s.lapEligible=true;s.eligibleFromTick=lap.endTick;
+    }
+   }
    const reply={sessionId:s.id,seq:data.seq,ackTick:s.ticks,phase:'running',result:message.result,
-    wallMs:message.wallMs,serverElapsedMs:this.clock()-s.started,laps};
+    wallMs:message.wallMs,serverElapsedMs:this.clock()-s.started,laps,practiceLaps,
+    eligibility:{eligible:s.lapEligible,fromTick:s.eligibleFromTick,lap:message.result.lap,lagMs:Math.max(0,arrivalLagMs)}};
    s.receipts.set(data.seq,{digest,reply});
    return reply;
   }catch(error){this.invalidate(s,error.code||'physics');throw error;}
