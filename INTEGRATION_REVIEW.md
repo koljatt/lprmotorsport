@@ -2,10 +2,13 @@
 
 ## Tulos
 
-Muutokset on yhdistetty paikalliseen haaraan `integration/main-updates-20261025`.
-Mainia tai etähaaroja ei ole muutettu. Suoraa mainiin puskua ei vielä suositella:
-mainin push käynnistää GitHub Pages -julkaisun, mutta nykyinen tuotantopalvelin
-ei tue uuden pelin kirjautumista. Lisäksi chatin nimimerkin omistus on varmistamatta.
+Muutokset on yhdistetty haaraan `integration/main-updates-20261025`, joka on
+käyttäjän luvalla puskettu GitHubiin. Mainia ei ole muutettu.
+Renderin tuotantopalvelin on päivitetty ja uusi Worker on tuotantotestattu.
+Julkinen Worker-reititys on palautettu vanhan Pages-pelin kanssa yhteensopivaksi
+main-julkaisua odottamaan. Julkaisun tilanne ja testit:
+[DEPLOYMENT-20261025.md](verification/DEPLOYMENT-20261025.md).
+Chatin nimimerkin omistus on edelleen varmistamatta ennen pelin julkaisua.
 
 ## Mukana olevat muutokset
 
@@ -44,23 +47,8 @@ Fysiikkarevisio säilyi arvossa `d8d41e628bb3b62ff574c4a95bcbb410a549ba79432c268
    `verification/server.cjs` hyväksyy asiakkaan lähettämän nimimerkin.
    Omatekoisella 64-merkkisellä tunnisteella voi esiintyä toisen nimimerkillä.
    Tuloslistan tilisuojaus ei ulotu chat-palveluun.
-2. Päivitä olemassa olevan D1-tietokannan skeema tiedostosta
-   `cloudflare/verified-schema.sql`. Julkaise tämän haaran generoitu
-   `cloudflare/verified-worker.bundle.mjs` nykyiseen `lpr-verified`-Workeriin.
-   Säilytä DB-binding ja `VERIFICATION_SECRET`. Aseta uusintojen ylläpitoavain
-   ja siivouksen ajastus ohjeen [REPLAYS.md](verification/REPLAYS.md) mukaan.
-3. Päivitä Renderin varmennuspalvelin saman yhdistetyn version mukaiseksi
-   ennen uuden pelin julkaisua. `render.yaml` seuraa mainia: palvelin- ja
-   Pages-julkaisun järjestys on sovittava, jotta Pages ei ehdi ensin.
-4. Tarkista uusi kirjautuminen, virallinen kierros, uusinnan katselu ja
-   uloskirjautuminen palvelinpäivitysten jälkeen. Vie mainiin vasta
-   palvelinten ja pelin yhteensopivuuden varmistamisen jälkeen.
+2. **Skeema tehty ja Worker tuotantotestattu.** Valmis uusi Worker-versio aktivoidaan yhdess? uuden Pages-pelin kanssa. Aktivoinnin yhteydess? lis?t??n siivousajastus uudelleen. Tarkat tunnisteet ovat [julkaisuraportissa](verification/DEPLOYMENT-20261025.md).
+3. **Render p?ivitetty:** palvelimella on commit `613df4fe980b9f80c47dcbebd0a56a8f766d5987`. Automaattijulkaisut ovat toistaiseksi pois k?yt?st?; ne palautetaan vasta mainin sis?lt?ess? testatun integraation.
+4. **Tuotantotestit tehty:** kirjautuminen, kaksi reaaliaikaista kierrosta ja uusinnat sek? Chrome-katselin l?p?isiv?t. Pelin julkaisun j?lkeinen tarkistus tehd??n viel? main-viennin j?lkeen.
 
-Tuotannosta luettiin vain julkiset GET-rajapinnat: Renderin `/health` oli 200
-ja sama fysiikkarevisio; Workerin `/api/verified/account` oli 404 ja tuloslistasta
-puuttuivat uusintakentät. Tuotantoon ei kirjoitettu eikä pelaajatietoja muutettu.
 
-Uusi lista näyttää vain tilien kierrokset, joihin liittyy julkinen uusinta.
-Nykyiset vanhat ajat jäävät tietokantaan, mutta poistuvat uuden julkisen TOP 10:n
-näkymästä. Fysiikkarevision säilyminen ei siis säilytä nykyisen listan sisältöä
-näkyvissä. Tämä julkaisuvaikutus tulee hyväksyä ennen käyttöönottoa.
