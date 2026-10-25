@@ -13,7 +13,7 @@ Node 24.x, ei palvelimen npm-riippuvuuksia:
 npm run dev:verified
 ```
 
-Avaa http://127.0.0.1:8000, kirjoita nimimerkki ja salasana (vähintään 8 merkkiä), hyväksy nimimerkkiin yhdistettyjen
+Avaa http://127.0.0.1:8000, kirjoita nimimerkki ja salasana (vähintään 8 merkkiä), valitse halutessasi nimimerkkiin yhdistettyjen
 peli- ja käyttötietojen kerääminen ja paina **Aloita ajo**. Vapaan nimimerkin kohdalla peli pyytää
 vahvistuksen (**Varaa nimimerkki**), ennen kuin nimi varataan tälle salasanalle. Kirjautuminen
 muistetaan selaimessa; **Vaihda kuljettajaa** unohtaa sen. Varmennus valmistellaan
@@ -204,7 +204,7 @@ Renderissä ja Cloudflaressa; se ei saa koskaan päätyä pelin tiedostoihin tai
 3. **Peli.** Pushaa `main` vasta, kun Worker on päivitetty: uusi peli kirjautuu
    `/api/verified/account`-osoitteeseen, jota vanha Worker ei tunne. GitHub Pages -työnkulku
    rakentaa `dist/`-kansion, johon syntyy
-   `verification/revision.js`. Avaa peli, kirjaudu nimimerkillä ja salasanalla, vahvista analytiikka, *Aloita ajo*.
+   `verification/revision.js`. Avaa peli, kirjaudu nimimerkillä ja salasanalla, valitse halutessasi analytiikka, *Aloita ajo*.
    Tilarivin pitää näyttää valmistelu ja liikennevalot; kierroksen jälkeen aika ilmestyy
    varmennettuun listaan.
 
@@ -237,3 +237,7 @@ edellyttää erikseen sessioreititysta ja aloituslupien kertakäytön jakamista;
 useita instansseja sellaisenaan. Render Free -tason todellinen viive ja kapasiteetti kahdella
 yhtäaikaisella pelaajalla sekä mobiiliselainten käyttäytyminen on todennettava tuotannossa
 ennen kuin listaa mainostetaan.
+
+### Pelaaminen ja valinnat
+
+Pelaa ilman leaderboardia ei vaadi tiliä eikä analytiikkasuostumusta. Aja leaderboardiin kirjautuu nimimerkkitilille ja käynnistää ajon varmennuksen. Kehitysanalytiikka on vapaaehtoinen kummassakin tilassa; sen peruminen ei keskeytä ajoa tai tulosten tallennusta.

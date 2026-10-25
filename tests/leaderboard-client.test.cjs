@@ -55,7 +55,7 @@ function setup(storage=new Map(),options={}){
   return {board,node,calls,storage,celebrations,network,handlers,identified,
     // Signs in, claiming the nickname when the server reports it free.
     async login(name='Panu',password='salasana'){
-      node('#analytics-consent').checked=true;node('#leaderboard-name').value=name;node('#leaderboard-password').value=password;
+      node('#leaderboard-name').value=name;node('#leaderboard-password').value=password;
       await node('#leaderboard-start-form').trigger('submit');
       if(node('#leaderboard-start-label').textContent==='Varaa nimimerkki')await node('#leaderboard-start-form').trigger('submit');
     },
@@ -74,14 +74,14 @@ function setup(storage=new Map(),options={}){
   let prevented=false;node('#settings-dialog').trigger('cancel',{preventDefault(){prevented=true;}});assert(prevented);
   await app.lap();assert.equal(app.starts().length,0);assert.equal(app.finishes().length,0);
   node('#leaderboard-name').value='Panu';node('#leaderboard-start-form').trigger('submit');
-  assert(board.requiresName,'Consent is required before naming can start play');assert.equal(board.identity,null);assert(node('#analytics-consent').reported);assert.deepEqual(app.identified,[]);
+  assert(board.requiresName,'Leaderboard entry still requires a password');assert.equal(board.identity,null);assert.deepEqual(app.identified,[]);
   await app.login('   ');assert(board.requiresName);assert(node('#leaderboard-name').reported);assert.deepEqual(app.identified,[]);
   node('#leaderboard-password').value='1234567';node('#leaderboard-name').value='Panu';await node('#leaderboard-start-form').trigger('submit');
   assert(board.requiresName);assert(node('#leaderboard-password').reported,'Short passwords are rejected before contacting the server');assert.equal(accountCalls.length,0);
   node('#leaderboard-password').value='salasana';node('#leaderboard-name').value=' Panu ';await node('#leaderboard-start-form').trigger('submit');
   assert(board.requiresName,'A free nickname is never claimed without confirmation');
   assert.equal(node('#leaderboard-start-label').textContent,'Varaa nimimerkki');assert.equal(accountCalls.at(-1).create,false);
-  node('#leaderboard-name').trigger('input');assert.equal(node('#leaderboard-start-label').textContent,'Aloita ajo','Editing the name cancels the claim');
+  node('#leaderboard-name').trigger('input');assert.equal(node('#leaderboard-start-label').textContent,'Aja leaderboardiin','Editing the name cancels the claim');
   await app.login(' Panu ');assert(!board.requiresName);assert(!node('#settings-dialog').open);
   assert.equal(accountCalls.at(-1).create,true);assert.equal(accountCalls.at(-1).nickname,'Panu');
   assert.deepEqual(app.identified,['Panu']);assert(node('#leaderboard-name').readOnly);assert(node('#leaderboard-start').hidden);
@@ -101,15 +101,25 @@ function setup(storage=new Map(),options={}){
   await board.submit(40000,[10000,10000,20000]);assert.equal(app.finishes().length,count,'No retroactive start can be minted at finish');
   await board.startLap();board.cancelLap();await board.submit(40000,[10000,10000,20000]);
   assert.equal(app.finishes().length,count,'Restart discards the active start');
-  const withdrawn=setup();await withdrawn.login();withdrawn.node('#analytics-consent').checked=false;withdrawn.node('#analytics-consent').trigger('change');
-  assert(withdrawn.board.requiresName);assert.equal(withdrawn.board.identity,null);assert(withdrawn.node('#settings-dialog').open,'Withdrawal pauses play behind the required start dialog');
-  await withdrawn.login();assert(!withdrawn.board.requiresName);assert(!withdrawn.node('#settings-dialog').open,'Consent can be accepted again');
+  const withdrawn=setup();await withdrawn.login();assert(!withdrawn.node('#analytics-consent').checked,'Leaderboard works without analytics');
+  withdrawn.node('#analytics-consent').checked=true;withdrawn.node('#analytics-consent').trigger('change');
+  const withdrawalIdentity=withdrawn.board.identity.token;withdrawn.node('#analytics-consent').checked=false;withdrawn.node('#analytics-consent').trigger('change');
+  assert(!withdrawn.board.requiresName);assert.equal(withdrawn.board.identity.token,withdrawalIdentity);assert(!withdrawn.node('#settings-dialog').open,'Analytics withdrawal does not interrupt play or leaderboard participation');
+  const guest=setup();const beforeGuestCalls=accountCalls.length;
+  await guest.node('#leaderboard-practice').trigger('click');
+  assert(!guest.board.requiresName);assert.equal(guest.board.identity,null);assert(!guest.node('#settings-dialog').open);
+  assert.equal(accountCalls.length,beforeGuestCalls,'Practice never creates or signs in to an account');
+  await guest.lap();assert.equal(guest.starts().length,0);assert.equal(guest.finishes().length,0,'Practice laps are never submitted');
+  guest.node('#settings-dialog').showModal();await guest.login('Guest upgrade');
+  assert(guest.board.identity,'Practice can later opt in to the leaderboard without analytics');
   const calls=accountCalls.length;
   const reopened=setup(storage);assert(reopened.board.requiresName);assert.equal(reopened.node('#leaderboard-name').value,'Panu');
   assert(reopened.node('#leaderboard-name').readOnly);assert(reopened.node('#leaderboard-password').hidden,'A remembered account does not ask for the password');
   assert.equal(reopened.node('#leaderboard-logout').hidden,false);
   await reopened.login('Panu','');assert(!reopened.board.requiresName,'Each page load still needs an explicit start');
   assert.equal(reopened.board.identity.token,token);assert.equal(accountCalls.length,calls);
+  const rememberedPractice=setup(storage);await rememberedPractice.node('#leaderboard-practice').trigger('click');
+  assert.equal(rememberedPractice.board.identity,null,'A remembered account does not opt practice into leaderboard participation');
   const other=setup(storage);other.node('#leaderboard-logout').trigger('click');
   assert.equal(other.account(),null);assert.equal(other.node('#leaderboard-name').readOnly,false);assert.equal(other.node('#leaderboard-password').hidden,false);
   await other.login('Eve');assert.notEqual(other.account().token,token);assert.equal(other.board.identity.nickname,'Eve');

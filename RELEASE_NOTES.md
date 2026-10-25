@@ -2,6 +2,12 @@
 
 Ei vielä julkaistu. Julkaise vasta, kun uusi `lpr-verified`-Worker on käytössä.
 
+## Pelaaminen ja tietojen kerääminen
+
+- Pelaa ilman leaderboardia: ei tiliä eikä tulosten lähetystä.
+- Aja leaderboardiin: nimimerkkitili, varmennus ja kierrosaikojen tallennus.
+- Kehitysanalytiikka on vapaaehtoinen molemmissa tiloissa. Suostumuksen peruminen ei keskeytä pelaamista eikä leaderboard-osallistumista.
+
 ## Oma nimimerkki salasanalla
 
 - Nimimerkki varataan salasanalla: kukaan muu ei voi ajaa sillä nimellä.

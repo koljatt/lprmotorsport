@@ -25,7 +25,7 @@ const {chromium}=require('playwright'),{driver}=require('../tests/helpers-drivin
    });
    await page.goto(origin,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForFunction(()=>window.__verifiedGame);
    await page.evaluate(source=>{window.__driver=eval('('+source+')');},driver.toString());
-   await page.fill('#leaderboard-name','Realtime '+(i+1));await page.check('#analytics-consent');await page.fill('#leaderboard-password','realtime-test-password');
+   await page.fill('#leaderboard-name','Realtime '+(i+1));await page.fill('#leaderboard-password','realtime-test-password');
    players.push({page,context});
   }
   const started=performance.now();

@@ -23,6 +23,7 @@
   const startLabel = document.querySelector('#leaderboard-start-label');
   const accountEndpoint = () => window.LPRVerificationConfig?.leaderboard;
   const accountKey = 'lpr-account';
+  let sessionChosen = false;
   let token, activeName = '', account = null, claimName = null, signingIn = false;
   let pending = [], sending = null;
   let activeLap = null;
@@ -41,7 +42,7 @@
     nickname.readOnly = !!account || !!activeName;
     for (const element of passwordRow) if (element) element.hidden = !!account || !!activeName;
     if (logoutButton) logoutButton.hidden = !remembered;
-    if (startLabel) startLabel.textContent = t(claimName ? 'Varaa nimimerkki' : 'Aloita ajo');
+    if (startLabel) startLabel.textContent = t(claimName ? 'Varaa nimimerkki' : 'Aja leaderboardiin');
   }
   function forget() {
     account = null; claimName = null;
@@ -77,10 +78,6 @@
   startForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (signingIn) return;
-    if (!consent.checked) {
-      consent.setCustomValidity(t('Hyväksy nimimerkkiin yhdistettyjen peli- ja käyttötietojen kerääminen ennen pelaamista.'));
-      consent.reportValidity();return;
-    }
     const name = activeName || nickname.value.trim().normalize('NFC');
     if (!validName(name)) {
       nickname.setCustomValidity(t('Kirjoita 1–24 merkin nimimerkki. Käytä kirjaimia, numeroita, välilyöntiä, pistettä, viivaa tai alaviivaa.'));
@@ -109,6 +106,7 @@
       account = identity;
       try { localStorage.setItem(accountKey, JSON.stringify(account)); localStorage.setItem('lpr-nickname', account.nickname); } catch {}
     }
+    sessionChosen = true;
     token = identity.token;
     activeName = identity.nickname;
     window.LPRAnalytics?.identify(activeName);
@@ -129,7 +127,17 @@
     flushPending();
     window.LPRVerifiedDriving?.identityReady?.();
   });
-  dialog.addEventListener('cancel', event => { if (!activeName || !consent.checked) event.preventDefault(); });
+  document.querySelector('#leaderboard-practice')?.addEventListener('click', () => {
+    if (signingIn) return;
+    sessionChosen = true; activeName = ''; token = undefined; pending = []; activeLap = null;
+    password.value = ''; claimName = null; status.textContent = '';
+    window.LPRVerifiedDriving?.identityCleared?.();
+    window.LPRAnalytics?.identify('');
+    showAccount(); startButton.hidden = false; closeButton.hidden = false;
+    dialog.classList.remove('session-start'); dialog.close();
+    document.querySelector('#restart-button')?.click?.();
+  });
+  dialog.addEventListener('cancel', event => { if (!sessionChosen) event.preventDefault(); });
   consent.addEventListener('change',()=>window.LPRLeaderboard.consentChanged());
   async function api(path, options) {
     const response = await fetch(endpoint + path, { ...options, signal: AbortSignal.timeout(10000) });
@@ -222,20 +230,14 @@
     },15000);
     window.addEventListener('online', flushPending);
     window.LPRLeaderboard = {
-      get identity() { return activeName && token && consent.checked ? {nickname:activeName,token} : null; },
-      consentChanged() {
-        consent.setCustomValidity('');
-        if(activeName && !consent.checked){
-          window.LPRVerifiedDriving?.cancel('Ajo keskeytetty: peli- ja käyttötietojen keräämisen suostumus on peruttu.');
-          window.LPRLeaderboard.beginSession();
-        }
-      },
+      get identity() { return activeName && token ? {nickname:activeName,token} : null; },
+      consentChanged() { consent.setCustomValidity(''); },
       refresh,
       cancelLap() { activeLap = null; },
       // Called when the server no longer accepts the remembered account (deleted or revoked).
       signOut(message) {
         forget();
-        activeName = ''; token = undefined; pending = [];
+        sessionChosen = false; activeName = ''; token = undefined; pending = [];
         window.LPRVerifiedDriving?.cancel(null);
         showAccount();
         window.LPRLeaderboard.beginSession();
@@ -255,9 +257,9 @@
         }).catch(() => null);
         return lap.ticket;
       },
-      get requiresName() { return !activeName || !consent.checked; },
+      get requiresName() { return !sessionChosen; },
       beginSession() {
-        if (activeName && consent.checked) return;
+        if (sessionChosen) return;
         // The last name is a suggestion, never an automatic login: each page
         // load requires an explicit confirmation before any driving can start.
         dialog.classList.add('session-start');

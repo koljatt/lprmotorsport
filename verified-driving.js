@@ -178,6 +178,7 @@
  };
  function sync(){restore();return save();}
  setInterval(()=>{if(!document.hidden&&document.querySelector('#settings-dialog').open)void sync();},15000);
+ window.LPRVerifiedDriving.identityCleared=()=>{cancel(null);identity=null;pending.length=0;};
  window.LPRVerifiedDriving.identityReady=()=>{restore();if(identity){void save();void start();}};
  document.addEventListener('visibilitychange',()=>{
   if(document.hidden){autoRetryAllowed=false;cancel();}
