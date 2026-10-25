@@ -25,11 +25,11 @@ const {chromium}=require('playwright'),{driver}=require('../tests/helpers-drivin
    });
    await page.goto(origin,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForFunction(()=>window.__verifiedGame);
    await page.evaluate(source=>{window.__driver=eval('('+source+')');},driver.toString());
-   await page.fill('#leaderboard-name','Realtime '+(i+1));await page.check('#analytics-consent');
+   await page.fill('#leaderboard-name','Realtime '+(i+1));await page.check('#analytics-consent');await page.fill('#leaderboard-password','realtime-test-password');
    players.push({page,context});
   }
   const started=performance.now();
-  await Promise.all(players.map(async player=>{await player.page.click('#leaderboard-start');await player.page.waitForFunction(()=>window.LPRVerifiedDriving.active,null,{timeout:40000});}));
+  await Promise.all(players.map(async player=>{await player.page.click('#leaderboard-start');await player.page.waitForFunction(()=>document.querySelector('#leaderboard-start-label').textContent==='Varaa nimimerkki');await player.page.click('#leaderboard-start');await player.page.waitForFunction(()=>window.LPRVerifiedDriving.active,null,{timeout:40000});}));
   console.log('Two real-time 3D browser sessions started');
   for(let second=0;second<300;second++){
    await new Promise(r=>setTimeout(r,1000));

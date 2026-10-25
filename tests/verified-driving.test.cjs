@@ -57,7 +57,12 @@ const {driver}=require('./helpers-driving.cjs');
   assert.equal((await post(boardURL,'/api/verified/laps',{lapMs:12345})).status,403,'Unsigned client scores are never accepted');
   const wrongTicket=await sign({...await verify(ticket,secret),revision:'b'.repeat(64)},secret);
   assert.equal((await post(serviceURL,'/sessions',{ticket:wrongTicket,revision})).status,401);
-  clock+=9000;
+  // A recoverable gap below the configured limit must remain verified.
+  clock=baseClock+last.ackTick*1000/120+service.sessions.lagMs-1000;
+  const recovered=await send({revision,seq,fromTick:last.ackTick,inputs:[idle]});
+  assert.equal(recovered.status,200,'A disconnection below the configured lag limit is recoverable');
+  last=await recovered.json();seq++;
+  clock=baseClock+last.ackTick*1000/120+service.sessions.lagMs+1;
   assert.equal((await send({revision,seq,fromTick:last.ackTick,inputs:[idle]})).status,410,'A long disconnection invalidates verification');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_laps').get().n,2);
   console.log('PASS: real HTTP → signed start → authoritative 3D physics with people → standing/flying receipts → SQLite leaderboard; clock, ownership, sequence, replay, forgery, duplicates and disconnect');
