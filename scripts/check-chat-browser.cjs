@@ -1,12 +1,16 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {chromium}=require('playwright');
 (async()=>{
+ const secret='chat-browser-test-'.repeat(4),{revision}=require('../verification/world.cjs');
  const game=require('../server.js').createServer();
  await new Promise(resolve=>game.listen(0,'127.0.0.1',resolve));
  const origin=`http://127.0.0.1:${game.address().port}`;
- const service=await require('../verification/server.cjs').createServer({secret:'chat-browser-test-'.repeat(4),origins:[origin]});
+ const service=await require('../verification/server.cjs').createServer({secret,origins:[origin]});
  await new Promise(resolve=>service.listen(0,'127.0.0.1',resolve));
  const serviceURL=`http://127.0.0.1:${service.address().port}`;
+ const board=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({secret,revision,origins:origin});
+ await new Promise(resolve=>board.listen(0,'127.0.0.1',resolve));
+ const boardURL=`http://127.0.0.1:${board.address().port}`;
  let browser;
  try{
   browser=await chromium.launch({headless:true,channel:'chrome',args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
@@ -15,14 +19,16 @@ const {chromium}=require('playwright');
    const context=await browser.newContext({viewport:{width:1280,height:800}});
    const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
    await page.addInitScript(()=>{window.requestAnimationFrame=()=>0;});
-   await page.route('**/verification/config.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:serviceURL})};`}));
+   await page.route('**/verification/config.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
    await page.route('https://lpr-leaderboard.panu-musakka.workers.dev/**',route=>route.fulfill({contentType:'application/json',body:'{}'}));
    await page.route('**/game.js?*',route=>{
     const source=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8').replaceAll('\r\n','\n').replace('  reset();\n  openTestScene','  window.__chatGame={held,readInput};\n  reset();\n  openTestScene');
     return route.fulfill({contentType:'text/javascript',body:source});
    });
    await page.goto(origin);await page.waitForFunction(()=>window.__chatGame,null,{polling:50});
-   await page.locator('#leaderboard-name').fill(name);await page.locator('#analytics-consent').check();await page.locator('#leaderboard-start').click();
+   await page.locator('#leaderboard-name').fill(name);await page.locator('#leaderboard-password').fill('chat-browser-password');await page.locator('#leaderboard-start').click();
+   await page.waitForFunction(()=>document.querySelector('#leaderboard-start-label').textContent==='Varaa nimimerkki',null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),config:await page.evaluate(()=>window.LPRVerificationConfig),errors});throw error;});
+   await page.locator('#leaderboard-start').click();await page.waitForFunction(()=>!window.LPRLeaderboard.requiresName,null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),errors});throw error;});
    await page.locator('#chat-button').click();return page;
   }
   const first=await player('Kuljettaja'),second=await player('Varikko');
@@ -65,7 +71,7 @@ const {chromium}=require('playwright');
   assert.deepEqual(errors,[]);console.log('Chat browser: two players, safe text, driving while reading, remembered visibility, language and mobile layout OK');
  }finally{
   await browser?.close();
-  service.closeAllConnections();game.closeAllConnections();
-  await Promise.all([new Promise(resolve=>service.close(resolve)),new Promise(resolve=>game.close(resolve))]);
+  service.closeAllConnections();game.closeAllConnections();board.closeAllConnections();
+  await Promise.all([new Promise(resolve=>board.close(resolve)),new Promise(resolve=>service.close(resolve)),new Promise(resolve=>game.close(resolve))]);
  }
 })().catch(error=>{console.error(error);process.exitCode=1;});

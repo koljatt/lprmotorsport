@@ -286,3 +286,7 @@ DELETE FROM verified_login_sessions WHERE player_hash IN
 ```
 
 Tunniste on edelleen selaimen localStoragessa. Tämä muutos ei toteuta HttpOnly-evästeitä eikä muuta salasanatiivisteen työmäärää.
+## Kierrosten uusinnat
+
+Tallennus, TOP 10 -uusinnat, ylläpidon tarkastusjono ja käyttöönotto:
+[REPLAYS.md](REPLAYS.md).

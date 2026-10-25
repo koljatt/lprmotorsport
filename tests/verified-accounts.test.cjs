@@ -9,8 +9,9 @@ const {revision}=require('../verification/world.cjs');
  const base=`http://127.0.0.1:${board.address().port}`;
  const post=(path,data,credential,ip='1.1.1.1')=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json','CF-Connecting-IP':ip,...(credential?{Authorization:'Bearer '+credential}:{})},body:JSON.stringify(data)});
  const account=(nickname,password,create,ip)=>post('/api/verified/account',{nickname,password,create},undefined,ip);
- const receipt=(playerHash,nickname,sessionId,lapTicks)=>sign({kind:'lap',protocol:'driving-v1',revision,playerHash,nickname,sessionId,lap:1,
-  startTick:0,endTick:lapTicks,lapTicks,sectorTicks:[lapTicks-2000,1000,1000],issuedAt:Date.now()},secret);
+ const replay=require('node:zlib').gzipSync(JSON.stringify({format:'account-test'})).toString('base64');
+ const receipt=async(playerHash,nickname,sessionId,lapTicks)=>sign({kind:'lap',protocol:'driving-v1',revision,playerHash,nickname,sessionId,lap:1,
+  startTick:0,endTick:lapTicks,lapTicks,sectorTicks:[lapTicks-2000,1000,1000],issuedAt:Date.now(),replayHash:await hash(replay)},secret);
  try{
   assert.equal((await account('Panu','salasana',false)).status,404,'Unknown nicknames are never claimed implicitly');
   assert.equal((await account('Panu','1234567',true)).status,400,'Passwords need at least eight characters');
@@ -33,24 +34,24 @@ const {revision}=require('../verification/world.cjs');
   const outsider='c'.repeat(64);
   assert.equal((await post('/api/verified/start',{nickname:'Panu',revision},outsider)).status,401,'A browser without the account cannot drive as Panu');
   const forged=await receipt(await hash(outsider),'Panu','1'.repeat(32),7000);
-  assert.equal((await post('/api/verified/laps',{receipt:forged},outsider)).status,401,'Laps without an account are not stored');
+  assert.equal((await post('/api/verified/laps',{receipt:forged,replay},outsider)).status,401,'Laps without an account are not stored');
   // A lap from before accounts existed stays in the table but is not listed.
   board.db.prepare(`INSERT INTO verified_laps (session_id,lap,revision,player_hash,nickname,start_tick,end_tick,lap_ticks,sector1,sector2,sector3,issued_ms)
    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run('2'.repeat(32),1,revision,await hash('d'.repeat(64)),'Panu',0,6500,6500,4500,1000,1000,1);
-  const saved=await post('/api/verified/laps',{receipt:await receipt(stored.player_hash,'Panu','3'.repeat(32),8000)},panu.token);
+  const saved=await post('/api/verified/laps',{replay,receipt:await receipt(stored.player_hash,'Panu','3'.repeat(32),8000)},panu.token);
   assert.equal(saved.status,200);assert.equal((await saved.json()).saved,true);
   const list=await(await fetch(base+'/api/verified/leaderboard')).json();
   assert.deepEqual(list.results.map(row=>[row.nickname,row.lap_ticks]),[['Panu',8000]],'Only account laps appear; the pre-account lap is hidden');
   // Revoke between authentication and the lap INSERT, using real SQLite and the production Worker.
   const {default:worker}=await import('../cloudflare/verified-worker.mjs');
   const raceToken=(await(await account('Panu','salasana',false,'2.2.2.2')).json()).token;
-  const raceBinding={prepare(sql){let values=[];return {bind(...args){values=args;return this;},
+  const raceBinding={async batch(statements){board.db.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());board.db.exec('COMMIT');return results;}catch(error){board.db.exec('ROLLBACK');throw error;}},prepare(sql){let values=[];return {bind(...args){values=args;return this;},
    async first(){return board.db.prepare(sql).get(...values)||null;},
    async run(){if(sql.startsWith('INSERT OR IGNORE INTO verified_laps'))board.db.prepare('DELETE FROM verified_login_sessions WHERE token_hash=?').run(await hash(raceToken));
     return {meta:{changes:Number(board.db.prepare(sql).run(...values).changes)}};}
   };}};
   const racingReceipt=await receipt(stored.player_hash,'Panu','7'.repeat(32),8000);
-  const racing=await worker.fetch(new Request(base+'/api/verified/laps',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+raceToken},body:JSON.stringify({receipt:racingReceipt})}),
+  const racing=await worker.fetch(new Request(base+'/api/verified/laps',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+raceToken},body:JSON.stringify({receipt:racingReceipt,replay})}),
    {DB:raceBinding,SIMULATION_REVISION:revision,VERIFICATION_SECRET:secret});
   assert.equal(racing.status,401,'Revocation during an in-flight upload prevents the database write');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_laps WHERE session_id=?').get('7'.repeat(32)).n,0);
@@ -60,11 +61,11 @@ const {revision}=require('../verification/world.cjs');
   assert.equal(board.db.prepare('SELECT 1 FROM verified_login_sessions WHERE token_hash=?').get(await hash(panu.token)),undefined,'Logout deletes a live session on the server');
   assert.equal((await logout()).status,200,'Logout retries are idempotent');
   assert.equal((await post('/api/verified/start',{revision},panu.token)).status,401,'A stolen copy cannot start after logout');
-  assert.equal((await post('/api/verified/laps',{receipt:await receipt(stored.player_hash,'Panu','5'.repeat(32),8000)},panu.token)).status,401,'Even a signed lap cannot be submitted with a revoked token');
+  assert.equal((await post('/api/verified/laps',{replay,receipt:await receipt(stored.player_hash,'Panu','5'.repeat(32),8000)},panu.token)).status,401,'Even a signed lap cannot be submitted with a revoked token');
   assert.equal((await post('/api/verified/start',{revision},again.token)).status,200,'Logging out one device preserves another device');
   board.db.prepare('UPDATE verified_login_sessions SET expires_ms=? WHERE token_hash=?').run(Date.now(),await hash(again.token));
   assert.equal((await post('/api/verified/start',{revision},again.token)).status,401,'Expired sessions cannot start');
-  assert.equal((await post('/api/verified/laps',{receipt:await receipt(stored.player_hash,'Panu','6'.repeat(32),8000)},again.token)).status,401,'Expired sessions cannot submit');
+  assert.equal((await post('/api/verified/laps',{replay,receipt:await receipt(stored.player_hash,'Panu','6'.repeat(32),8000)},again.token)).status,401,'Expired sessions cannot submit');
   const renewed=await(await account('Panu','salasana',false)).json();
   assert.notEqual(renewed.token,panu.token);assert.notEqual(renewed.token,again.token);
   assert.equal((await post('/api/verified/start',{revision},renewed.token)).status,200,'Password sign-in recovers access after expiry');
@@ -93,7 +94,7 @@ const {revision}=require('../verification/world.cjs');
  try{
   ({server,url}=await open({secret}));
   const old=await(await call(url,'/api/verified/account',{nickname:'Kiertäjä',password:'salasana',create:true})).json();
-  assert.equal((await call(url,'/api/verified/laps',{receipt:await receipt(server.db.prepare('SELECT player_hash FROM verified_accounts').get().player_hash,'Kiertäjä','4'.repeat(32),9000)},old.token)).status,200);
+  assert.equal((await call(url,'/api/verified/laps',{replay,receipt:await receipt(server.db.prepare('SELECT player_hash FROM verified_accounts').get().player_hash,'Kiertäjä','4'.repeat(32),9000)},old.token)).status,200);
   await shut(server);
   ({server,url}=await open({secret:'rotated-secret-'.repeat(4),passwordIterations:20000}));
   assert.equal((await call(url,'/api/verified/start',{revision},old.token)).status,401,'A signing-secret change invalidates existing sessions');

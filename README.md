@@ -1,26 +1,31 @@
 # LPR Lap Challenge
 
-Tässä kehityshaarassa 3D-peli on yhdistetty palvelimen ajovarmennukseen.
-Käynnistä koko paikallinen ketju komennolla `npm run dev:verified` ja avaa
-http://127.0.0.1:8000. Kirjoita nimimerkki, hyväksy peli- ja käyttötietojen
-kerääminen ja paina **Aloita ajo**. Varmennus valmistellaan automaattisesti.
-Kun yhteys toimii, ajo alkaa ilman harjoitteluvaihetta. Jos yhteyttä joudutaan
-odottamaan, voi ajaa harjoitteluna. Peli yrittää yhteyttä automaattisesti uudelleen
-ja käynnistää virallisen ajon lähtöruudusta heti, kun yhteys on valmis.
-Erillistä lähtölaskentaa ei ole. Palvelin laskee ajan ohjaussyötteistä;
-erillinen varmennettu tuloslista hyväksyy vain palvelimen allekirjoittamat ajat.
-Lentävät jatkokierrokset käyttävät samaa palvelinsessiota.
+K?ynnist? paikallinen peli ja ajovarmennus komennolla `npm run dev:verified`
+ja avaa http://127.0.0.1:8000. **Pelaa ilman leaderboardia** ei vaadi tili?.
+**Aja leaderboardiin** kirjautuu nimimerkill? ja v?hint??n kahdeksan merkin
+salasanalla. Vapaan nimimerkin varaaminen vahvistetaan erikseen.
+Kehitysanalytiikka on vapaaehtoinen kummassakin pelitilassa.
 
-Myös **Aloita uudelleen** valmistelee varmennuksen automaattisesti. Lentävät
-jatkokierrokset säilyvät samassa varmennetussa ajossa.
-Harjoittelusta ei lähetetä uusia aikoja vanhalle listalle.
-Vanha lista säilyy näkyvissä erikseen ilman varmennusmerkintää. Katkos, pelin
-piilottaminen tai ajotilan poikkeama muuttaa varmennetun ajon harjoitteluksi.
-Jo allekirjoitettu kierroskuitti jää tarvittaessa lähetysjonoon; saman nimimerkin
-vahvistaminen ja tuloslistan automaattinen päivitys yrittävät tallennusta uudelleen.
+Punaiset l?ht?valot pit?v?t auton paikallaan varmennuksen valmistelun ajan;
+vihre?t vapauttavat l?hd?n, kun palvelinsessio on valmis. Palvelin laskee
+kierrosajan ohjaussy?tteist?. Virallinen TOP 10 edellytt?? palvelimen
+allekirjoittamaa kierrosta ja julkisesti katsottavaa uusintaa.
+Lent?v?t jatkokierrokset k?ytt?v?t samaa palvelinsessiota.
 
-Ohjeet, luottamusketju, tarkistukset ja vielä tekemätön julkinen käyttöönotto:
-[verification/README.md](verification/README.md).
+Yhteyskatkos voi muuttaa kierroksen harjoitteluksi auton jatkaessa ajoa.
+Varmennus voi palautua seuraavalta t?sm?llisesti varmennetulta maaliviivan
+ylitykselt?; jo ajettua harjoittelukierrosta ei hyv?ksyt? j?lkik?teen.
+Pelin piilottaminen tai ajotilan poikkeama katkaisee varmennuksen.
+**Aloita uudelleen** valmistelee uuden virallisen ajon.
+Kierroskuitti ja uusinta j??v?t tarvittaessa l?hetysjonoon. Saman tilin
+uudelleenkirjautuminen voi l?hett?? ne uudella kirjautumisistunnolla.
+
+Varikkochat avataan puhekuplapainikkeesta. N?kyvyys muistetaan selaimessa;
+viestin kirjoittaminen est?? pelin n?pp?inohjauksen kirjoittamisen ajaksi.
+
+K?ytt??notto ja luottamusketju: [verification/README.md](verification/README.md).
+Uusinnat: [verification/REPLAYS.md](verification/REPLAYS.md).
+Haarojen yhdist?minen ja julkaisun tarkistukset: [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md).
 
 Auton kori, etusiipi ja renkaiden kiinteät sekä pyörivät osat säilytetään
 näytönohjaimen muistissa. Ajon aikana päivitetään niiden asennot; jousituksen

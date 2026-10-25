@@ -15,7 +15,7 @@ const {chromium}=require('playwright'),{driver}=require('../tests/helpers-drivin
   for(let i=0;i<2;i++){
    const context=await browser.newContext({viewport:{width:640,height:480}}),page=await context.newPage();
    page.on('pageerror',error=>errors.push(error.message));
-   await page.route('**/verification/config.js',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
+   await page.route('**/verification/config.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
    await page.route('https://lpr-leaderboard.panu-musakka.workers.dev/**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({version:'lut-20261011-v3',results:[]})}));
    await page.route('**/game.js?*',route=>{
     let source=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8').replaceAll('\r\n','\n');

@@ -1,3 +1,4 @@
+import {replaySchema,replayStatements,replayRoute} from './replays.mjs';
 import {sign,verify,hash,protocol,validPlayer,validName} from '../verification/protocol.mjs';
 // npm run build:verified-worker inlines the protocol and the simulation revision into a pasteable bundle.
 const BUILD_REVISION='';
@@ -18,7 +19,7 @@ async function newSession(db,account,secret){
   .bind(await hash(token),account.player_hash,await hash(secret),now,expiresAt).run();
  return {nickname:account.nickname,token,expiresAt};
 }
-export const schema=[
+export const schema=[...replaySchema,
  `CREATE TABLE IF NOT EXISTS verified_laps (
   session_id TEXT NOT NULL,lap INTEGER NOT NULL,revision TEXT NOT NULL,player_hash TEXT NOT NULL,nickname TEXT NOT NULL,
   start_tick INTEGER NOT NULL,end_tick INTEGER NOT NULL,lap_ticks INTEGER NOT NULL,
@@ -50,15 +51,18 @@ async function passwordHash(password,salt,iterations){
  const material=await crypto.subtle.importKey('raw',textEncoder.encode(password),'PBKDF2',false,['deriveBits']);
  return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:textEncoder.encode(salt),iterations},material,256));
 }
-async function body(request){
+async function body(request,limit=8192){
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))throw Object.assign(Error('JSON required'),{status:415});
  const reader=request.body?.getReader();if(!reader)throw Object.assign(Error('Missing body'),{status:400});
  const chunks=[];let size=0;
- for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>8192){await reader.cancel();throw Object.assign(Error('Body too large'),{status:413});}chunks.push(value);}
+ for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>limit){await reader.cancel();throw Object.assign(Error('Body too large'),{status:413});}chunks.push(value);}
  const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
  try{return JSON.parse(new TextDecoder().decode(bytes));}catch{throw Object.assign(Error('Invalid JSON'),{status:400});}
 }
 export default {
+ async scheduled(controller,env){
+  await env.DB.prepare("DELETE FROM verified_replays WHERE expires_ms<=? AND pinned=0 AND review!='flagged'").bind(Date.now()).run();
+ },
  async fetch(request,env){
   const revision=env.SIMULATION_REVISION||BUILD_REVISION;
   const origin=request.headers.get('Origin');
@@ -72,10 +76,11 @@ export default {
    if(!env.DB||!validPlayer(revision)||typeof env.VERIFICATION_SECRET!=='string'||env.VERIFICATION_SECRET.length<32)return reply({error:'Verification not configured'},503);
    const url=new URL(request.url);
    await ensureAccounts(env.DB);
+   if(url.pathname.startsWith('/api/verified/replays/')||url.pathname.startsWith('/api/verified/admin/'))return await replayRoute(request,env,url,reply,headers,body);
    if(url.pathname==='/api/verified/leaderboard'&&request.method==='GET'){
-    // Only laps from signed-in accounts are listed; the account decides the shown nickname.
-    const rows=await env.DB.prepare(`SELECT a.nickname,l.lap_ticks,l.sector1,l.sector2,l.sector3 FROM verified_laps l
-     JOIN verified_accounts a ON a.player_hash=l.player_hash WHERE l.revision=? ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision).all();
+    const rows=await env.DB.prepare(`SELECT a.nickname,l.lap_ticks,l.sector1,l.sector2,l.sector3,l.session_id,l.lap,
+     CASE WHEN r.pinned=1 THEN 1 ELSE 0 END AS replay_available FROM verified_laps l JOIN verified_replays r USING(session_id,lap) JOIN verified_accounts a ON a.player_hash=l.player_hash
+     WHERE l.revision=? AND r.pinned=1 ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision).all();
     return reply({protocol,revision:revision,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
    }
    const limit=async(id,max,windowMs)=>{
@@ -139,7 +144,7 @@ export default {
     if(await limit(id,max,120000))return reply({error:'Too many requests'},429);
    }
    await env.DB.prepare('DELETE FROM verified_limits WHERE expires < ?').bind(now).run();
-   const data=await body(request);
+   const data=await body(request,starting?8192:950000);
    if(starting){
     if(data?.revision!==revision)return reply({error:'Invalid start'},400);
     const nonce=crypto.randomUUID().replaceAll('-','')+crypto.randomUUID().replaceAll('-','');
@@ -152,11 +157,14 @@ export default {
     !Number.isSafeInteger(lap.lapTicks)||lap.lapTicks<=600||lap.endTick-lap.startTick!==lap.lapTicks||
     !Array.isArray(lap.sectorTicks)||lap.sectorTicks.length!==3||!lap.sectorTicks.every(n=>Number.isSafeInteger(n)&&n>0)||lap.sectorTicks.reduce((a,b)=>a+b,0)!==lap.lapTicks||
     !Number.isSafeInteger(lap.issuedAt)||lap.issuedAt>now+5000)return reply({error:'Invalid verified lap'},403);
-   const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO verified_laps
+   if(!validPlayer(lap.replayHash)||typeof data.replay!=='string')return reply({error:'A signed public replay is required for leaderboard submission'},403);
+   const replayWrites=await replayStatements(env,lap,data,now,{tokenHash,secretHash});
+   const insert=env.DB.prepare(`INSERT OR IGNORE INTO verified_laps
     (session_id,lap,revision,player_hash,nickname,start_tick,end_tick,lap_ticks,sector1,sector2,sector3,issued_ms) SELECT ?,?,?,?,?,?,?,?,?,?,?,?
     WHERE EXISTS (SELECT 1 FROM verified_login_sessions s JOIN verified_accounts a ON a.player_hash=s.player_hash
      WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=? AND a.player_hash=?)`)
-    .bind(lap.sessionId,lap.lap,lap.revision,lap.playerHash,lap.nickname,lap.startTick,lap.endTick,lap.lapTicks,...lap.sectorTicks,lap.issuedAt,tokenHash,Date.now(),secretHash,playerHash).run();
+    .bind(lap.sessionId,lap.lap,lap.revision,lap.playerHash,lap.nickname,lap.startTick,lap.endTick,lap.lapTicks,...lap.sectorTicks,lap.issuedAt,tokenHash,Date.now(),secretHash,playerHash);
+   const [inserted]=await env.DB.batch([insert,...replayWrites]);
    // Revocation/expiry can occur while reading the body or checking the signature.
    // The write above validates the session atomically; distinguish this from a duplicate lap.
    if(!inserted.meta.changes&&!await env.DB.prepare(`SELECT 1 FROM verified_login_sessions s

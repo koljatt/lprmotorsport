@@ -96,12 +96,13 @@ class Sessions {
    if(message.result.ticks!==endTick)throw fail(422,'ticks','Simulation tick mismatch');
    s.ticks=endTick;s.nextSeq++;s.lastAccepted=this.clock();
    const laps=[],practiceLaps=[];
-   for(const lap of message.laps||[]){
+   for(const value of message.laps||[]){
+    const {replay,...lap}=value;
     // Check the crossing itself as well as the batch end, so trailing inputs cannot
     // hide a late finish. Only server-simulated boundaries can restore eligibility.
     const crossingLagMs=arrivalLagMs+(endTick-lap.endTick)*1000/hz;
     if(crossingLagMs>this.lapLagMs)s.lapEligible=false;
-    if(s.lapEligible)laps.push({lap,receipt:await this.signLap(s,lap)});
+    if(s.lapEligible)laps.push({lap,receipt:await this.signLap(s,{...lap,...(replay?{replayHash:replay.hash}:{})}),...(replay?{replay:replay.payload}:{})});
     else practiceLaps.push(lap.lap);
     // Catch-up laps never get receipts. Rejoin only at an exact, timely boundary;
     // do not retroactively qualify the lap that is already underway in this batch.

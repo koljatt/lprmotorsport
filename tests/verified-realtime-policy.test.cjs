@@ -45,7 +45,7 @@ const {driver}=require('./helpers-driving.cjs');
     assert.equal(signed.length,0,'A timely boundary qualifies only the following lap');
    }
    if(completed?.lap===2){assert(!ack.eligibility.eligible);assert.deepEqual(ack.practiceLaps,[2]);}
-   if(lateCrossing&&!completed&&simMs>clock-200){
+   if(lateCrossing&&!afterLateCrossing&&!completed&&simMs>clock-200){
     assert(!ack.eligibility.eligible,'Recovery just after a line must wait for another crossing');afterLateCrossing=true;
    }
    if(completed?.lap===3){assert.deepEqual(ack.practiceLaps,[3]);assert(ack.eligibility.eligible);}
