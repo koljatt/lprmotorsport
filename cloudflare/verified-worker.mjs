@@ -3,10 +3,21 @@ import {sign,verify,hash,protocol,validPlayer,validName} from '../verification/p
 const BUILD_REVISION='';
 
 // Separate table and endpoints: legacy times can never appear as verified results.
-// One account owns one nickname. player_hash is the hash of the credential returned at sign-in.
+// player_hash is a stable account identity, never a login credential.
 const accountSchema=`CREATE TABLE IF NOT EXISTS verified_accounts (
   name_key TEXT PRIMARY KEY,nickname TEXT NOT NULL,player_hash TEXT NOT NULL UNIQUE,credential_salt TEXT NOT NULL,
   password_salt TEXT NOT NULL,password_hash TEXT NOT NULL,iterations INTEGER NOT NULL,created_ms INTEGER NOT NULL)`;
+const sessionSchema=`CREATE TABLE IF NOT EXISTS verified_login_sessions (
+ token_hash TEXT PRIMARY KEY,player_hash TEXT NOT NULL,secret_hash TEXT NOT NULL,created_ms INTEGER NOT NULL,expires_ms INTEGER NOT NULL)`;
+const sessionIndex='CREATE INDEX IF NOT EXISTS verified_login_expiry ON verified_login_sessions(expires_ms)';
+const SESSION_MS=7*86400000;
+async function newSession(db,account,secret){
+ const now=Date.now(),token=randomHex()+randomHex(),expiresAt=now+SESSION_MS;
+ await db.prepare('DELETE FROM verified_login_sessions WHERE expires_ms<=?').bind(now).run();
+ await db.prepare('INSERT INTO verified_login_sessions(token_hash,player_hash,secret_hash,created_ms,expires_ms) VALUES (?,?,?,?,?)')
+  .bind(await hash(token),account.player_hash,await hash(secret),now,expiresAt).run();
+ return {nickname:account.nickname,token,expiresAt};
+}
 export const schema=[
  `CREATE TABLE IF NOT EXISTS verified_laps (
   session_id TEXT NOT NULL,lap INTEGER NOT NULL,revision TEXT NOT NULL,player_hash TEXT NOT NULL,nickname TEXT NOT NULL,
@@ -15,12 +26,14 @@ export const schema=[
   PRIMARY KEY(session_id,lap))`,
  'CREATE INDEX IF NOT EXISTS verified_order ON verified_laps(revision,lap_ticks,issued_ms,session_id,lap)',
  'CREATE TABLE IF NOT EXISTS verified_limits (key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires INTEGER NOT NULL)',
- accountSchema
+ accountSchema,sessionSchema,sessionIndex
 ];
-const accountsReady=new WeakMap();
-const ensureAccounts=db=>{
- if(!accountsReady.has(db))accountsReady.set(db,db.prepare(accountSchema).run().catch(error=>{accountsReady.delete(db);throw error;}));
- return accountsReady.get(db);
+const accountsReady=new WeakSet();
+const ensureAccounts=async db=>{
+ if(accountsReady.has(db))return;
+ // Cache completion only: never share request-owned I/O promises across Worker requests.
+ for(const sql of [accountSchema,sessionSchema,sessionIndex])await db.prepare(sql).run();
+ accountsReady.add(db);
 };
 // Cloudflare Workers caps PBKDF2 at 100 000 iterations. If sign-ins exceed the plan's CPU limit,
 // set PASSWORD_ITERATIONS lower; each account is rehashed at its next successful sign-in.
@@ -36,11 +49,6 @@ const sameText=(a,b)=>{if(a.length!==b.length)return false;let diff=0;for(let i=
 async function passwordHash(password,salt,iterations){
  const material=await crypto.subtle.importKey('raw',textEncoder.encode(password),'PBKDF2',false,['deriveBits']);
  return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:textEncoder.encode(salt),iterations},material,256));
-}
-// Deterministic per account, so every device that signs in gets the same leaderboard identity.
-async function credential(account,secret){
- const key=await crypto.subtle.importKey('raw',textEncoder.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
- return hex(await crypto.subtle.sign('HMAC',key,textEncoder.encode(`lpr-account-v1\n${account.name_key}\n${account.credential_salt}`)));
 }
 async function body(request){
  if(!request.headers.get('Content-Type')?.startsWith('application/json'))throw Object.assign(Error('JSON required'),{status:415});
@@ -94,42 +102,43 @@ export default {
       await limit(pairId,Infinity,1200000);await limit(nameId,Infinity,1200000);
       return reply({error:'Wrong password'},401);
      }
-     const token=await credential(account,env.VERIFICATION_SECRET),playerHash=await hash(token);
-     if(playerHash!==account.player_hash){
-      // The signing secret changed: move the account and its laps to the new credential.
-      await env.DB.prepare('UPDATE verified_laps SET player_hash=? WHERE player_hash=?').bind(playerHash,account.player_hash).run();
-      await env.DB.prepare('UPDATE verified_accounts SET player_hash=? WHERE name_key=?').bind(playerHash,key).run();
-     }
      const iterations=passwordIterations(env);
      if(account.iterations!==iterations){
       const salt=randomHex();
       await env.DB.prepare('UPDATE verified_accounts SET password_salt=?,password_hash=?,iterations=? WHERE name_key=?')
        .bind(salt,await passwordHash(data.password,salt,iterations),iterations,key).run();
      }
-     return reply({nickname:account.nickname,token,created:false});
+     return reply({...await newSession(env.DB,account,env.VERIFICATION_SECRET),created:false});
     }
     if(data.create!==true)return reply({error:'Account not found'},404);
     const created={name_key:key,nickname:data.nickname,credential_salt:randomHex(),password_salt:randomHex(),iterations:passwordIterations(env),created_ms:now};
     created.password_hash=await passwordHash(data.password,created.password_salt,created.iterations);
-    const token=await credential(created,env.VERIFICATION_SECRET);
+    created.player_hash=randomHex()+randomHex();
     const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO verified_accounts
      (name_key,nickname,player_hash,credential_salt,password_salt,password_hash,iterations,created_ms) VALUES (?,?,?,?,?,?,?,?)`)
-     .bind(key,created.nickname,await hash(token),created.credential_salt,created.password_salt,created.password_hash,created.iterations,now).run();
+     .bind(key,created.nickname,created.player_hash,created.credential_salt,created.password_salt,created.password_hash,created.iterations,now).run();
     if(!inserted.meta.changes)return reply({error:'Nickname taken'},409);
-    return reply({nickname:created.nickname,token,created:true},201);
+    return reply({...await newSession(env.DB,created,env.VERIFICATION_SECRET),created:true},201);
    }
-   if(!['/api/verified/start','/api/verified/laps'].includes(url.pathname))return reply({error:'Not found'},404);
+   if(!['/api/verified/start','/api/verified/laps','/api/verified/logout'].includes(url.pathname))return reply({error:'Not found'},404);
    if(request.method!=='POST')return reply({error:'POST required'},405);
    const token=request.headers.get('Authorization')?.replace(/^Bearer /,'');
    if(!validPlayer(token))return reply({error:'Player credential required'},401);
-   const playerHash=await hash(token),now=Date.now(),starting=url.pathname.endsWith('/start');
+   const tokenHash=await hash(token),secretHash=await hash(env.VERIFICATION_SECRET),now=Date.now(),starting=url.pathname.endsWith('/start');
+   if(url.pathname==='/api/verified/logout'){
+    await env.DB.prepare('DELETE FROM verified_login_sessions WHERE token_hash=?').bind(tokenHash).run();
+    return reply({signedOut:true});
+   }
+   const owner=await env.DB.prepare(`SELECT a.nickname,a.player_hash FROM verified_login_sessions s
+    JOIN verified_accounts a ON a.player_hash=s.player_hash
+    WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=?`).bind(tokenHash,now,secretHash).first();
+   if(!owner)return reply({error:'Sign in required'},401);
+   const playerHash=owner.player_hash;
    const minute=Math.floor(now/60000),ip=await hash(request.headers.get('CF-Connecting-IP')||'unknown');
    for(const [id,max]of [[`p:${playerHash}:${minute}`,20],[`i:${ip}:${minute}`,80]]){
     if(await limit(id,max,120000))return reply({error:'Too many requests'},429);
    }
    await env.DB.prepare('DELETE FROM verified_limits WHERE expires < ?').bind(now).run();
-   const owner=await env.DB.prepare('SELECT nickname FROM verified_accounts WHERE player_hash=?').bind(playerHash).first();
-   if(!owner)return reply({error:'Sign in required'},401);
    const data=await body(request);
    if(starting){
     if(data?.revision!==revision)return reply({error:'Invalid start'},400);
@@ -144,8 +153,15 @@ export default {
     !Array.isArray(lap.sectorTicks)||lap.sectorTicks.length!==3||!lap.sectorTicks.every(n=>Number.isSafeInteger(n)&&n>0)||lap.sectorTicks.reduce((a,b)=>a+b,0)!==lap.lapTicks||
     !Number.isSafeInteger(lap.issuedAt)||lap.issuedAt>now+5000)return reply({error:'Invalid verified lap'},403);
    const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO verified_laps
-    (session_id,lap,revision,player_hash,nickname,start_tick,end_tick,lap_ticks,sector1,sector2,sector3,issued_ms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(lap.sessionId,lap.lap,lap.revision,lap.playerHash,lap.nickname,lap.startTick,lap.endTick,lap.lapTicks,...lap.sectorTicks,lap.issuedAt).run();
+    (session_id,lap,revision,player_hash,nickname,start_tick,end_tick,lap_ticks,sector1,sector2,sector3,issued_ms) SELECT ?,?,?,?,?,?,?,?,?,?,?,?
+    WHERE EXISTS (SELECT 1 FROM verified_login_sessions s JOIN verified_accounts a ON a.player_hash=s.player_hash
+     WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=? AND a.player_hash=?)`)
+    .bind(lap.sessionId,lap.lap,lap.revision,lap.playerHash,lap.nickname,lap.startTick,lap.endTick,lap.lapTicks,...lap.sectorTicks,lap.issuedAt,tokenHash,Date.now(),secretHash,playerHash).run();
+   // Revocation/expiry can occur while reading the body or checking the signature.
+   // The write above validates the session atomically; distinguish this from a duplicate lap.
+   if(!inserted.meta.changes&&!await env.DB.prepare(`SELECT 1 FROM verified_login_sessions s
+    JOIN verified_accounts a ON a.player_hash=s.player_hash WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=?`)
+    .bind(tokenHash,Date.now(),secretHash).first())return reply({error:'Sign in required'},401);
    return reply({protocol,saved:inserted.meta.changes>0,verified:true,lap:lap.lap,lapMs:lap.lapTicks*1000/120});
   }catch(error){console.error('Verified leaderboard request failed',error.status||500);return reply({error:error.status?error.message:'Verified leaderboard unavailable'},error.status||503);}
  }

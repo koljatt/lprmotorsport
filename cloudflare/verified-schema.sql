@@ -10,3 +10,8 @@ CREATE TABLE IF NOT EXISTS verified_limits (key TEXT PRIMARY KEY,attempts INTEGE
 CREATE TABLE IF NOT EXISTS verified_accounts (
   name_key TEXT PRIMARY KEY,nickname TEXT NOT NULL,player_hash TEXT NOT NULL UNIQUE,credential_salt TEXT NOT NULL,
   password_salt TEXT NOT NULL,password_hash TEXT NOT NULL,iterations INTEGER NOT NULL,created_ms INTEGER NOT NULL);
+
+-- Random, individually revocable logins with an absolute seven-day lifetime.
+CREATE TABLE IF NOT EXISTS verified_login_sessions (
+ token_hash TEXT PRIMARY KEY,player_hash TEXT NOT NULL,secret_hash TEXT NOT NULL,created_ms INTEGER NOT NULL,expires_ms INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS verified_login_expiry ON verified_login_sessions(expires_ms);

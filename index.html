@@ -12,8 +12,8 @@
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
     <link rel="stylesheet" href="styles.css?v=single-line-topbar-20261015" />
-    <link rel="stylesheet" href="3d.css?v=optional-analytics-20261025" />
-    <script src="i18n.js?v=optional-analytics-20261025" defer></script>
+    <link rel="stylesheet" href="3d.css?v=expiring-sessions-20261025" />
+    <script src="i18n.js?v=expiring-sessions-20261025" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
     <script src="campus.js?v=deterministic-math-20261024" defer></script>
@@ -33,11 +33,11 @@
     <script src="vehicle.js?v=deterministic-math-20261024" defer></script>
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
-    <script src="analytics.js?v=optional-analytics-20261025" defer></script>
-    <script src="leaderboard.js?v=optional-analytics-20261025" defer></script>
+    <script src="analytics.js?v=expiring-sessions-20261025" defer></script>
+    <script src="leaderboard.js?v=expiring-sessions-20261025" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
-    <script src="verified-driving.js?v=optional-analytics-20261025" defer></script>
+    <script src="verified-driving.js?v=expiring-sessions-20261025" defer></script>
     <script src="game.js?v=verified-launch-20261025" defer></script>
   </head>
   <body>
@@ -111,7 +111,7 @@
             <p>Leaderboardiin osallistuminen tallentaa nimimerkin, varmennetut kierrosajat ja ajon tarkastamiseen tarvittavat tiedot. Kehitysanalytiikka on vapaaehtoinen.</p>
             <label for="leaderboard-name">Nimimerkki</label>
             <input id="leaderboard-name" required maxlength="24" autocomplete="username" autocapitalize="off" enterkeyhint="next" placeholder="Nimimerkki" />
-            <button id="leaderboard-logout" class="leaderboard-logout" type="button" hidden>Vaihda kuljettajaa</button>
+            <button id="leaderboard-logout" class="leaderboard-logout" type="button" hidden>Kirjaudu ulos</button>
             <label id="leaderboard-password-label" for="leaderboard-password">Salasana</label>
             <input id="leaderboard-password" type="password" minlength="8" maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Vähintään 8 merkkiä" />
             <p id="leaderboard-password-hint" class="leaderboard-password-hint">Salasana varaa nimimerkin sinulle. Salasanaa ei voi palauttaa.</p>

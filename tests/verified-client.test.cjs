@@ -2,11 +2,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 function fixture(){
  const nodes=new Map(),storage=new Map(),requests=[],clients=[];let hidden=false,healthResolve,offline=false;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',dataset:{},disabled:false,handlers:{},append(){},addEventListener(name,fn){this.handlers[name]=fn;}});return nodes.get(id);};
- const identity={nickname:'Driver',token:'a'.repeat(64)};let startStatus=200;const signOuts=[];
+ const identity={nickname:'Driver',token:'a'.repeat(64)};let startStatus=200,lapStatus=200;const signOuts=[];
  const fetch=async(url,options)=>{
   requests.push({url,options});
   if(url.endsWith('/health')){if(offline)throw Error('offline');return new Promise(resolve=>{healthResolve=()=>resolve({ok:true,json:async()=>({revision:'rev',protocol:'driving-v1'})});});}
   if(url.endsWith('/start'))return startStatus===200?{ok:true,json:async()=>({ticket:'signed-start'})}:{ok:false,status:startStatus,json:async()=>({})};
+  if(url.endsWith('/laps')&&lapStatus!==200)return {ok:false,status:lapStatus};
   if(url.endsWith('/laps'))return {ok:true,json:async()=>({protocol:'driving-v1',verified:true,lapMs:90000})};
   return {ok:true,json:async()=>({protocol:'driving-v1',revision:'rev',results:[]})};
  };
@@ -24,20 +25,30 @@ function fixture(){
  const context={window,document,fetch,AbortSignal,console,setInterval(){},setTimeout(fn,ms){if(ms===3000){retry=fn;return null;}countdowns.push(ms);return setImmediate(fn);},clearTimeout(handle){if(handle)clearImmediate(handle);},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../verified-driving.js'),'utf8'),context);
  let starts=0,prepares=0;window.LPRVerifiedDriving.attach({prepare(){prepares++;},start(){starts++;}});
- return {api:window.LPRVerifiedDriving,nodes,node,storage,requests,clients,identity,document,countdowns,signOuts,setStartStatus(value){startStatus=value;},
+ return {api:window.LPRVerifiedDriving,nodes,node,storage,requests,clients,identity,document,countdowns,signOuts,setLapStatus(value){lapStatus=value;},setStartStatus(value){startStatus=value;},
   ready:()=>healthResolve(),retry:()=>retry(),setOffline(value){offline=value;},hide(){hidden=true;document.visibilitychange();},get starts(){return starts;},get prepares(){return prepares;}};
 }
 const settle=()=>new Promise(r=>setImmediate(r));
 (async()=>{
+ const expired=fixture(),receiptKey='lpr-verified-account-receipts:driver';
+ expired.storage.set(receiptKey,JSON.stringify(['expiry-pending-receipt']));
+ expired.setLapStatus(401);expired.api.identityReady();for(let i=0;i<8;i++)await settle();
+ assert.equal(expired.signOuts.length,1,'Expired upload asks the player to sign in again');
+ assert.deepEqual(JSON.parse(expired.storage.get(receiptKey)),['expiry-pending-receipt'],'Expiry never discards a verified queued lap');
+ expired.api.identityCleared();expired.identity.token='b'.repeat(64);expired.setLapStatus(200);
+ expired.api.identityReady();for(let i=0;i<8;i++)await settle();
+ assert.equal(JSON.parse(expired.storage.get(receiptKey)).length,0,'The same account retries its receipt using a new login session');
+ assert(expired.requests.some(r=>r.url.endsWith('/laps')&&r.options.headers.Authorization==='Bearer '+'b'.repeat(64)));
+ expired.api.identityCleared();
  const a=fixture(),starting=a.api.start();assert(a.api.preparing);
  assert(a.api.waitingForStart,'Initial preparation holds the car until the official start');
  a.hide();a.ready();await starting;
  assert.equal(a.starts,0);assert.equal(a.clients.length,0,'Hiding while waking cannot allocate a new timed session later');
  const b=fixture();
- b.storage.set(`lpr-verified-receipts:${b.identity.token}`,JSON.stringify(['signed-old-lap']));
+ b.storage.set(`lpr-verified-account-receipts:${b.identity.nickname.normalize('NFC').toLowerCase()}`,JSON.stringify(['signed-old-lap']));
  b.api.identityReady();await settle();
  assert(b.requests.some(r=>r.url.endsWith('/laps')&&JSON.parse(r.options.body).receipt==='signed-old-lap'),'Reloaded signed receipts retry after signing in, without requiring a new driving session');
- assert.equal(JSON.parse(b.storage.get(`lpr-verified-receipts:${b.identity.token}`)).length,0);
+ assert.equal(JSON.parse(b.storage.get(`lpr-verified-account-receipts:${b.identity.nickname.normalize('NFC').toLowerCase()}`)).length,0);
  assert(b.api.preparing,'Signing in automatically prepares verification');
  assert.equal(b.starts,0,'Driving waits for server readiness');
  b.ready();for(let i=0;i<8;i++)await settle();assert(b.api.active);assert.equal(b.starts,1);

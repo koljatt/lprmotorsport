@@ -33,12 +33,13 @@
   }
   try {
     const saved = JSON.parse(localStorage.getItem(accountKey) ?? 'null');
-    if (saved && validName(saved.nickname) && validToken(saved.token)) account = { nickname: saved.nickname, token: saved.token };
+    if (saved && validName(saved.nickname) && validToken(saved.token) && Number.isSafeInteger(saved.expiresAt) && saved.expiresAt > Date.now()) account = { nickname: saved.nickname, token: saved.token, expiresAt: saved.expiresAt };
+    else localStorage.removeItem(accountKey);
     nickname.value = account?.nickname ?? localStorage.getItem('lpr-nickname') ?? '';
   } catch {}
   function showAccount() {
     // A remembered sign-in skips the password, but every page load still needs Aloita ajo.
-    const remembered = !!account && !activeName;
+    const remembered = !!account;
     nickname.readOnly = !!account || !!activeName;
     for (const element of passwordRow) if (element) element.hidden = !!account || !!activeName;
     if (logoutButton) logoutButton.hidden = !remembered;
@@ -56,8 +57,8 @@
     });
     if (!response.ok) throw Object.assign(new Error(`Account HTTP ${response.status}`), { status: response.status });
     const data = await response.json();
-    if (!validName(data?.nickname) || nameKey(data.nickname) !== nameKey(name) || !validToken(data.token)) throw new Error('Invalid account response');
-    return { nickname: data.nickname, token: data.token };
+    if (!validName(data?.nickname) || nameKey(data.nickname) !== nameKey(name) || !validToken(data.token) || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= Date.now()) throw new Error('Invalid account response');
+    return { nickname: data.nickname, token: data.token, expiresAt: data.expiresAt };
   }
   const signInError = (status, name) => status === 404 ? t('nameFree', { name })
     : status === 401 ? t('Väärä salasana tälle nimimerkille.')
@@ -70,9 +71,20 @@
     if (claimName) { claimName = null; status.textContent = ''; showAccount(); }
   });
   password.addEventListener('input', () => password.setCustomValidity(''));
-  logoutButton?.addEventListener('click', () => {
-    forget(); nickname.value = ''; password.value = ''; status.textContent = '';
-    showAccount(); nickname.focus?.();
+  logoutButton?.addEventListener('click', async () => {
+    if (!account || signingIn) return;
+    signingIn = true; logoutButton.disabled = true; startButton.disabled = true;
+    try {
+      const response = await fetch(accountEndpoint() + '/api/verified/logout', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + account.token }, signal: AbortSignal.timeout(15000)
+      });
+      if (!response.ok) throw Error('Logout failed');
+      window.LPRLeaderboard.signOut();
+      nickname.value = ''; password.value = ''; status.textContent = '';
+      showAccount(); nickname.focus?.();
+    } catch {
+      status.textContent = t('Uloskirjautuminen ei onnistunut. Tarkista yhteys ja yritä uudelleen.');
+    } finally { signingIn = false; logoutButton.disabled = false; startButton.disabled = false; }
   });
   showAccount();
   startForm.addEventListener('submit', async event => {
@@ -238,7 +250,7 @@
       signOut(message) {
         forget();
         sessionChosen = false; activeName = ''; token = undefined; pending = [];
-        window.LPRVerifiedDriving?.cancel(null);
+        window.LPRVerifiedDriving?.identityCleared?.();
         showAccount();
         window.LPRLeaderboard.beginSession();
         if (message) status.textContent = t(message);

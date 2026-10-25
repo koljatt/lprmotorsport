@@ -44,7 +44,7 @@ const {driver}=require('./helpers-driving.cjs');
   }
   assert.equal(receipts.length,2,'Standing and flying laps both receive receipts');
   const firstLap=await verify(receipts[0],secret),flying=await verify(receipts[1],secret);
-  assert.equal(firstLap.playerHash,await hash(token));assert.equal(flying.startTick,firstLap.endTick,'Flying lap preserves authoritative state');
+  assert.equal(firstLap.playerHash,board.db.prepare('SELECT player_hash FROM verified_accounts WHERE name_key=?').get('driver').player_hash);assert.equal(flying.startTick,firstLap.endTick,'Flying lap preserves authoritative state');
   assert(firstLap.lapTicks>600);assert.notEqual(firstLap.lapTicks*1000/120,1,'Client time claims are ignored');
   for(const receipt of receipts){
    assert.equal((await post(boardURL,'/api/verified/laps',{receipt},otherToken)).status,403,'Receipt is player-bound');

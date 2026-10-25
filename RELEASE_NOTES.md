@@ -11,7 +11,9 @@ Ei vielä julkaistu. Julkaise vasta, kun uusi `lpr-verified`-Worker on käytöss
 ## Oma nimimerkki salasanalla
 
 - Nimimerkki varataan salasanalla: kukaan muu ei voi ajaa sillä nimellä.
-- Samalla nimimerkillä ja salasanalla kirjaudut millä tahansa laitteella, ja kirjautuminen muistetaan.
+- Samalla nimimerkillä ja salasanalla kirjaudut millä tahansa laitteella. Kirjautuminen muistetaan enintään seitsemän päivää.
+- Kirjaudu ulos mitätöi tämän laitteen istunnon myös palvelimella; muut laitteet ja tallennetut kierrosajat säilyvät.
+- Päivityksen jälkeen aiemmin kirjautuneilta pyydetään salasana uudelleen.
 - Tuloslista alkaa taas alusta: TOP 10:ssä näkyvät vain tileillä ajetut kierrokset.
 - Salasanaa ei voi palauttaa. Unohtuneen salasanan nimimerkin voi vapauttaa ylläpito.
 

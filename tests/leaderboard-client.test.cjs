@@ -7,12 +7,12 @@ function accountReply(body){
   if(existing){
     if(body.create===true)return {status:409};
     if(existing.password!==body.password)return {status:401};
-    return {status:200,data:{nickname:existing.nickname,token:existing.token,created:false}};
+    return {status:200,data:{nickname:existing.nickname,token:existing.token,expiresAt:Date.now()+7*86400000,created:false}};
   }
   if(body.create!==true)return {status:404};
   const account={nickname:body.nickname,password:body.password,token:nodeCrypto.createHash('sha256').update('account:'+key).digest('hex')};
   serverAccounts.set(key,account);
-  return {status:201,data:{nickname:account.nickname,token:account.token,created:true}};
+  return {status:201,data:{nickname:account.nickname,token:account.token,expiresAt:Date.now()+7*86400000,created:true}};
 }
 function setup(storage=new Map(),options={}){
   const nodes=new Map(),calls=[],celebrations=[],handlers=new Map(),identified=[];
@@ -40,6 +40,10 @@ function setup(storage=new Map(),options={}){
         if(network.accountOffline)throw Error('offline');
         const {status,data}=accountReply(JSON.parse(request.body));
         return {ok:status>=200&&status<300,status,json:async()=>data};
+      }
+      if(url==='https://verified.test/api/verified/logout'){
+        if(network.logoutOffline)throw Error('offline');
+        return {ok:true,status:200,json:async()=>({signedOut:true})};
       }
       const finish=url.endsWith('/api/laps'),start=url.endsWith('/api/laps/start');
       if(network.offline||(finish&&network.finishOffline))throw Error('offline');
@@ -120,9 +124,16 @@ function setup(storage=new Map(),options={}){
   assert.equal(reopened.board.identity.token,token);assert.equal(accountCalls.length,calls);
   const rememberedPractice=setup(storage);await rememberedPractice.node('#leaderboard-practice').trigger('click');
   assert.equal(rememberedPractice.board.identity,null,'A remembered account does not opt practice into leaderboard participation');
-  const other=setup(storage);other.node('#leaderboard-logout').trigger('click');
+  const other=setup(storage);await other.node('#leaderboard-logout').trigger('click');
   assert.equal(other.account(),null);assert.equal(other.node('#leaderboard-name').readOnly,false);assert.equal(other.node('#leaderboard-password').hidden,false);
   await other.login('Eve');assert.notEqual(other.account().token,token);assert.equal(other.board.identity.nickname,'Eve');
+  assert(other.calls.some(c=>c.url.endsWith('/api/verified/logout')&&c.options.headers.Authorization===`Bearer ${token}`),'Logout revokes the server session');
+  const failedLogout=setup(new Map(storage),{logoutOffline:true});await failedLogout.login('Eve');
+  await failedLogout.node('#leaderboard-logout').trigger('click');
+  assert(failedLogout.account(),'Network failure must not pretend server-side logout succeeded');
+  assert.match(failedLogout.node('#leaderboard-status').textContent,/Uloskirjautuminen ei onnistunut/);
+  const expiredStorage=new Map([['lpr-account',JSON.stringify({nickname:'Panu',token,expiresAt:Date.now()-1})]]);
+  const expired=setup(expiredStorage);assert.equal(expired.account(),null);assert(!expired.node('#leaderboard-password').hidden,'Expired remembered logins require a password');
   const wrong=setup();await wrong.login('PANU','väärä123');
   assert(wrong.board.requiresName);assert.match(wrong.node('#leaderboard-status').textContent,/Väärä salasana/);assert.equal(wrong.account(),null);
   const caseless=setup();await caseless.login('pAnU','salasana');
