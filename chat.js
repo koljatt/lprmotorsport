@@ -8,7 +8,7 @@
  const visibilityKey='lpr-chat-visible';
  const t=text=>window.LPRI18n?.t(text)??text;
  const endpoint=window.LPRVerificationConfig.service+'/api/chat';
- let timer=null,loading=false,sending=false;
+ let timer=null,loading=false,sending=false,ticket=null;
  function typing(){return panel.contains(document.activeElement)&&!panel.hidden;}
  window.LPRChat={get typing(){return typing();}};
  function controls(){window.dispatchEvent(new Event('lpr-chat-focus'));}
@@ -36,6 +36,22 @@
   const response=await fetch(endpoint,{...options,signal:AbortSignal.timeout(10000)});
   if(!response.ok)throw Object.assign(Error('Chat HTTP '+response.status),{status:response.status});
   return response.json();
+ }
+ // The account service signs the nickname into a short-lived ticket; the chat never trusts a nickname from the browser.
+ async function chatTicket(identity,renew){
+  if(!renew&&ticket?.token===identity.token&&ticket.expires-Date.now()>30000)return ticket.value;
+  ticket=null;
+  const response=await fetch(window.LPRVerificationConfig.leaderboard+'/api/verified/chat-ticket',{method:'POST',headers:{Authorization:'Bearer '+identity.token},signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw Object.assign(Error('Chat ticket HTTP '+response.status),{status:response.status,signIn:response.status===401});
+  const data=await response.json();
+  if(typeof data?.ticket!=='string'||!Number.isSafeInteger(data.expiresInMs))throw Error('Invalid chat ticket');
+  ticket={token:identity.token,value:data.ticket,expires:Date.now()+data.expiresInMs};
+  return ticket.value;
+ }
+ async function post(identity,text){
+  const attempt=async renew=>request({method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await chatTicket(identity,renew)},body:JSON.stringify({text})});
+  try{return await attempt(false);}
+  catch(error){if(error.status!==401||error.signIn)throw error;return attempt(true);}
  }
  function render(messages){
   const nearBottom=list.scrollHeight-list.scrollTop-list.clientHeight<45;
@@ -71,10 +87,10 @@
   if(!text)return;
   sending=true;send.disabled=true;status.textContent=t('Lähetetään…');
   try{
-   await request({method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+identity.token},body:JSON.stringify({nickname:identity.nickname,text})});
+   await post(identity,text);
    if(input.value.trim()===text)input.value='';
    status.textContent=t('Viesti lähetetty');void refresh();
-  }catch(error){status.textContent=t(error.status===429?'Liikaa viestejä. Odota minuutti.':'Viestiä ei lähetetty. Yritä uudelleen.');}
+  }catch(error){status.textContent=t(error.signIn?'Kirjaudu uudelleen ennen lähettämistä.':error.status===429?'Liikaa viestejä. Odota minuutti.':'Viestiä ei lähetetty. Yritä uudelleen.');}
   finally{sending=false;send.disabled=false;}
  });
  document.addEventListener('visibilitychange',()=>{clearTimeout(timer);if(!document.hidden)void refresh();});

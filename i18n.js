@@ -12,6 +12,7 @@
   "Lähetä": "Send",
   "Yhteys kunnossa": "Connected",
   "Vahvista nimimerkki ennen lähettämistä.": "Confirm your nickname before sending.",
+  "Kirjaudu uudelleen ennen lähettämistä.": "Sign in again before sending.",
   "Chat ei saa yhteyttä. Yritetään uudelleen…": "Chat cannot connect. Retrying…",
   "Lähetetään…": "Sending…",
   "Viesti lähetetty": "Message sent",

@@ -9,7 +9,7 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
  const sessions=new Sessions({...sessionsOptions,signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
   sessionId:s.id,playerHash:s.identity.playerHash,nickname:s.identity.nickname,...lap,issuedAt:Date.now()},secret)});
  const allowed=new Set(origins);
- const chat=createChat();
+ const chat=createChat({protocol});
  const server=http.createServer(async(req,res)=>{
   const origin=req.headers.origin;
   const headers={'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff'};
@@ -26,7 +26,8 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
     if(req.method!=='POST')return reply(405,{error:'Method not allowed'});
     // Trust the connecting socket; client-supplied forwarding headers can be forged.
     const data=await readJSON(req,2048);
-    return reply(201,chat.post(req.headers.authorization?.replace(/^Bearer /,''),req.socket.remoteAddress||'unknown',data));
+    let identity;try{identity=await verify(req.headers.authorization?.replace(/^Bearer /,''),secret);}catch{throw fail(401,'Sign in required');}
+    return reply(201,chat.post(identity,req.socket.remoteAddress||'unknown',data));
    }
    if(url.pathname==='/sessions'&&req.method==='POST'){
     const data=await readJSON(req),now=Date.now();

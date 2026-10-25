@@ -61,7 +61,9 @@ Paikalliset, Gitin ohittamat raportit ja kuvat:
 
 ## Main-julkaisun yhteydessä vielä tehtävää
 
-1. Korjaa chatin nimimerkin omistus tai jätä chat pois julkaisusta.
+1. Chatin nimimerkin omistus on korjattu: nimimerkki tulee Workerin allekirjoittamasta
+   chat-lipusta (`/api/verified/chat-ticket`). Julkaise Worker uudelleen ja Render samasta commitista;
+   vanha Worker ei myönnä chat-lippuja, joten chat-viestien lähetys vaatii uuden Workerin.
 2. Huomioi, että uusi lista näyttää vain tilien kierrokset, joilla on julkinen uusinta.
    Vanhat tulokset säilyvät tietokannassa mutta eivät näy uudessa TOP 10:ssä.
 3. Aktivoi valmis Worker-versio 6, lisää Cron Trigger `0 3 * * *` ja julkaise uusi peli mainista

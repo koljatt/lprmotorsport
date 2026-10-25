@@ -1,7 +1,10 @@
 const {createHash,randomUUID}=require('node:crypto');
 const digest=value=>createHash('sha256').update(value).digest('hex');
+const TICKET_MAX_MS=15*60*1000;
+const validName=value=>typeof value==='string'&&/^[\p{L}\p{N} _.-]{1,24}$/u.test(value);
 // One shared room per server process. No database or driving-session capacity required.
-function createChat({now=Date.now}={}) {
+// post() receives the payload of a chat ticket whose signature the caller has already verified.
+function createChat({now=Date.now,protocol='driving-v1'}={}) {
  const messages=[],limits=new Map();
  const retention=24*60*60*1000;
  function clean() {
@@ -16,15 +19,19 @@ function createChat({now=Date.now}={}) {
  }
  return {
   list(){clean();return {messages:messages.map(({owner,...message})=>message)};},
-  post(token,ip,data){
+  post(identity,ip,data){
    clean();
-   if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))throw fail(401,'Player credential required');
-   const nickname=typeof data?.nickname==='string'?data.nickname.trim().normalize('NFC'):'';
+   const time=now();
+   // The nickname always comes from the account-bound ticket, never from the request body.
+   if(identity?.kind!=='chat'||identity.protocol!==protocol||typeof identity.playerHash!=='string'||!/^[a-f0-9]{64}$/.test(identity.playerHash)||
+    !validName(identity.nickname)||!Number.isSafeInteger(identity.issuedAt)||!Number.isSafeInteger(identity.expiresAt)||
+    identity.issuedAt>time+5000||identity.expiresAt<=time||identity.expiresAt-identity.issuedAt>TICKET_MAX_MS)throw fail(401,'Sign in required');
+   const nickname=identity.nickname;
    const text=typeof data?.text==='string'?data.text.trim().normalize('NFC'):'';
-   if(!/^[\p{L}\p{N} _.-]{1,24}$/u.test(nickname)||!text||text.length>280||/[\p{Cc}\p{Cf}]/u.test(text))throw fail(400,'Invalid message');
-   const owner=digest(token);
+   if(!text||text.length>280||/[\p{Cc}\p{Cf}]/u.test(text))throw fail(400,'Invalid message');
+   const owner=identity.playerHash;
    consume('ip:'+digest(ip),30);consume('player:'+owner,6);
-   const message={id:randomUUID(),nickname,text,at:now(),owner};
+   const message={id:randomUUID(),nickname,text,at:time,owner};
    messages.push(message);if(messages.length>100)messages.shift();
    const {owner:_,...publicMessage}=message;
    return {message:publicMessage};

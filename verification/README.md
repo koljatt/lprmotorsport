@@ -8,17 +8,21 @@ Valinta muistetaan selaimessa seuraaville pelikerroille; oletuksena chat on piil
 Chatin näyttäminen ei kohdista kirjoituskenttää, joten viestejä voi lukea ajaessa.
 
 Pelin 💬-painike avaa kaikille yhteisen chatin. Chat käyttää samaa Render-palvelua
-kuin ajovarmennus (`verification/server.cjs`) ja pelissä vahvistettua nimimerkkiä.
-Julkaise päivitetty palvelin sekä `npm run build` -komennon tuottama peli.
-Cloudflare Workeria tai tietokantaa ei tarvitse muuttaa. Paikallisesti molemmat
+kuin ajovarmennus (`verification/server.cjs`). Viestin lähettäjän nimimerkki tulee
+aina kirjautuneen tilin tiedoista: peli hakee Cloudflare Workerilta
+(`POST /api/verified/chat-ticket`, kirjautumistunniste `Authorization`-otsakkeessa)
+kymmenen minuuttia voimassa olevan, `VERIFICATION_SECRET`illä allekirjoitetun chat-lipun.
+Render hyväksyy viestin vain voimassa olevalla lipulla ja ottaa nimimerkin lipusta,
+ei pyynnön sisällöstä. Uloskirjautunut tai väärennetty tunniste ei saa uutta lippua.
+Julkaise päivitetty palvelin, Worker (`npm run build:verified-worker`) sekä
+`npm run build` -komennon tuottama peli yhdessä. Paikallisesti kaikki
 käynnistyvät komennolla `npm run dev:verified`.
 
 Chat päivittyy kolmen sekunnin välein vain sen ollessa näkyvissä. Kirjoittaminen
 vapauttaa ajonäppäimet ja lähettää neutraalin ohjaussyötteen; kierros jatkuu normaalisti.
 Viestissä saa olla enintään 280 merkkiä. Raja on kuusi viestiä minuutissa
-pelaajatunnistetta ja 30 viestiä minuutissa yhdistävää IP-osoitetta kohti.
+tiliä ja 30 viestiä minuutissa yhdistävää IP-osoitetta kohti.
 Käänteisen välityspalvelimen takana jälkimmäinen raja voi olla yhteinen kaikille.
-Nimimerkit eivät ole yksilöllisiä tai varmennettuja henkilöllisyyksiä.
 
 Palvelin pitää muistissa viimeiset 100 viestiä enintään 24 tuntia. Historia
 tyhjenee uudelleenkäynnistyksessä. Käytä yhtä palvelininstanssia: eri instansseilla

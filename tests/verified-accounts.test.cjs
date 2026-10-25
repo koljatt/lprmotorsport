@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
 const {revision}=require('../verification/world.cjs');
 // Nickname ownership against the real verified Worker and SQL on local SQLite.
 (async()=>{
- const secret='test-only-secret-'.repeat(4),{sign,hash}=await import('../verification/protocol.mjs');
+ const secret='test-only-secret-'.repeat(4),{sign,verify,hash}=await import('../verification/protocol.mjs');
  const board=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({secret,revision});
  await new Promise(r=>board.listen(0,'127.0.0.1',r));
  board.db.exec('DROP TABLE verified_login_sessions'); // Existing deployments have accounts but no session table yet.
@@ -33,6 +33,11 @@ const {revision}=require('../verification/world.cjs');
   const started=await start.json();assert.equal(started.nickname,'Panu','The start ticket always carries the account nickname, not the requested one');
   const outsider='c'.repeat(64);
   assert.equal((await post('/api/verified/start',{nickname:'Panu',revision},outsider)).status,401,'A browser without the account cannot drive as Panu');
+  const chatGrant=await post('/api/verified/chat-ticket',{nickname:'Eve'},panu.token);assert.equal(chatGrant.status,200);
+  const chatTicket=await verify((await chatGrant.json()).ticket,secret);
+  assert.equal(chatTicket.kind,'chat');assert.equal(chatTicket.nickname,'Panu','The chat ticket always carries the account nickname');
+  assert.equal(chatTicket.playerHash,stored.player_hash);assert(chatTicket.expiresAt-chatTicket.issuedAt<=10*60000,'Chat tickets are short-lived');
+  assert.equal((await post('/api/verified/chat-ticket',{},outsider)).status,401,'A browser without the account cannot chat as Panu');
   const forged=await receipt(await hash(outsider),'Panu','1'.repeat(32),7000);
   assert.equal((await post('/api/verified/laps',{receipt:forged,replay},outsider)).status,401,'Laps without an account are not stored');
   // A lap from before accounts existed stays in the table but is not listed.
@@ -61,6 +66,7 @@ const {revision}=require('../verification/world.cjs');
   assert.equal(board.db.prepare('SELECT 1 FROM verified_login_sessions WHERE token_hash=?').get(await hash(panu.token)),undefined,'Logout deletes a live session on the server');
   assert.equal((await logout()).status,200,'Logout retries are idempotent');
   assert.equal((await post('/api/verified/start',{revision},panu.token)).status,401,'A stolen copy cannot start after logout');
+  assert.equal((await post('/api/verified/chat-ticket',{},panu.token)).status,401,'A stolen copy cannot get chat tickets after logout');
   assert.equal((await post('/api/verified/laps',{replay,receipt:await receipt(stored.player_hash,'Panu','5'.repeat(32),8000)},panu.token)).status,401,'Even a signed lap cannot be submitted with a revoked token');
   assert.equal((await post('/api/verified/start',{revision},again.token)).status,200,'Logging out one device preserves another device');
   board.db.prepare('UPDATE verified_login_sessions SET expires_ms=? WHERE token_hash=?').run(Date.now(),await hash(again.token));

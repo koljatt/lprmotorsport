@@ -105,6 +105,7 @@ const sessionSchema=`CREATE TABLE IF NOT EXISTS verified_login_sessions (
  token_hash TEXT PRIMARY KEY,player_hash TEXT NOT NULL,secret_hash TEXT NOT NULL,created_ms INTEGER NOT NULL,expires_ms INTEGER NOT NULL)`;
 const sessionIndex='CREATE INDEX IF NOT EXISTS verified_login_expiry ON verified_login_sessions(expires_ms)';
 const SESSION_MS=7*86400000;
+const CHAT_TICKET_MS=10*60000;
 async function newSession(db,account,secret){
  const now=Date.now(),token=randomHex()+randomHex(),expiresAt=now+SESSION_MS;
  await db.prepare('DELETE FROM verified_login_sessions WHERE expires_ms<=?').bind(now).run();
@@ -218,7 +219,7 @@ export default {
     if(!inserted.meta.changes)return reply({error:'Nickname taken'},409);
     return reply({...await newSession(env.DB,created,env.VERIFICATION_SECRET),created:true},201);
    }
-   if(!['/api/verified/start','/api/verified/laps','/api/verified/logout'].includes(url.pathname))return reply({error:'Not found'},404);
+   if(!['/api/verified/start','/api/verified/chat-ticket','/api/verified/laps','/api/verified/logout'].includes(url.pathname))return reply({error:'Not found'},404);
    if(request.method!=='POST')return reply({error:'POST required'},405);
    const token=request.headers.get('Authorization')?.replace(/^Bearer /,'');
    if(!validPlayer(token))return reply({error:'Player credential required'},401);
@@ -237,6 +238,12 @@ export default {
     if(await limit(id,max,120000))return reply({error:'Too many requests'},429);
    }
    await env.DB.prepare('DELETE FROM verified_limits WHERE expires < ?').bind(now).run();
+   if(url.pathname==='/api/verified/chat-ticket'){
+    // Short-lived, so a logout or a stolen ticket cannot post for long.
+    const expiresAt=now+CHAT_TICKET_MS;
+    return reply({protocol,nickname:owner.nickname,expiresInMs:CHAT_TICKET_MS,
+     ticket:await sign({kind:'chat',protocol,playerHash,nickname:owner.nickname,issuedAt:now,expiresAt},env.VERIFICATION_SECRET)});
+   }
    const data=await body(request,starting?8192:950000);
    if(starting){
     if(data?.revision!==revision)return reply({error:'Invalid start'},400);
