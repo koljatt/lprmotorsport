@@ -49,17 +49,18 @@
   return null;
  }
  const snapshots=new Map(),pending=[];
- const key=()=>`lpr-verified-receipts:${identity?.token}`;
+ const key=()=>`lpr-verified-account-receipts:${identity?.nickname.normalize('NFC').toLowerCase()}`;
  const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{}};
  function restore(){
   const chosen=window.LPRLeaderboard.identity;if(!chosen)return;
+  if(identity?.token!==chosen.token)pending.length=0;
   identity=chosen;
   try{const saved=JSON.parse(localStorage.getItem(key())||'[]');if(Array.isArray(saved))for(const receipt of saved.filter(v=>typeof v==='string'&&v.length<=4096).slice(0,20))if(!pending.includes(receipt))pending.push(receipt);}catch{}
  }
  const say=text=>{status.textContent=text;document.querySelector('#verification-state').textContent=text;};
- async function api(path,data){
+ async function api(path,data,auth=identity){
   if(!config?.leaderboard)throw Error('Varmennettua tuloslistaa ei ole vielä otettu käyttöön.');
-  const response=await fetch(config.leaderboard+path,{...(data?{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+identity.token},body:JSON.stringify(data)}:{}),signal:AbortSignal.timeout(15000)});
+  const response=await fetch(config.leaderboard+path,{...(data?{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+auth.token},body:JSON.stringify(data)}:{}),signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw Object.assign(Error('Varmennettu tuloslista ei ole saatavilla ('+response.status+').'),{status:response.status});
   return response.json();
  }
@@ -79,11 +80,16 @@
  let sending=null;
  async function save(){
   if(sending)return sending;
+  if(!identity)return;
+  const login=identity;
   sending=(async()=>{do{while(pending.length){
-   try{const reply=await api('/api/verified/laps',{receipt:pending[0]});
+   try{const reply=await api('/api/verified/laps',{receipt:pending[0]},login);
+    if(identity?.token!==login.token)return;
     if(!reply.verified||reply.protocol!=='driving-v1')throw Error('Virheellinen tallennuskuittaus.');
     pending.shift();persist();say(lapEligibility?.eligible===false?practiceMessage:`Kierrosaika ${(reply.lapMs/1000).toFixed(3)} s tallennettu.`);hooks?.saved?.(reply.lapMs);
-   }catch(error){if([400,401,403,409,413,415,422].includes(error.status)){pending.shift();persist();say('Kierrosaikaa ei voitu tallentaa tuloslistalle.');continue;}
+   }catch(error){if(identity?.token!==login.token)return;
+    if(error.status===401){window.LPRLeaderboard.signOut?.('Kirjautuminen vanheni. Kirjaudu uudelleen nimimerkilläsi ja salasanallasi.');return;}
+    if([400,403,409,413,415,422].includes(error.status)){pending.shift();persist();say('Kierrosaikaa ei voitu tallentaa tuloslistalle.');continue;}
     say('Kierrosaika odottaa tallennusta.');return;}
   }await refresh();}while(pending.length);})();
   try{await sending;}finally{sending=null;}
@@ -124,7 +130,7 @@
    connectionUnavailable=false;
    if(attempt!==generation)return;
    if(lights.hidden)prepareLights();
-   const {ticket}=await api('/api/verified/start',{nickname:identity.nickname,revision});
+   const {ticket}=await api('/api/verified/start',{nickname:identity.nickname,revision}).catch(error=>{throw Object.assign(error,{signIn:error.status===401});});
    if(attempt!==generation)return;
    next=new window.LPRLiveClient({revision,ticket,armed:true,base:config.service,
     onUpdate:ack=>{
@@ -167,7 +173,9 @@
    hooks.start();autoRetryAllowed=false;releaseLights();say('');
    restore();
    void save();
-  }catch(error){if(next)await next.cancel();if(attempt===generation){connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');if(autoRetryAllowed)retrySoon();}}
+  }catch(error){if(next)await next.cancel();if(attempt===generation){
+   if(error.signIn){autoRetryAllowed=false;cancel('Kirjaudu uudelleen.');window.LPRLeaderboard.signOut?.('Kirjautuminen vanheni. Kirjaudu uudelleen nimimerkilläsi ja salasanallasi.');return;}
+   connectionUnavailable=true;cancel('Harjoittelu käynnissä – odotetaan yhteyttä.');if(autoRetryAllowed)retrySoon();}}
  }
  window.LPRVerificationDiagnostics=diagnostics;
  window.LPRVerifiedDriving={
@@ -185,7 +193,8 @@
  };
  function sync(){restore();return save();}
  setInterval(()=>{if(!document.hidden&&document.querySelector('#settings-dialog').open)void sync();},15000);
- document.querySelector('#leaderboard-start-form').addEventListener('submit',()=>{restore();if(identity){void save();void start();}});
+ window.LPRVerifiedDriving.identityCleared=()=>{cancel(null);identity=null;pending.length=0;};
+ window.LPRVerifiedDriving.identityReady=()=>{restore();if(identity){void save();void start();}};
  document.addEventListener('visibilitychange',()=>{
   if(document.hidden){autoRetryAllowed=false;cancel();}
   else if(connectionUnavailable&&autoRetryAllowed&&window.LPRLeaderboard.identity)void start({reconnect:true});

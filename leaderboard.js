@@ -13,10 +13,18 @@
   const consent = document.querySelector('#analytics-consent');
   const startButton = document.querySelector('#leaderboard-start');
   const closeButton = document.querySelector('#close-settings');
-  const validName = name => /^[\p{L}\p{N} _.-]{1,24}$/u.test(name);
+  const validName = name => /^[\p{L}\p{N} _.-]{1,24}$/u.test(name) && !/\s\s/.test(name);
   const validToken = value => /^[a-f0-9]{64}$/.test(value ?? '');
   const newToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map(n => n.toString(16).padStart(2, '0')).join('');
-  let token, activeName = '', rememberedName = '', legacyToken;
+  const nameKey = name => name.normalize('NFC').toLowerCase();
+  const password = document.querySelector('#leaderboard-password');
+  const passwordRow = [document.querySelector('#leaderboard-password-label'), password, document.querySelector('#leaderboard-password-hint')];
+  const logoutButton = document.querySelector('#leaderboard-logout');
+  const startLabel = document.querySelector('#leaderboard-start-label');
+  const accountEndpoint = () => window.LPRVerificationConfig?.leaderboard;
+  const accountKey = 'lpr-account';
+  let sessionChosen = false;
+  let token, activeName = '', account = null, claimName = null, signingIn = false;
   let pending = [], sending = null;
   let activeLap = null;
   const pendingKey = () => `lpr-pending-laps:${token}`;
@@ -24,58 +32,124 @@
     try { localStorage.setItem(pendingKey(), JSON.stringify(pending)); } catch {}
   }
   try {
-    rememberedName = localStorage.getItem('lpr-nickname') ?? '';
-    nickname.value = rememberedName;
-    legacyToken = localStorage.getItem('lpr-player-token');
+    const saved = JSON.parse(localStorage.getItem(accountKey) ?? 'null');
+    if (saved && validName(saved.nickname) && validToken(saved.token) && Number.isSafeInteger(saved.expiresAt) && saved.expiresAt > Date.now()) account = { nickname: saved.nickname, token: saved.token, expiresAt: saved.expiresAt };
+    else localStorage.removeItem(accountKey);
+    nickname.value = account?.nickname ?? localStorage.getItem('lpr-nickname') ?? '';
   } catch {}
-  function chooseIdentity(name) {
-    // A shared phone can have several drivers; changing names must not submit
-    // one person's lap under another person's identity.
-    const key = `lpr-player-token:${name.normalize('NFC').toLowerCase()}`;
-    let saved;
-    try { saved = localStorage.getItem(key); } catch {}
-    const identity = validToken(saved) ? saved
-      : name === rememberedName && validToken(legacyToken) ? legacyToken : newToken();
-    try {
-      localStorage.setItem(key, identity);
-      localStorage.setItem('lpr-player-token', identity);
-      localStorage.setItem('lpr-nickname', name);
-    } catch {}
-    return identity;
+  function showAccount() {
+    // A remembered sign-in skips the password, but every page load still needs Aloita ajo.
+    const remembered = !!account;
+    nickname.readOnly = !!account || !!activeName;
+    for (const element of passwordRow) if (element) element.hidden = !!account || !!activeName;
+    if (logoutButton) logoutButton.hidden = !remembered;
+    if (startLabel) startLabel.textContent = t(claimName ? 'Varaa nimimerkki' : 'Aja leaderboardiin');
   }
-  nickname.addEventListener('input', () => nickname.setCustomValidity(''));
-  startForm.addEventListener('submit', event => {
+  function forget() {
+    account = null; claimName = null;
+    try { localStorage.removeItem(accountKey); } catch {}
+  }
+  async function signIn(name, secret, create) {
+    if (!accountEndpoint()) throw Object.assign(new Error('Accounts unavailable'), { status: 503 });
+    const response = await fetch(accountEndpoint() + '/api/verified/account', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nickname: name, password: secret, create }), signal: AbortSignal.timeout(15000)
+    });
+    if (!response.ok) throw Object.assign(new Error(`Account HTTP ${response.status}`), { status: response.status });
+    const data = await response.json();
+    if (!validName(data?.nickname) || nameKey(data.nickname) !== nameKey(name) || !validToken(data.token) || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= Date.now()) throw new Error('Invalid account response');
+    return { nickname: data.nickname, token: data.token, expiresAt: data.expiresAt };
+  }
+  const signInError = (status, name) => status === 404 ? t('nameFree', { name })
+    : status === 401 ? t('Väärä salasana tälle nimimerkille.')
+    : status === 409 ? t('Nimimerkki on jo varattu. Kirjaudu sen salasanalla tai valitse toinen nimimerkki.')
+    : status === 429 ? t('Liian monta kirjautumisyritystä. Odota hetki ja yritä uudelleen.')
+    : status === 400 ? t('Tarkista nimimerkki ja salasana.')
+    : t('Kirjautuminen ei onnistunut juuri nyt. Yritä uudelleen.');
+  nickname.addEventListener('input', () => {
+    nickname.setCustomValidity('');
+    if (claimName) { claimName = null; status.textContent = ''; showAccount(); }
+  });
+  password.addEventListener('input', () => password.setCustomValidity(''));
+  logoutButton?.addEventListener('click', async () => {
+    if (!account || signingIn) return;
+    signingIn = true; logoutButton.disabled = true; startButton.disabled = true;
+    try {
+      const response = await fetch(accountEndpoint() + '/api/verified/logout', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + account.token }, signal: AbortSignal.timeout(15000)
+      });
+      if (!response.ok) throw Error('Logout failed');
+      window.LPRLeaderboard.signOut();
+      nickname.value = ''; password.value = ''; status.textContent = '';
+      showAccount(); nickname.focus?.();
+    } catch {
+      status.textContent = t('Uloskirjautuminen ei onnistunut. Tarkista yhteys ja yritä uudelleen.');
+    } finally { signingIn = false; logoutButton.disabled = false; startButton.disabled = false; }
+  });
+  showAccount();
+  startForm.addEventListener('submit', async event => {
     event.preventDefault();
-    if (!consent.checked) {
-      consent.setCustomValidity(t('Hyväksy nimimerkkiin yhdistettyjen peli- ja käyttötietojen kerääminen ennen pelaamista.'));
-      consent.reportValidity();return;
-    }
+    if (signingIn) return;
     const name = activeName || nickname.value.trim().normalize('NFC');
     if (!validName(name)) {
       nickname.setCustomValidity(t('Kirjoita 1–24 merkin nimimerkki. Käytä kirjaimia, numeroita, välilyöntiä, pistettä, viivaa tai alaviivaa.'));
       nickname.reportValidity();
       return;
     }
-    token = chooseIdentity(name);
-    activeName = name;
-    window.LPRAnalytics?.identify(name);
+    let identity = activeName ? { nickname: activeName, token }
+      : account && nameKey(account.nickname) === nameKey(name) ? account : null;
+    if (!identity) {
+      if ([...password.value].length < 8) {
+        password.setCustomValidity(t('Kirjoita vähintään 8 merkin salasana.'));
+        password.reportValidity();
+        return;
+      }
+      signingIn = true; startButton.disabled = true;
+      status.textContent = t('Kirjaudutaan…');
+      try {
+        identity = await signIn(name, password.value, claimName === nameKey(name));
+      } catch (error) {
+        claimName = error.status === 404 ? nameKey(name) : null;
+        status.textContent = signInError(error.status, name);
+        showAccount();
+        return;
+      } finally { signingIn = false; startButton.disabled = false; }
+      password.value = ''; claimName = null; status.textContent = '';
+      account = identity;
+      try { localStorage.setItem(accountKey, JSON.stringify(account)); localStorage.setItem('lpr-nickname', account.nickname); } catch {}
+    }
+    sessionChosen = true;
+    token = identity.token;
+    activeName = identity.nickname;
+    window.LPRAnalytics?.identify(activeName);
     try {
       const saved = JSON.parse(localStorage.getItem(pendingKey()) ?? '[]');
       if (Array.isArray(saved)) pending = saved.filter(lap => lap?.version === version && lap.protocol === protocol &&
-        typeof lap.nickname === 'string' && lap.nickname.normalize('NFC').toLowerCase() === name.toLowerCase() &&
+        typeof lap.nickname === 'string' && nameKey(lap.nickname) === nameKey(activeName) &&
         validToken(lap.lapId) && Number.isSafeInteger(lap.lapMs) && lap.lapMs > 5000 &&
         Array.isArray(lap.sectors) && lap.sectors.length === 3 && lap.sectors.every(n => Number.isSafeInteger(n) && n > 0) &&
         lap.sectors.reduce((a, b) => a + b, 0) === lap.lapMs);
     } catch {}
-    nickname.value = name;
-    nickname.readOnly = true;
+    nickname.value = activeName;
+    showAccount();
     startButton.hidden = true;
     closeButton.hidden = false;
     dialog.classList.remove('session-start');
     dialog.close();
     flushPending();
+    window.LPRVerifiedDriving?.identityReady?.();
   });
-  dialog.addEventListener('cancel', event => { if (!activeName || !consent.checked) event.preventDefault(); });
+  document.querySelector('#leaderboard-practice')?.addEventListener('click', () => {
+    if (signingIn) return;
+    sessionChosen = true; activeName = ''; token = undefined; pending = []; activeLap = null;
+    password.value = ''; claimName = null; status.textContent = '';
+    window.LPRVerifiedDriving?.identityCleared?.();
+    window.LPRAnalytics?.identify('');
+    showAccount(); startButton.hidden = false; closeButton.hidden = false;
+    dialog.classList.remove('session-start'); dialog.close();
+    document.querySelector('#restart-button')?.click?.();
+  });
+  dialog.addEventListener('cancel', event => { if (!sessionChosen) event.preventDefault(); });
   consent.addEventListener('change',()=>window.LPRLeaderboard.consentChanged());
   async function api(path, options) {
     const response = await fetch(endpoint + path, { ...options, signal: AbortSignal.timeout(10000) });
@@ -168,18 +242,22 @@
     },15000);
     window.addEventListener('online', flushPending);
     window.LPRLeaderboard = {
-      get identity() { return activeName && token && consent.checked ? {nickname:activeName,token} : null; },
-      consentChanged() {
-        consent.setCustomValidity('');
-        if(activeName && !consent.checked){
-          window.LPRVerifiedDriving?.cancel('Ajo keskeytetty: peli- ja käyttötietojen keräämisen suostumus on peruttu.');
-          window.LPRLeaderboard.beginSession();
-        }
-      },
+      get identity() { return activeName && token ? {nickname:activeName,token} : null; },
+      consentChanged() { consent.setCustomValidity(''); },
       refresh,
       cancelLap() { activeLap = null; },
+      // Called when the server no longer accepts the remembered account (deleted or revoked).
+      signOut(message) {
+        forget();
+        sessionChosen = false; activeName = ''; token = undefined; pending = [];
+        window.LPRVerifiedDriving?.identityCleared?.();
+        showAccount();
+        window.LPRLeaderboard.beginSession();
+        if (message) status.textContent = t(message);
+      },
       startLap() {
-        if (!token || !activeName) return Promise.resolve(null);
+        // The retired leaderboard must never receive the account credential.
+        if (!list || !token || !activeName) return Promise.resolve(null);
         const lap = { requestId: newToken(), nickname: activeName };
         activeLap = lap;
         lap.ticket = api('/api/laps/start', {
@@ -191,9 +269,9 @@
         }).catch(() => null);
         return lap.ticket;
       },
-      get requiresName() { return !activeName || !consent.checked; },
+      get requiresName() { return !sessionChosen; },
       beginSession() {
-        if (activeName && consent.checked) return;
+        if (sessionChosen) return;
         // The last name is a suggestion, never an automatic login: each page
         // load requires an explicit confirmation before any driving can start.
         dialog.classList.add('session-start');
@@ -203,6 +281,7 @@
         refresh();
       },
       async submit(lapMs, sectors) {
+        if (!list) return;
         const started = activeLap;
         activeLap = null;
         const name = activeName;

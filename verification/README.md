@@ -40,8 +40,10 @@ Node 24.x, ei palvelimen npm-riippuvuuksia:
 npm run dev:verified
 ```
 
-Avaa http://127.0.0.1:8000, kirjoita nimimerkki, hyväksy nimimerkkiin yhdistettyjen
-peli- ja käyttötietojen kerääminen ja paina **Aloita ajo**. Varmennus valmistellaan
+Avaa http://127.0.0.1:8000, kirjoita nimimerkki ja salasana (vähintään 8 merkkiä), valitse halutessasi nimimerkkiin yhdistettyjen
+peli- ja käyttötietojen kerääminen ja paina **Aloita ajo**. Vapaan nimimerkin kohdalla peli pyytää
+vahvistuksen (**Varaa nimimerkki**), ennen kuin nimi varataan tälle salasanalle. Kirjautuminen
+muistetaan selaimessa enintään seitsemän päivää; **Kirjaudu ulos** mitätöi istunnon myös palvelimella. Varmennus valmistellaan
 automaattisesti. Toimivalla yhteydellä ajo alkaa ilman harjoittelua tai
 lähtölaskentaa. Jos yhteyttä ei saada, voi ajaa harjoitteluna. Peli yrittää yhteyttä
 automaattisesti uudelleen kolmen sekunnin välein. Yhteyden palattua ja session
@@ -63,8 +65,18 @@ pelikäyttöliittymä enää lähetä harjoitteluaikoja vanhaan tuloslistaan.
 
 ## Luottamusketju
 
-1. `cloudflare/verified-worker.mjs` myöntää pelaajatunnukseen, nimimerkkiin ja
-   simulaatioversioon sidotun, kaksi minuuttia voimassa olevan aloitusluvan.
+0. **Nimimerkin omistus.** `POST /api/verified/account` (`cloudflare/verified-worker.mjs`)
+   kirjaa sisään nimimerkillä ja salasanalla tai varaa vapaan nimimerkin, kun selain pyytää
+   sitä erikseen (`create:true`). Nimimerkit ovat yksilöllisiä kirjainkoosta riippumatta.
+   Salasanasta tallennetaan vain PBKDF2-SHA-256-tiiviste ja suola `verified_accounts`-tauluun
+   (oletuksena 100 000 kierrosta, Workersin yläraja; ks. `PASSWORD_ITERATIONS` alla). Palvelin
+   palauttaa jokaiselle kirjautumiselle uuden satunnaisen tunnisteen ja `expiresAt`-ajan.
+   `verified_login_sessions` tallentaa vain tunnisteen tiivisteen, tilin pysyvän tunnuksen sekä
+   luonti- ja vanhenemisajat. Istunto vanhenee ehdottomasti seitsemässä päivässä; käyttö ei jatka määräaikaa. Vain väärät salasanat rajoitetaan: 5 / 10 min nimimerkkiä ja osoitetta kohden ja
+   30 / 10 min nimimerkkiä kohden. Lisäksi kaikkia tilipyyntöjä rajoitetaan 20/min osoitetta kohden.
+   Onnistunut kirjautuminen ei kuluta nimimerkin kiintiötä. Salasanaa ei voi palauttaa.
+1. `cloudflare/verified-worker.mjs` myöntää aloitusluvan vain tilin omistajalle. Lupa on sidottu
+   pelaajatunnukseen, tilin nimimerkkiin ja simulaatioversioon, ja se on voimassa kaksi minuuttia.
 2. `verification/server.cjs` tarkistaa luvan ja aloittaa oman 120 Hz:n
    simulaation worker-threadissa. Saman luvan uusintayritys palauttaa saman
    session eikä nollaa palvelinkelloa. Kapasiteetti on enintään kaksi sessiota.
@@ -82,9 +94,11 @@ pelikäyttöliittymä enää lähetä harjoitteluaikoja vanhaan tuloslistaan.
 5. Palvelin allekirjoittaa valmistuneen kierroksen HMAC-SHA-256:lla. Kuitti sisältää
    pelaajan, version, session, kierrosnumeron sekä palvelimen laskemat kierros- ja
    sektoriajat. Selaimen ilmoittamia kierrosaikoja ei käytetä.
-6. Worker tarkistaa allekirjoituksen ja pelaajan ennen erilliseen `verified_laps`-
+6. Worker tarkistaa allekirjoituksen, pelaajan ja tilin ennen erilliseen `verified_laps`-
    tauluun tallentamista. Sama session ja kierroksen pari tallentuu vain kerran.
-   Vanhoja tuloksia ei siirretä varmennettujen joukkoon.
+   Vanhoja tuloksia ei siirretä varmennettujen joukkoon. TOP 10 näyttää vain tileihin
+   kuuluvat kierrokset tilin nimimerkillä; ennen tilejä ajetut kierrokset jäävät tauluun
+   mutta eivät näy listalla.
 
 
 Kesken virallisen ajon tapahtuva varmennuksen menetys ei enää käynnistä peliä uudelleen eikä siirrä autoa lähtöruutuun. Ajo jatkuu harjoitteluna, kunnes pelaaja käynnistää itse uuden virallisen ajon. Virheluokka näkyy pelissä ja tarkemmat tiedot löytyvät selaimen konsolista. Tämä ei hyväksy keskeneräistä kierrosta tuloslistalle.
@@ -96,7 +110,8 @@ Jo allekirjoitetun kierroksen tallennusta voi yrittää myöhemmin uudelleen.
 
 Tämä varmistaa palvelimen fysiikan mukaisen ajon. Se ei tunnista ihmistä,
 estä fysiikan mukaista automaattiohjausta tai takaa julkisen palvelun saatavuutta.
-Pelaajatunnus on selainkohtainen satunnaisavain, ei varmennettu henkilöllisyys.
+Pelaajatunnus kuuluu nimimerkkitilille, ei varmennetulle henkilöllisyydelle: salasanan
+tietävä voi ajaa tilin nimissä.
 
 ## Jos ajo muuttuu harjoitteluksi fysiikkaeron vuoksi
 
@@ -202,13 +217,36 @@ Renderissä ja Cloudflaressa; se ei saa koskaan päätyä pelin tiedostoihin tai
    simulaatiorevisio. Cloudflare → *Workers & Pages* → *Create* → Worker nimellä **lpr-verified**
    → *Edit code* → liitä koko bundle → *Deploy*. Sitten *Settings*: D1-binding **DB → lpr-times**
    (sama tietokanta kuin vanhalla listalla) ja **Secret** `VERIFICATION_SECRET` = Renderin arvo.
-   Suorita `cloudflare/verified-schema.sql` D1-konsolissa kerran. Tarkista
+   Suorita `cloudflare/verified-schema.sql` D1-konsolissa kerran (Worker luo myös
+   `verified_accounts`-taulun itse, jos se puuttuu). Tarkista
    `https://lpr-verified.panu-musakka.workers.dev/api/verified/leaderboard` → `{"protocol":"driving-v1","revision":"...","results":[]}`.
    `GAME_ORIGINS` tarvitaan vain, jos pelillä on muu osoite kuin `https://panulut.github.io`.
-3. **Peli.** Pushaa `main`; GitHub Pages -työnkulku rakentaa `dist/`-kansion, johon syntyy
-   `verification/revision.js`. Avaa peli, vahvista nimimerkki ja analytiikka, *Aloita ajo*.
+   **Testaa kirjautuminen ennen pelin julkaisua**: luo testitili esimerkiksi selaimen konsolista
+   `fetch('https://lpr-verified.panu-musakka.workers.dev/api/verified/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'Testi',password:'testi1234',create:true})}).then(r=>r.status)`
+   → `201`. Jos vastaus on `503` tai Cloudflare näyttää virheen 1102 (CPU-raja ylittyi), lisää
+   Workerin *Settings → Variables* -kohtaan `PASSWORD_ITERATIONS` = `20000` (sallittu 10 000–100 000)
+   tai siirrä Worker maksulliseen tasoon. Tilit tiivistetään uudelleen seuraavalla kirjautumisella.
+   Poista testitili lopuksi (ks. alla).
+   Jos `VERIFICATION_SECRET` vaihdetaan, kaikki aiemmat kirjautumiset lakkaavat toimimasta.
+   Tilit ja kierrokset säilyvät, ja salasanalla kirjautuminen luo uuden istunnon.
+3. **Peli.** Pushaa `main` vasta, kun Worker on päivitetty: uusi peli kirjautuu
+   `/api/verified/account`-osoitteeseen, jota vanha Worker ei tunne. GitHub Pages -työnkulku
+   rakentaa `dist/`-kansion, johon syntyy
+   `verification/revision.js`. Avaa peli, kirjaudu nimimerkillä ja salasanalla, valitse halutessasi analytiikka, *Aloita ajo*.
    Tilarivin pitää näyttää valmistelu ja liikennevalot; kierroksen jälkeen aika ilmestyy
    varmennettuun listaan.
+
+### Unohtunut salasana tai nimimerkin poisto
+
+Salasanaa ei voi palauttaa. Ylläpito vapauttaa nimimerkin D1-konsolissa
+(`name_key` on nimimerkki pienillä kirjaimilla):
+
+```sql
+DELETE FROM verified_accounts WHERE name_key = 'nimimerkki';
+```
+
+Tilin kierrokset katoavat silloin TOP 10 -listalta. Jos sama nimi varataan uudelleen, uusi
+tili saa uuden tunnuksen, eikä vanhoja kierroksia liitetä siihen.
 
 ### Kun fysiikka muuttuu
 
@@ -227,3 +265,24 @@ edellyttää erikseen sessioreititysta ja aloituslupien kertakäytön jakamista;
 useita instansseja sellaisenaan. Render Free -tason todellinen viive ja kapasiteetti kahdella
 yhtäaikaisella pelaajalla sekä mobiiliselainten käyttäytyminen on todennettava tuotannossa
 ennen kuin listaa mainostetaan.
+
+### Pelaaminen ja valinnat
+
+Pelaa ilman leaderboardia ei vaadi tiliä eikä analytiikkasuostumusta. Aja leaderboardiin kirjautuu nimimerkkitilille ja käynnistää ajon varmennuksen. Kehitysanalytiikka on vapaaehtoinen kummassakin tilassa; sen peruminen ei keskeytä ajoa tai tulosten tallennusta.
+
+### Kirjautumisistunnot ja päivitysjärjestys
+
+Päivitä ensin Worker ja sitten selainpeli. Worker luo `verified_login_sessions`-taulun ja indeksin tarvittaessa; taulut löytyvät myös `cloudflare/verified-schema.sql`-tiedostosta. Vanhan version pysyvät kirjautumistunnisteet eivät enää kelpaa: pelaajien on kirjauduttava uudelleen. Tilit, salasanat ja aiemmat tilien kierrosajat säilyvät.
+
+`POST /api/verified/logout` vaatii Authorization Bearer -tunnisteen ja poistaa vain kyseisen istunnon. Toistaminen on turvallista. Selain ilmoittaa verkkovirheestä eikä väitä palvelinistunnon peruuntuneen, jos pyyntö epäonnistui. Jokainen aloitus ja kierrosajan tallennus tarkistaa voimassaolon palvelimelta. Tallennus tarkistaa istunnon myös atomisesti SQL-kirjoituksen yhteydessä, jotta samanaikainen uloskirjautuminen estää uuden tallennuksen. Jo hyväksytyt kierrokset säilyvät.
+
+Vanhentuminen tai uloskirjautuminen estää myös aiemmin allekirjoitettujen kierrosten lähetyksen kyseisellä tunnisteella. Uudelleen kirjautunut sama tili voi lähettää jonoon jääneet kierrokset uudella istunnollaan. Jonot ovat selainkohtaisia. Aiemmin myönnetty ajon varmennussessio voi elää palvelimella aikarajaansa asti, mutta peruttu kirjautuminen ei voi tallentaa sillä tuloksia.
+
+Ylläpito voi tarvittaessa perua tilin kaikki istunnot muuttamatta kierroksia:
+
+```sql
+DELETE FROM verified_login_sessions WHERE player_hash IN
+ (SELECT player_hash FROM verified_accounts WHERE name_key = 'nimimerkki');
+```
+
+Tunniste on edelleen selaimen localStoragessa. Tämä muutos ei toteuta HttpOnly-evästeitä eikä muuta salasanatiivisteen työmäärää.

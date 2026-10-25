@@ -248,6 +248,11 @@ dialog { touch-action: pan-y pinch-zoom; }
 .leaderboard-start-form .analytics-settings details { margin:6px 0 0; }
 .analytics-settings summary { cursor:pointer; padding:4px 0; }
 .leaderboard-start-form #leaderboard-name { min-height:44px; margin:5px 0 8px; padding:8px; }
+.leaderboard-start-form #leaderboard-password { min-height:44px; margin:5px 0 4px; padding:8px; }
+.leaderboard-start-form .leaderboard-password-hint { margin:0 0 8px; color:#8fae9f; }
+.leaderboard-start-form .leaderboard-logout { display:block; min-height:0; margin:-2px 0 8px; padding:0; border:0; background:none; color:#9cefc2; font-size:12px; text-decoration:underline; cursor:pointer; }
+.leaderboard-start-form .leaderboard-start #leaderboard-start-label { font-size:inherit; }
+.leaderboard-start-form .leaderboard-start:disabled { opacity:.6; cursor:wait; }
 .leaderboard-start-form .leaderboard-start { min-height:44px; padding:8px 12px; }
 
 @media(max-width:760px) {
@@ -279,8 +284,8 @@ dialog { touch-action: pan-y pinch-zoom; }
   .leaderboard-entry-grid { gap:8px; margin-top:8px; padding-top:8px; }
   .leaderboard-start-form { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; column-gap:8px; }
   .leaderboard-start-form > label { font-size:11px; }
-  .leaderboard-start-form #leaderboard-name { margin:0; }
-  .leaderboard-start-form > fieldset, .leaderboard-start-form > button, #leaderboard-status { grid-column:1 / -1; }
+  .leaderboard-start-form #leaderboard-name, .leaderboard-start-form #leaderboard-password { margin:0; }
+  .leaderboard-start-form > fieldset, .leaderboard-start-form > button, .leaderboard-start-form > .leaderboard-password-hint, #leaderboard-status { grid-column:1 / -1; }
   .leaderboard-start-form .analytics-settings details { margin-top:3px; }
   .analytics-settings summary { font-size:11px; padding:2px 0; }
   #verified-list li, #leaderboard-list li { padding:1px 0; line-height:1.25; }
