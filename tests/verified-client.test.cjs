@@ -107,5 +107,12 @@ const settle=()=>new Promise(r=>setImmediate(r));
  assert(drivingUpdate,'Game exposes an authenticated driving update path');
  assert(!/if\s*\(!window\.LPRVerifiedDriving\.active\)\s*\{?\s*void window\.LPRVerifiedDriving\.start\(/.test(drivingUpdate),
   'A completed lap must not auto-restart a player whose verification dropped');
- console.log('PASS: no automatic reset after verification loss, manual restart, receipt retry, prepared start and mismatch fallback');
+ // Series tabs: humans by default, a bot login opens the bot table, and tabs switch the request.
+ const tabs=fixture();await settle();
+ assert(tabs.requests.some(r=>r.url==='board/api/verified/leaderboard?series=human'));
+ tabs.identity.series='bot';tabs.api.identityReady();await settle();
+ assert.equal(tabs.requests.filter(r=>r.url.includes('/leaderboard?')).at(-1).url,'board/api/verified/leaderboard?series=bot');
+ tabs.node('#verified-series-human').handlers.click();await settle();
+ assert.equal(tabs.requests.filter(r=>r.url.includes('/leaderboard?')).at(-1).url,'board/api/verified/leaderboard?series=human');
+ console.log('PASS: no automatic reset after verification loss, manual restart, receipt retry, prepared start, mismatch fallback and series tabs');
 })().catch(error=>{console.error(error);process.exitCode=1;});

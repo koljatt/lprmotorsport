@@ -27,7 +27,15 @@
   const accountEndpoint = () => window.LPRVerificationConfig?.leaderboard;
   const accountKey = 'lpr-account';
   let sessionChosen = false;
-  let token, activeName = '', account = null, authMode = null, signingIn = false;
+  let token, activeName = '', activeSeries = 'human', account = null, authMode = null, signingIn = false;
+  // Account creation asks credentials first, then an explicit human/bot series choice.
+  let createStep = 1, chosenSeries = null;
+  const credentials = document.querySelector('#leaderboard-credentials');
+  const seriesStep = document.querySelector('#leaderboard-series-step');
+  const seriesName = document.querySelector('#leaderboard-series-name');
+  const stepLabel = document.querySelector('#leaderboard-create-step');
+  const seriesChoices = [document.querySelector('#leaderboard-series-human'), document.querySelector('#leaderboard-series-bot')];
+  const seriesOf = value => value === 'bot' ? 'bot' : 'human';
   let pending = [], sending = null;
   let activeLap = null;
   const pendingKey = () => `lpr-pending-laps:${token}`;
@@ -36,7 +44,7 @@
   }
   try {
     const saved = JSON.parse(localStorage.getItem(accountKey) ?? 'null');
-    if (saved && validName(saved.nickname) && validToken(saved.token) && Number.isSafeInteger(saved.expiresAt) && saved.expiresAt > Date.now()) account = { nickname: saved.nickname, token: saved.token, expiresAt: saved.expiresAt };
+    if (saved && validName(saved.nickname) && validToken(saved.token) && Number.isSafeInteger(saved.expiresAt) && saved.expiresAt > Date.now()) account = { nickname: saved.nickname, token: saved.token, expiresAt: saved.expiresAt, series: seriesOf(saved.series) };
     else localStorage.removeItem(accountKey);
     nickname.value = account?.nickname ?? localStorage.getItem('lpr-nickname') ?? '';
   } catch {}
@@ -55,16 +63,35 @@
     for (const element of passwordRow) if (element) element.hidden = !!account || !!activeName;
     if (logoutButton) logoutButton.hidden = !remembered;
     password.autocomplete = authMode === 'create' ? 'new-password' : 'current-password';
-    const label = remembered || activeName ? 'Aja leaderboardiin' : authMode === 'create' ? 'Luo käyttäjätunnus' : 'Kirjaudu sisään';
+    const creating = authMode === 'create' && !remembered && !activeName;
+    const choosingSeries = creating && createStep === 2;
+    const label = remembered || activeName ? 'Aja leaderboardiin' : creating ? (choosingSeries ? 'Luo käyttäjätunnus' : 'Jatka') : 'Kirjaudu sisään';
     if (startLabel) startLabel.textContent = t(label);
-    if (accountTitle) accountTitle.textContent = t(remembered || activeName ? 'Kuljettaja' : label);
+    if (accountTitle) accountTitle.textContent = t(remembered || activeName ? 'Kuljettaja' : creating ? (choosingSeries ? 'Valitse sarja' : 'Luo käyttäjätunnus') : 'Kirjaudu sisään');
+    if (stepLabel) { stepLabel.hidden = !creating; stepLabel.textContent = t(choosingSeries ? 'Vaihe 2/2: sarja' : 'Vaihe 1/2: nimimerkki ja salasana'); }
+    if (credentials) credentials.hidden = choosingSeries;
+    if (seriesStep) seriesStep.hidden = !choosingSeries;
+    if (seriesName) seriesName.textContent = choosingSeries ? `${t('Nimimerkki')}: ${nickname.value.trim()}` : '';
+    if (backButton) backButton.textContent = t(choosingSeries ? 'Takaisin' : 'Takaisin valikkoon');
     const hint = document.querySelector('#leaderboard-password-hint');
     if (hint) hint.hidden = remembered || !!activeName || authMode !== 'create';
   }
+  function setStep(step) {
+    createStep = step;
+    status.textContent = '';
+    showAccount();
+    if (step === 2) (seriesChoices.find(choice => choice?.checked) ?? seriesChoices[0])?.focus?.();
+    else nickname.focus?.();
+  }
+  for (const choice of seriesChoices) choice?.addEventListener('change', () => {
+    if (choice.checked) { chosenSeries = seriesOf(choice.value); status.textContent = ''; }
+  });
   function chooseAuth(mode) {
     if (signingIn) return;
     authMode = mode;
     password.value = '';
+    createStep = 1; chosenSeries = null;
+    for (const choice of seriesChoices) if (choice) choice.checked = false;
     nickname.setCustomValidity(''); password.setCustomValidity('');
     status.textContent = '';
     showAccount();
@@ -72,7 +99,10 @@
   }
   document.querySelector('#leaderboard-login')?.addEventListener('click', () => chooseAuth('login'));
   document.querySelector('#leaderboard-create')?.addEventListener('click', () => chooseAuth('create'));
-  document.querySelector('#leaderboard-back')?.addEventListener('click', () => chooseAuth(null));
+  document.querySelector('#leaderboard-back')?.addEventListener('click', () => {
+    if (authMode === 'create' && createStep === 2) setStep(1);
+    else chooseAuth(null);
+  });
   function forget() {
     account = null; authMode = null;
     try { localStorage.removeItem(accountKey); } catch {}
@@ -81,12 +111,12 @@
     if (!accountEndpoint()) throw Object.assign(new Error('Accounts unavailable'), { status: 503 });
     const response = await fetch(accountEndpoint() + '/api/verified/account', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nickname: name, password: secret, create }), signal: AbortSignal.timeout(15000)
+      body: JSON.stringify({ nickname: name, password: secret, create, ...(create ? { series: chosenSeries } : {}) }), signal: AbortSignal.timeout(15000)
     });
     if (!response.ok) throw Object.assign(new Error(`Account HTTP ${response.status}`), { status: response.status });
     const data = await response.json();
     if (!validName(data?.nickname) || nameKey(data.nickname) !== nameKey(name) || !validToken(data.token) || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= Date.now()) throw new Error('Invalid account response');
-    return { nickname: data.nickname, token: data.token, expiresAt: data.expiresAt };
+    return { nickname: data.nickname, token: data.token, expiresAt: data.expiresAt, series: seriesOf(data.series) };
   }
   const signInError = (status, name) => status === 404 ? t('Tunnusta ei löytynyt. Valitse Luo käyttäjätunnus luodaksesi uuden tunnuksen.')
     : status === 401 ? t('Väärä salasana tälle nimimerkille.')
@@ -133,21 +163,31 @@
         password.reportValidity();
         return;
       }
+      const creating = authMode === 'create';
+      if (creating && createStep === 1) { setStep(2); return; }
+      if (creating && !chosenSeries) {
+        status.textContent = t('Valitse ihmisten tai bottien sarja.');
+        seriesChoices[0]?.focus?.();
+        return;
+      }
       signingIn = true; startButton.disabled = true;
       status.textContent = t('Kirjaudutaan…');
       try {
-        identity = await signIn(name, password.value, authMode === 'create');
+        identity = await signIn(name, password.value, creating);
       } catch (error) {
+        // A taken or invalid nickname must be fixed on the credentials step.
+        if (creating && (error.status === 409 || error.status === 400)) createStep = 1;
         status.textContent = signInError(error.status, name);
         showAccount();
         return;
       } finally { signingIn = false; startButton.disabled = false; }
-      password.value = ''; authMode = null; status.textContent = '';
+      password.value = ''; authMode = null; createStep = 1; chosenSeries = null; status.textContent = '';
       account = identity;
       try { localStorage.setItem(accountKey, JSON.stringify(account)); localStorage.setItem('lpr-nickname', account.nickname); } catch {}
     }
     sessionChosen = true;
     token = identity.token;
+    if (!activeName) activeSeries = seriesOf(identity.series);
     activeName = identity.nickname;
     window.LPRAnalytics?.identify(activeName);
     try {
@@ -270,7 +310,7 @@
     },15000);
     window.addEventListener('online', flushPending);
     window.LPRLeaderboard = {
-      get identity() { return activeName && token ? {nickname:activeName,token} : null; },
+      get identity() { return activeName && token ? {nickname:activeName,token,series:activeSeries} : null; },
       consentChanged() { consent.setCustomValidity(''); },
       refresh,
       cancelLap() { activeLap = null; },

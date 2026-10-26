@@ -114,6 +114,10 @@
       <div class="leaderboard-entry-grid">
       <section class="leaderboard-panel verified-standings" aria-label="Varmennettujen kierrosaikojen TOP 10">
         <h3>TOP 10</h3>
+        <div class="series-tabs" role="group" aria-label="Sarja">
+          <button id="verified-series-human" type="button" aria-pressed="true">Ihmiset</button>
+          <button id="verified-series-bot" type="button" aria-pressed="false">Botit</button>
+        </div>
         <p id="verification-status" role="status" hidden></p>
         <p><small>TOP 10 edellyttää julkisesti katsottavaa, varmennettua uusintaa.</small></p>
         <ol id="verified-list" aria-live="polite"></ol>
@@ -128,13 +132,29 @@
             <div id="leaderboard-account-fields" hidden>
             <button id="leaderboard-back" class="leaderboard-back" type="button">Takaisin valikkoon</button>
             <h4 id="leaderboard-account-title">Kirjaudu sisään</h4>
+            <p id="leaderboard-create-step" class="leaderboard-create-step" hidden></p>
             <p>Leaderboardiin osallistuminen tallentaa nimimerkin, varmennetut kierrosajat ja ajon tarkastamiseen tarvittavat tiedot. Kehitysanalytiikka on vapaaehtoinen.</p>
+            <div id="leaderboard-credentials">
             <label for="leaderboard-name">Nimimerkki</label>
             <input id="leaderboard-name" required maxlength="24" autocomplete="username" autocapitalize="off" enterkeyhint="next" placeholder="Nimimerkki" />
             <button id="leaderboard-logout" class="leaderboard-logout" type="button" hidden>Kirjaudu ulos</button>
             <label id="leaderboard-password-label" for="leaderboard-password">Salasana</label>
             <input id="leaderboard-password" type="password" minlength="8" maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Vähintään 8 merkkiä" />
             <p id="leaderboard-password-hint" class="leaderboard-password-hint">Salasana varaa nimimerkin sinulle. Salasanaa ei voi palauttaa.</p>
+            </div>
+            <fieldset id="leaderboard-series-step" class="leaderboard-series" hidden>
+              <legend>Kummassa sarjassa ajat?</legend>
+              <p id="leaderboard-series-name" class="leaderboard-series-name"></p>
+              <div class="leaderboard-series-options">
+              <label class="leaderboard-series-option"><input id="leaderboard-series-human" type="radio" name="leaderboard-series" value="human" />
+                <svg class="leaderboard-series-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><circle cx="32" cy="18" r="10" fill="currentColor"/><path d="M14 56c0-11 8-20 18-20s18 9 18 20z" fill="currentColor"/><path d="M22 15c2-6 7-9 10-9s8 3 10 9" fill="none" stroke="#0b1a14" stroke-width="2.5" stroke-linecap="round"/></svg>
+                <span><strong>Ihmisten sarja</strong> <small>Ajan itse näppäimistöllä tai kosketusohjaimilla.</small></span></label>
+              <label class="leaderboard-series-option"><input id="leaderboard-series-bot" type="radio" name="leaderboard-series" value="bot" />
+                <svg class="leaderboard-series-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><line x1="32" y1="4" x2="32" y2="12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="4" r="3" fill="currentColor"/><rect x="14" y="12" width="36" height="26" rx="6" fill="currentColor"/><circle cx="24" cy="24" r="4" fill="#0b1a14"/><circle cx="40" cy="24" r="4" fill="#0b1a14"/><rect x="23" y="31" width="18" height="3" rx="1.5" fill="#0b1a14"/><rect x="9" y="20" width="5" height="10" rx="2" fill="currentColor"/><rect x="50" y="20" width="5" height="10" rx="2" fill="currentColor"/><rect x="18" y="41" width="28" height="17" rx="4" fill="currentColor"/><circle cx="32" cy="49.5" r="3" fill="#0b1a14"/></svg>
+                <span><strong>Bottien sarja</strong> <small>Autoa ohjaa ohjelma tai muu automaattinen ohjaus.</small></span></label>
+              </div>
+              <p class="leaderboard-series-note">Ihmiset ja botit kilpailevat eri tuloslistoilla. Sarjaa voi myöhemmin vaihtaa vain ylläpito.</p>
+            </fieldset>
             </div>
             <details class="leaderboard-options">
             <summary>Lisäasetukset</summary>

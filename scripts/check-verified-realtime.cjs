@@ -27,6 +27,7 @@ const {chromium}=require('playwright'),{driver}=require('../tests/helpers-drivin
    await page.evaluate(source=>{window.__driver=eval('('+source+')');},driver.toString());
    await page.click('#leaderboard-create');
    await page.fill('#leaderboard-name','Realtime '+(i+1));await page.fill('#leaderboard-password','realtime-test-password');
+   await page.click('#leaderboard-start');await page.click('label:has(#leaderboard-series-human)');
    players.push({page,context});
   }
   const started=performance.now();

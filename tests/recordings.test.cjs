@@ -41,19 +41,102 @@ const assert=require('node:assert/strict');
   assert.equal((await post(privatePath,{review:'invented'},adminToken)).status,400);
   const flagged=await(await fetch(base+'/api/verified/admin/replays?flagged=1',{headers:{Authorization:'Bearer '+adminToken}})).json();
   assert.deepEqual(flagged.results.map(r=>r.lap),[13]);
-  // Expired private entries disappear from reads immediately, even before daily physical cleanup.
+  // Retention is rank-based only: an old expiry timestamp no longer hides a retained recording.
   board.db.prepare('UPDATE verified_replays SET expires_ms=?').run(now-1);
-  assert.equal((await fetch(base+'/api/verified/admin/replays/'+sessionId+'/12',{headers:{Authorization:'Bearer '+adminToken}})).status,404);
-  assert.equal((await fetch(base+privatePath,{headers:{Authorization:'Bearer '+adminToken}})).status,200,'Review flag retains an expired recording');
-  const binding={prepare:sql=>({bind:value=>({run:async()=>board.db.prepare(sql).run(value)})})};
+  assert.equal((await fetch(base+'/api/verified/admin/replays/'+sessionId+'/12',{headers:{Authorization:'Bearer '+adminToken}})).status,200);
+  // Fill past the limit: twenty-four recordings (laps 2–25), of which only the fastest twenty may remain.
+  for(let lap=14;lap<=25;lap++){
+   board.db.prepare('INSERT INTO verified_laps VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(sessionId,lap,revision,playerHash,'Test',0,12000+lap,12000+lap,4000,4000,4000+lap,now);
+   board.db.prepare('INSERT INTO verified_replays VALUES (?,?,?,?,?,?,?)').run(sessionId,lap,payload,await hash(payload),now+86400000,0,'unreviewed');
+  }
+  board.db.prepare("UPDATE verified_replays SET review='flagged' WHERE lap=25").run();
+  // Another revision's recording is invisible immediately and removed by cleanup.
+  const oldRevision='b'.repeat(64),oldSession='d'.repeat(32);
+  board.db.prepare('INSERT INTO verified_laps VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(oldSession,1,oldRevision,playerHash,'Test',0,700,700,200,200,300,now);
+  board.db.prepare('INSERT INTO verified_replays VALUES (?,?,?,?,?,?,?)').run(oldSession,1,payload,await hash(payload),now+86400000,1,'unreviewed');
+  assert.equal((await fetch(base+'/api/verified/replays/'+oldSession+'/1')).status,404,'Old-revision recordings are never public');
+  assert.equal((await fetch(base+'/api/verified/admin/replays/'+oldSession+'/1',{headers:{Authorization:'Bearer '+adminToken}})).status,404);
+  const binding=board.binding;
+  const laps=()=>board.db.prepare('SELECT lap FROM verified_replays ORDER BY session_id,lap').all().map(r=>r.lap);
   await worker.scheduled({}, {DB:binding});
-  assert.deepEqual(board.db.prepare('SELECT lap FROM verified_replays ORDER BY lap').all().map(r=>r.lap),[2,3,4,5,6,7,8,9,10,11,13],'Cleanup preserves pinned and flagged recordings');
-  assert.equal((await fetch(publicURL(2))).status,200,'Top-ten archive remains public after expiry');
-  // Removing the flag permits cleanup; it never changes the leaderboard result.
-  assert.equal((await post(privatePath,{review:'reviewed'},adminToken)).status,200);
-  await worker.scheduled({}, {DB:binding});
-  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_laps').get().n,13);
-  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_replays').get().n,10);
-  console.log('PASS: mandatory signed artifacts, excluded legacy scores, private/public access, review authorization, expiry, sticky top-ten retention, flagged retention, scheduled cleanup');
+  assert.equal(laps().length,25,'Cleanup without a configured revision deletes nothing');
+  await worker.scheduled({}, {DB:binding,SIMULATION_REVISION:revision});
+  assert.deepEqual(laps(),[...Array.from({length:20},(_,i)=>i+2),25],'The current revision\'s fastest twenty remain, plus the recording awaiting review');
+  assert.equal((await fetch(publicURL(2))).status,200,'Top-ten recording stays public');
+  assert.equal((await fetch(publicURL(13))).status,404,'Ranks eleven to twenty remain private');
+  // A slower lap is saved as a result, but its recording is never written once twenty faster ones exist.
+  const slow=await import('../verification/protocol.mjs').then(async({verify})=>sign({...await verify(await receipt(30),secret),replayHash:await hash(payload)},secret));
+  assert.equal((await post('/api/verified/laps',{receipt:slow,replay:payload})).status,200);
+  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_laps WHERE lap=30').get().n,1);
+  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_replays WHERE lap=30').get().n,0);
+  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_replays').get().n,21);
+  // A faster lap displaces the slowest retained recording within the same transaction.
+  board.db.prepare('INSERT INTO verified_laps VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(sessionId,40,revision,playerHash,'Test',0,11000,11000,4000,4000,3000,now);
+  board.db.prepare('INSERT INTO verified_replays VALUES (?,?,?,?,?,?,?)').run(sessionId,40,payload,await hash(payload),now,0,'unreviewed');
+  assert.equal((await post('/api/verified/laps',{receipt:signed,replay:payload})).status,200);
+  assert.deepEqual(laps(),[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,25,40]);
+  assert.equal((await fetch(publicURL(40))).status,200,'A new top-ten recording becomes public');
+  // Separate series: an account chosen as a bot at creation races only against bots.
+  const signUp=async(nickname,series)=>(await fetch(base+'/api/verified/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname,password:'recording-password',create:true,...(series?{series}:{})})}));
+  assert.equal((await signUp('Väärä','robot')).status,400);
+  const botAccount=await(await signUp('Botti','bot')).json(),viewer=await(await signUp('Katsoja')).json();
+  assert.equal(botAccount.series,'bot');assert.equal(viewer.series,'human');
+  const hashOf=name=>board.db.prepare('SELECT player_hash FROM verified_accounts WHERE nickname=?').get(name).player_hash;
+  const botHash=hashOf('Botti'),botSession='e'.repeat(32);
+  const seedBot=async(lap,ticks)=>{
+   board.db.prepare('INSERT INTO verified_laps VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(botSession,lap,revision,botHash,'Botti',0,ticks,ticks,3000,3000,ticks-6000,now);
+   board.db.prepare('INSERT INTO verified_replays VALUES (?,?,?,?,?,?,?)').run(botSession,lap,payload,await hash(payload),now,0,'unreviewed');
+  };
+  for(let lap=1;lap<=22;lap++)await seedBot(lap,9000+lap);
+  await worker.scheduled({}, {DB:binding,SIMULATION_REVISION:revision});
+  const board_=async series=>(await(await fetch(base+'/api/verified/leaderboard'+(series?'?series='+series:''))).json());
+  assert.deepEqual((await board_()).results.map(r=>r.lap),[40,2,3,4,5,6,7,8,9,10],'Faster bots never displace humans');
+  const bots=await board_('bot');assert.equal(bots.series,'bot');assert.deepEqual(bots.results.map(r=>r.lap),[1,2,3,4,5,6,7,8,9,10]);
+  assert(bots.results.every(r=>r.session_id===botSession));
+  assert.equal((await fetch(base+'/api/verified/leaderboard?series=robot')).status,400);
+  const count=session=>board.db.prepare('SELECT COUNT(*) n FROM verified_replays WHERE session_id=?').get(session).n;
+  assert.equal(count(botSession),20,'Each series keeps its own twenty recordings');assert.equal(count(sessionId),21,'Twenty humans plus one awaiting review');
+  // Viewer reports: signed-in, public recordings only, once per viewer, never one's own lap.
+  const report=(data,credential)=>post('/api/verified/report',data,credential);
+  const botLap=lap=>({sessionId:botSession,lap,reason:'bot',note:'  Täsmälleen samat ohjaukset joka kierroksella  '});
+  assert.equal((await report(botLap(1),'0'.repeat(64))).status,401);
+  assert.equal((await report({...botLap(1),reason:'cheat'},viewer.token)).status,400);
+  assert.equal((await report({...botLap(1),note:'x'.repeat(201)},viewer.token)).status,400);
+  assert.equal((await report(botLap(15),viewer.token)).status,404,'Private recordings cannot be reported');
+  assert.equal((await report(botLap(1),botAccount.token)).status,403,'Own laps cannot be reported');
+  assert.equal((await report(botLap(1),viewer.token)).status,200);
+  assert.equal((await report(botLap(1),viewer.token)).status,409,'One report per viewer and recording');
+  assert.equal(board.db.prepare('SELECT review FROM verified_replays WHERE session_id=? AND lap=1').get(botSession).review,'flagged');
+  assert.equal((await board_('bot')).results[0].lap,1,'A report never removes the result');
+  const queue=await(await fetch(base+'/api/verified/admin/replays?flagged=1',{headers:{Authorization:'Bearer '+adminToken}})).json();
+  const queued=queue.results.find(r=>r.session_id===botSession&&r.lap===1);assert.equal(queued.reports,1);assert.equal(queued.series,'bot');
+  const reportsPath='/api/verified/admin/replays/'+botSession+'/1/reports';
+  assert.equal((await fetch(base+reportsPath)).status,401);
+  const details=await(await fetch(base+reportsPath,{headers:{Authorization:'Bearer '+adminToken}})).json();
+  assert.deepEqual(details.results.map(({reason,note,reporter})=>({reason,note,reporter})),[{reason:'bot',note:'Täsmälleen samat ohjaukset joka kierroksella',reporter:'Katsoja'}]);
+  // Reported recordings stay until reviewed, but leave the public set once outside the twenty fastest.
+  for(let lap=30;lap<50;lap++)await seedBot(lap,8000+lap);
+  await worker.scheduled({}, {DB:binding,SIMULATION_REVISION:revision});
+  assert.equal(count(botSession),21,'Twenty fastest bots plus the reported recording');
+  assert.equal((await fetch(base+'/api/verified/replays/'+botSession+'/1')).status,404);
+  assert.equal((await fetch(base+'/api/verified/admin/replays/'+botSession+'/1',{headers:{Authorization:'Bearer '+adminToken}})).status,200);
+  assert.equal((await post('/api/verified/admin/replays/'+botSession+'/1',{review:'reviewed'},adminToken)).status,200);
+  await worker.scheduled({}, {DB:binding,SIMULATION_REVISION:revision});
+  assert.equal(count(botSession),20,'Review ends the retention exception');
+  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_reports').get().n,0,'Reports are removed with their recording');
+  // Daily report cap per viewer.
+  for(let i=0;i<30;i++)board.db.prepare('INSERT INTO verified_reports VALUES (?,?,?,?,?,?)').run('f'.repeat(32),i+1,hashOf('Katsoja'),'other','',now);
+  assert.equal((await report(botLap(30),viewer.token)).status,429);
+  board.db.prepare('DELETE FROM verified_reports').run();
+  // The operator moves a whole account between series; pins and retention follow immediately.
+  const move=(data,credential=adminToken)=>post('/api/verified/admin/series',data,credential);
+  assert.equal((await move({sessionId,lap:40,series:'bot'},'bad')).status,401);
+  assert.equal((await move({sessionId,lap:40,series:'robot'})).status,400);
+  assert.equal((await move({sessionId:'0'.repeat(32),lap:1,series:'bot'})).status,404);
+  assert.equal((await move({sessionId,lap:40,series:'bot'})).status,200);
+  assert.equal((await board_()).results.length,0,'The moved account leaves the human series');
+  assert((await board_('bot')).results.every(r=>r.session_id===botSession));
+  assert.deepEqual(board.db.prepare('SELECT lap FROM verified_replays WHERE session_id=? ORDER BY lap').all(sessionId).map(r=>r.lap),[13,25],'Only flagged recordings of the moved account survive outside the bot top twenty');
+  console.log('PASS: mandatory signed artifacts, excluded legacy scores, private/public access, review authorization, per-series top-twenty retention, skipped slow writes, scheduled cleanup, bot series, viewer reports, admin series moves');
  }finally{await new Promise(r=>board.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

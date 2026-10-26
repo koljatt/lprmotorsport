@@ -64,13 +64,38 @@
   $('#velocity').textContent=(Math.hypot(lerp(4),lerp(5))*3.6).toFixed(0)+' km/h';
   $('#clock').textContent=elapsed.toFixed(3)+' / '+seconds().toFixed(3)+' s';$('#seek').value=seconds()?elapsed/seconds():0;
  }
+ // The game page stores the signed-in account; reports reuse that login session.
+ function signedIn(){
+  try{const a=JSON.parse(localStorage.getItem('lpr-account')||'null');return a&&/^[a-f0-9]{64}$/.test(a.token)&&Number.isSafeInteger(a.expiresAt)&&a.expiresAt>Date.now()?a:null;}catch{return null;}
+ }
+ let reportTarget=null;
+ const reasons={bot:'Epäilty botti',inputs:'Epäluonnolliset ohjauskomennot',line:'Epäilyttävä ajolinja tai aika',other:'Muu syy'};
+ function showReport(id,lap){
+  reportTarget={sessionId:id,lap:Number(lap)};const login=!!signedIn();
+  $('#report').hidden=false;$('#report-form').hidden=!login;$('#report-signin').hidden=login;$('#report-status').textContent='';$('#report-send').disabled=false;
+ }
+ const reportMessages={200:'Kiitos. Ilmoitus on välitetty ylläpidon tarkastettavaksi.',400:'Tarkista syy ja lisätieto (enintään 200 merkkiä).',
+  401:'Kirjautuminen on vanhentunut. Kirjaudu pelissä uudelleen.',403:'Omasta kierroksesta ei voi ilmoittaa.',404:'Uusinta ei ole enää julkinen.',
+  409:'Olet jo ilmoittanut tästä kierroksesta.',429:'Liian monta ilmoitusta. Yritä myöhemmin uudelleen.'};
+ $('#report-form').onsubmit=async event=>{
+  event.preventDefault();const login=signedIn(),target=reportTarget;if(!login||!target)return;
+  $('#report-send').disabled=true;$('#report-status').textContent='Lähetetään…';
+  try{
+   const response=await fetch(config.leaderboard+'/api/verified/report',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+login.token},
+    body:JSON.stringify({...target,reason:$('#report-reason').value,note:$('#report-note').value}),signal:AbortSignal.timeout(15000)});
+   if(target!==reportTarget)return;
+   $('#report-status').textContent=reportMessages[response.status]||'Ilmoitus epäonnistui ('+response.status+').';
+   if(response.ok||[403,404,409].includes(response.status)){$('#report-form').hidden=true;$('#report-note').value='';}else $('#report-send').disabled=false;
+  }catch{if(target===reportTarget){$('#report-status').textContent='Ilmoitus epäonnistui. Tarkista yhteys ja yritä uudelleen.';$('#report-send').disabled=false;}}
+ };
  async function load(id,lap,privateReplay=false,label=''){
-  const gen=++generation;pause();message('Ladataan uusintaa…');
+  const gen=++generation;pause();message('Ladataan uusintaa…');$('#report').hidden=true;reportTarget=null;
   try{
    if(!/^[a-f0-9]{32}$/.test(id)||!Number.isSafeInteger(Number(lap))||Number(lap)<1)throw Error('Virheellinen tallenteen osoite.');
    const r=await api('/api/verified/'+(privateReplay?'admin/':'')+'replays/'+id+'/'+lap);
    if(gen!==generation)return;if(!valid(r))throw Error('Tallenne on vioittunut tai sen muotoa ei tueta.');
    recording=r;elapsed=0;driverUnavailable=false;resetCamera();$('#view-note').textContent='';$('#viewer').hidden=false;draw();message(label||'Palvelimen varmentama kierros · '+seconds().toFixed(3)+' s');
+   if(!privateReplay)showReport(id,lap);
   }catch(error){if(gen===generation){recording=null;$('#viewer').hidden=true;message(error.message);}}
  }
  async function list(){
@@ -80,11 +105,26 @@
    for(const r of data.results){const tr=document.createElement('tr');
     const add=value=>{const td=document.createElement('td');if(value instanceof Node)td.append(value);else td.textContent=value;tr.append(td);};
     add(r.nickname+' · '+(r.lap_ticks/120).toFixed(3)+' s');add(new Date(r.issued_ms).toLocaleString('fi-FI'));
+    // Series belongs to the account: changing it moves every lap of that driver.
+    const series=document.createElement('select');series.setAttribute('aria-label','Kuljettajan sarja');
+    for(const [value,label]of [['human','Ihminen'],['bot','Botti']]){const o=document.createElement('option');o.value=value;o.textContent=label;series.append(o);}series.value=r.series||'human';
+    series.onchange=async()=>{series.disabled=true;try{await api('/api/verified/admin/series',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:r.session_id,lap:r.lap,series:series.value})});message('Kuljettajan '+r.nickname+' sarja vaihdettu.');await list();message('Kuljettajan '+r.nickname+' sarja vaihdettu.');}catch(error){series.value=r.series||'human';series.disabled=false;message(error.message);}};add(series);
     if(r.replay_available){const view=document.createElement('button');view.textContent='Katso · '+Math.round(r.bytes/1024)+' kt';view.onclick=()=>void load(r.session_id,r.lap,true,r.nickname+' · '+(r.lap_ticks/120).toFixed(3)+' s');add(view);
      const select=document.createElement('select');select.setAttribute('aria-label','Suorituksen tarkastustila');
      for(const [value,label]of [['unreviewed','Ei tarkastettu'],['flagged','Tarkastettava'],['reviewed','Tarkastettu']]){const o=document.createElement('option');o.value=value;o.textContent=label;select.append(o);}select.value=r.review;
      select.onchange=async()=>{select.disabled=true;try{await api('/api/verified/admin/replays/'+r.session_id+'/'+r.lap,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({review:select.value})});r.review=select.value;message('Tarkastusmerkintä tallennettu.');}catch(error){select.value=r.review;message(error.message);}finally{select.disabled=false;}};add(select);
-    }else{add('Ei tallennetta');add('—');}$('#runs').append(tr);
+    }else{add('Ei tallennetta');add('—');}
+    if(r.reports){const show=document.createElement('button');show.textContent=r.reports+' kpl';show.setAttribute('aria-expanded','false');
+     let details=null;
+     show.onclick=async()=>{
+      if(details){details.remove();details=null;show.setAttribute('aria-expanded','false');return;}
+      try{const data=await api('/api/verified/admin/replays/'+r.session_id+'/'+r.lap+'/reports');
+       details=document.createElement('tr');const td=document.createElement('td');td.colSpan=6;const ul=document.createElement('ul');
+       for(const p of data.results){const li=document.createElement('li');li.textContent=new Date(p.created_ms).toLocaleString('fi-FI')+' · '+(p.reporter||'poistettu tili')+' · '+(reasons[p.reason]||p.reason)+(p.note?' · '+p.note:'');ul.append(li);}
+       td.append(ul);details.append(td);tr.after(details);show.setAttribute('aria-expanded','true');
+      }catch(error){message(error.message);}
+     };add(show);
+    }else add('—');$('#runs').append(tr);
    }
    $('#previous').disabled=offset===0;$('#next').disabled=!data.hasMore;message('Suoritukset '+(offset+1)+'–'+(offset+data.results.length));
   }catch(error){if(gen===generation)message(error.message);}

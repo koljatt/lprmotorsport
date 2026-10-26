@@ -20,7 +20,7 @@ jälkikäteen. Fysiikkarevisio ja tallennetut vanhat tulokset eivät muutu, mutt
   kuitti sitoo mukana toimitetun tallenteen. Pelkkä aika tai kuitti ilman
   tallennetta hylätään. Myös selaimen tallennustilan täyttyessä jonossa pidetään
   koko tallenne, ei pelkkiä kuitteja. Pidä välilehti auki lähetyksen ajan.
-- TOP 10 valitaan vain kierroksista, joilla on julkinen, pysyvästi kiinnitetty
+- TOP 10 valitaan vain kierroksista, joilla on julkinen, kiinnitetty
   tallenne. Vanhat tallenteettomat tulokset säilyvät tietokannassa ylläpidolle,
   mutta eivät voi viedä TOP 10 -paikkoja. Jos tallennus ylittää 900 000 merkin
   rajan tai epäonnistuu, kierros ei kelpaa julkiselle listalle.
@@ -48,16 +48,45 @@ vaihtoehtoista 2D-ratakuvaa. Automaattista bottipisteytystä ei lisätty.
 
 `verified_replays` on erillinen taulu: tulokset säilyvät `verified_laps`-taulussa.
 
-- Tavalliset uusinnat ovat ylläpidon katsottavissa 30 päivää kierroksen myöntämisestä.
-- Minkä tahansa revision TOP 10:een tallennushetkellä päässeet uusinnat saavat
-  pysyvän `pinned=1`-merkinnän. Ne säilyvät julkisina myös sijoituksen pudottua.
+- Tietokantaan säilytetään **kummastakin sarjasta (ihmiset, botit) nykyisen fysiikkarevision
+  20 nopeimman** kierroksen uusinnat (`REPLAY_LIMIT` tiedostossa `cloudflare/replays.mjs`), samassa
+  järjestyksessä kuin tuloslista. Muut tallenteet poistetaan, myös vanhojen revisioiden ja poistettujen
+  tilien, ellei tallenne odota tarkastusta. Tulokset säilyvät `verified_laps`-taulussa ilman tallennetta.
+- Jos kierros ei mahdu oman sarjansa 20 parhaan joukkoon, sen tallennetta ei kirjoiteta lainkaan.
+  Nopeampi kierros syrjäyttää hitaimman säilytetyn tallenteen samassa D1-transaktiossa.
+  Tilankäyttö on siis noin 2 × 20 × 550 kB ≈ 22 MB sekä tarkastusta odottavat tallenteet.
+- TOP 10:een päässyt tallenne saa `pinned=1`-merkinnän ja on julkinen niin kauan kuin se
+  säilyy sarjansa 20 parhaan joukossa. Sijat 11–20 ilman merkintää näkyvät vain ylläpidolle.
 - Ylläpito voi merkitä tallenteen `flagged` (tarkastettava), `reviewed`
-  (tarkastettu) tai `unreviewed` (ei tarkastettu). `flagged` säilyttää tallenteen
-  myös 30 päivän jälkeen. Merkintä ei poista tulosta tai väitä pelaajaa botiksi.
-- Vanhentunutta yksityistä tallennetta ei palauteta katselurajapinnasta, vaikka
-  päivittäinen fyysinen siivous olisi vielä tekemättä.
-- Siivous tapahtuu kierrosten tallennuksen yhteydessä ja Worker Cron Triggerillä.
-  TOP 10 -arkiston ja tarkastusjonon kasvu ei ole rajattu; seuraa D1:n tilankäyttöä.
+  (tarkastettu) tai `unreviewed` (ei tarkastettu). Merkintä ei poista tulosta eikä väitä
+  pelaajaa botiksi. `flagged`-tallenne säilyy myös 20 parhaan ulkopuolella (ei julkisena),
+  kunnes ylläpito vaihtaa tilan; seuraava siivous poistaa sen sitten normaalisti.
+- Vanhan revision tallennetta ei palauteta julkisesta katselurajapinnasta, vaikka fyysinen
+  siivous olisi vielä tekemättä. Sarake `expires_ms` säilyy skeemassa, mutta sitä ei käytetä.
+- Siivous tapahtuu kierrosten tallennuksen yhteydessä, sarjan vaihdon yhteydessä ja Worker Cron Triggerillä.
+  Ajastettu siivous ei tee mitään, jos Workerin revisio puuttuu. **Väärä
+  `SIMULATION_REVISION` poistaa kaikki tarkastusta odottamattomat tallenteet**, koska ne tulkitaan vanhan revision tallenteiksi.
+
+## Sarjat: ihmiset ja botit
+
+- Tilin luonti etenee kahdessa vaiheessa: ensin nimimerkki ja salasana, sitten pakollinen
+  **Kummassa sarjassa ajat?** -valinta kuvakorteilla (ihminen / robotti), joista kumpaakaan ei ole
+  valittu valmiiksi. Tili luodaan vasta toisessa vaiheessa. Valinta tallennetaan
+  `verified_account_series`-tauluun; rivin puuttuminen tarkoittaa ihmissarjaa.
+- Tuloslistalla on välilehdet **Ihmiset** ja **Botit** (`/api/verified/leaderboard?series=human|bot`).
+  Kirjautuneelle näytetään oman sarjan lista. Botit eivät koskaan vie ihmissarjan paikkoja.
+- Ylläpito voi siirtää tilin sarjasta toiseen ylläpitonäkymän **Sarja**-valinnalla.
+  Siirto koskee tilin kaikkia kierroksia, ja kiinnitykset ja säilytys lasketaan heti uudelleen.
+
+## Katsojien ilmoitukset
+
+- Kirjautunut katsoja voi ilmoittaa julkisesta (TOP 10) uusinnasta: syy (epäilty botti,
+  epäluonnolliset ohjauskomennot, epäilyttävä ajolinja tai aika, muu) ja valinnainen enintään
+  200 merkin lisätieto. Ilmoitus käyttää pelin kirjautumista (`POST /api/verified/report`).
+- Yksi ilmoitus katsojaa ja kierrosta kohden, enintään 30 vuorokaudessa. Omasta kierroksesta
+  ei voi ilmoittaa. Ilmoitus merkitsee tallenteen `flagged`-tilaan, mutta ei piilota tulosta.
+- Ilmoitukset (`verified_reports`: ilmoittajan tili, syy, lisätieto, aika) näkyvät vain ylläpidolle
+  ja poistuvat tallenteen mukana.
 
 Ylläpito: pelin `replay.html?admin=1` tai katselimen **Ylläpito**-linkki.
 Kirjaudu Workerille asetetulla `ANALYTICS_ADMIN_TOKEN`-avaimella. Avain jää vain
@@ -81,7 +110,7 @@ Olemassa olevan D1-tietokannan kiintiöt pätevät edelleen.
    eri Workerissa oleva samanniminen secret ei siirry automaattisesti.
    Älä käytä `VERIFICATION_SECRET`-avainta ylläpitokirjautumiseen.
 4. Lisää Workerille päivittäinen Cron Trigger **`0 3 * * *`** (UTC).
-   Handler poistaa vain vanhentuneet, kiinnittämättömät ja liputtamattomat tallenteet.
+   Handler poistaa tallenteet, jotka eivät kuulu kummankaan sarjan nykyisen revision 20 nopeimpaan eivätkä odota tarkastusta.
 5. Julkaise varmennuspalvelin ja pelin Pages-julkaisu. Worker julkaistaan ensin,
    koska uudet selainpyynnöt sisältävät suuremman tallenteen. Fysiikkarevisio
    pysyy samana: tämän muutoksen vuoksi tuloslistaa ei nollata.
@@ -99,8 +128,9 @@ luodaan automaattisesti. Uusinnat tallentuvat samaan paikalliseen SQLite-tietoka
   ohjauskomennoista uudelleen laskettuun fysiikkaan, väärennösten torjunta,
   SQLite-tallennus, julkinen katselu ja ylläpidon oikeudet. Myös selaimen
   uusintalähetysjono testataan sekä vanhalla että tallenteellisella kuitilla.
-- `npm run test:recordings`: käyttöoikeudet, määräaika, päivittäinen siivous,
-  top-ten-arkisto, tarkastusjono, vanhat ajat sekä katselimen lataus, aikajana,
+- `npm run test:recordings`: käyttöoikeudet, sarjakohtainen 20 parhaan säilytys, hitaan kierroksen
+  ohitettu kirjoitus, vanhan revision tallenteet, päivittäinen siivous, tarkastusjono, bottisarja,
+  katsojien ilmoitukset ja ylläpidon sarjasiirrot, vanhat ajat sekä katselimen lataus, ilmoituslomake, aikajana,
   toisto/tauko/nopeus/alkuun, mittayksiköt, puuttuva/viallinen tallenne ja lukitus.
 - `npm run test:analytics`, `npm run test:leaderboard`, `npm run build`,
   `npm run build:verified-worker`.

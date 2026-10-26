@@ -7,12 +7,12 @@ function accountReply(body){
   if(existing){
     if(body.create===true)return {status:409};
     if(existing.password!==body.password)return {status:401};
-    return {status:200,data:{nickname:existing.nickname,token:existing.token,expiresAt:Date.now()+7*86400000,created:false}};
+    return {status:200,data:{nickname:existing.nickname,token:existing.token,expiresAt:Date.now()+7*86400000,created:false,series:existing.series}};
   }
   if(body.create!==true)return {status:404};
-  const account={nickname:body.nickname,password:body.password,token:nodeCrypto.createHash('sha256').update('account:'+key).digest('hex')};
+  const account={nickname:body.nickname,password:body.password,series:body.series,token:nodeCrypto.createHash('sha256').update('account:'+key).digest('hex')};
   serverAccounts.set(key,account);
-  return {status:201,data:{nickname:account.nickname,token:account.token,expiresAt:Date.now()+7*86400000,created:true}};
+  return {status:201,data:{nickname:account.nickname,token:account.token,expiresAt:Date.now()+7*86400000,created:true,series:account.series}};
 }
 function setup(storage=new Map(),options={}){
   const nodes=new Map(),calls=[],celebrations=[],handlers=new Map(),identified=[];
@@ -58,9 +58,15 @@ function setup(storage=new Map(),options={}){
   const board=context.window.LPRLeaderboard;
   return {board,node,calls,storage,celebrations,network,handlers,identified,
     // Select the explicit sign-in or account-creation flow.
-    async login(name='Panu',password='salasana'){
-      if(!storage.get('lpr-account'))node(serverAccounts.has(name.trim().normalize('NFC').toLowerCase())?'#leaderboard-login':'#leaderboard-create').trigger('click');
+    async login(name='Panu',password='salasana',series='human'){
+      const creating=!storage.get('lpr-account')&&!serverAccounts.has(name.trim().normalize('NFC').toLowerCase());
+      if(!storage.get('lpr-account'))node(creating?'#leaderboard-create':'#leaderboard-login').trigger('click');
       node('#leaderboard-name').value=name;node('#leaderboard-password').value=password;
+      await node('#leaderboard-start-form').trigger('submit');
+      if(creating&&!node('#leaderboard-series-step').hidden)await this.chooseSeries(series);
+    },
+    async chooseSeries(series){
+      const choice=node('#leaderboard-series-'+series);choice.value=series;choice.checked=true;choice.trigger('change');
       await node('#leaderboard-start-form').trigger('submit');
     },
     account:()=>JSON.parse(storage.get('lpr-account')??'null'),
@@ -90,11 +96,13 @@ function setup(storage=new Map(),options={}){
   node('#leaderboard-password').value='salasana';node('#leaderboard-name').value=' Panu ';await node('#leaderboard-start-form').trigger('submit');
   assert(board.requiresName,'A free nickname is never claimed without confirmation');
   assert.equal(node('#leaderboard-start-label').textContent,'Kirjaudu sisään');assert.equal(accountCalls.at(-1).create,false);
+  assert.equal(accountCalls.at(-1).series,undefined,'Signing in never sends a series');assert.equal(node('#leaderboard-series-step').hidden,true,'The series step belongs only to account creation');
   await node('#leaderboard-start-form').trigger('submit');
   assert.equal(accountCalls.at(-1).create,false,'Retrying sign-in never creates an account');
   node('#leaderboard-name').trigger('input');assert.equal(node('#leaderboard-start-label').textContent,'Kirjaudu sisään');
   await app.login(' Panu ');assert(!board.requiresName);assert(!node('#settings-dialog').open);
   assert.equal(accountCalls.at(-1).create,true);assert.equal(accountCalls.at(-1).nickname,'Panu');
+  assert.equal(accountCalls.at(-1).series,'human');assert.equal(board.identity.series,'human');
   assert.deepEqual(app.identified,['Panu']);assert(node('#leaderboard-name').readOnly);assert(node('#leaderboard-start').hidden);
   assert.equal(node('#leaderboard-password').value,'','The password is not kept in the form');
   const token=app.account().token;assert.equal(token,serverAccounts.get('panu').token);
@@ -147,8 +155,9 @@ function setup(storage=new Map(),options={}){
   assert.equal(caseless.board.identity.nickname,'Panu','The account keeps its original spelling');assert.equal(caseless.board.identity.token,token);
   const race=setup();race.node('#leaderboard-create').trigger('click');race.node('#analytics-consent').checked=true;race.node('#leaderboard-name').value='Kilpa';race.node('#leaderboard-password').value='12345678';
   accountReply({nickname:'kilpa',password:'toinen12',create:true});
-  await race.node('#leaderboard-start-form').trigger('submit');
+  await race.node('#leaderboard-start-form').trigger('submit');await race.chooseSeries('human');
   assert(race.board.requiresName);assert.match(race.node('#leaderboard-status').textContent,/jo varattu/,'A nickname claimed meanwhile is not overwritten');
+  assert.equal(race.node('#leaderboard-series-step').hidden,true,'A taken nickname returns to the credentials step');assert.equal(race.node('#leaderboard-credentials').hidden,false);
   const down=setup(new Map(),{accountOffline:true});await down.login('Kuka');
   assert(down.board.requiresName);assert.match(down.node('#leaderboard-status').textContent,/ei onnistunut/);
   const legacy=setup(new Map([['lpr-nickname','Legacy'],['lpr-player-token','a'.repeat(64)]]));
@@ -185,5 +194,22 @@ function setup(storage=new Map(),options={}){
   throttled.network.status=200;await throttled.handlers.get('online')();assert.equal(throttled.queue().length,0);
   const old=setup(new Map(),{result:{mode:'old'}});await old.login();await old.lap();
   assert.match(old.node('#leaderboard-status').textContent,/ei vielä tue/);
-  console.log('PASS: required identity, server start/finish hooks, no retrospective tickets, cancellation, moderation, safe rendering, records, password accounts with confirmed nickname claims, offline play, durable retries and terminal/transient queue errors');
+  // Account creation is two steps: credentials, then an explicit human/bot series choice.
+  const botStorage=new Map(),bot=setup(botStorage);bot.board.beginSession();const before=accountCalls.length;
+  bot.node('#leaderboard-create').trigger('click');
+  assert.equal(bot.node('#leaderboard-start-label').textContent,'Jatka');assert.equal(bot.node('#leaderboard-series-step').hidden,true);
+  bot.node('#leaderboard-name').value='Robotti';bot.node('#leaderboard-password').value='salasana';
+  await bot.node('#leaderboard-start-form').trigger('submit');
+  assert.equal(accountCalls.length,before,'Credentials alone never create the account');
+  assert.equal(bot.node('#leaderboard-series-step').hidden,false);assert.equal(bot.node('#leaderboard-credentials').hidden,true);
+  assert.equal(bot.node('#leaderboard-start-label').textContent,'Luo käyttäjätunnus');assert.match(bot.node('#leaderboard-series-name').textContent,/Robotti/);
+  await bot.node('#leaderboard-start-form').trigger('submit');
+  assert.equal(accountCalls.length,before,'No series is preselected');assert.match(bot.node('#leaderboard-status').textContent,/Valitse ihmisten tai bottien sarja/);
+  bot.node('#leaderboard-back').trigger('click');
+  assert.equal(bot.node('#leaderboard-series-step').hidden,true);assert.equal(bot.node('#leaderboard-name').value,'Robotti','Back keeps the credentials');
+  await bot.node('#leaderboard-start-form').trigger('submit');await bot.chooseSeries('bot');
+  assert.equal(accountCalls.at(-1).series,'bot');assert.equal(bot.board.identity.series,'bot');assert.equal(bot.account().series,'bot');
+  const returning=setup(botStorage);returning.board.beginSession();await returning.node('#leaderboard-start-form').trigger('submit');
+  assert.equal(returning.board.identity.series,'bot','A remembered login keeps its series');
+  console.log('PASS: required identity, server start/finish hooks, no retrospective tickets, cancellation, moderation, safe rendering, records, password accounts with confirmed nickname claims, bot series choice, offline play, durable retries and terminal/transient queue errors');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -19,7 +19,7 @@ async function createLocalLeaderboard({secret,revision,database=':memory:',origi
    res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
   }catch{res.writeHead(500);res.end('Local worker failed');}
  });
- server.on('close',()=>db.close());server.db=db;
+ server.on('close',()=>db.close());server.db=db;server.binding=binding;
  return server;
 }
 module.exports={createLocalLeaderboard};

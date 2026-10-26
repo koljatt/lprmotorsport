@@ -1,4 +1,4 @@
-import {replaySchema,replayStatements,replayRoute} from './replays.mjs';
+import {replaySchema,moderationSchema,replayStatements,replayRoute,retentionStatements,reportReplay,seriesFor,seriesOf,SERIES} from './replays.mjs';
 import {sign,verify,hash,protocol,validPlayer,validName} from '../verification/protocol.mjs';
 // npm run build:verified-worker inlines the protocol and the simulation revision into a pasteable bundle.
 const BUILD_REVISION='';
@@ -18,7 +18,7 @@ async function newSession(db,account,secret){
  await db.prepare('DELETE FROM verified_login_sessions WHERE expires_ms<=?').bind(now).run();
  await db.prepare('INSERT INTO verified_login_sessions(token_hash,player_hash,secret_hash,created_ms,expires_ms) VALUES (?,?,?,?,?)')
   .bind(await hash(token),account.player_hash,await hash(secret),now,expiresAt).run();
- return {nickname:account.nickname,token,expiresAt};
+ return {nickname:account.nickname,token,expiresAt,series:await seriesFor(db,account.player_hash)};
 }
 export const schema=[...replaySchema,
  `CREATE TABLE IF NOT EXISTS verified_laps (
@@ -34,7 +34,7 @@ const accountsReady=new WeakSet();
 const ensureAccounts=async db=>{
  if(accountsReady.has(db))return;
  // Cache completion only: never share request-owned I/O promises across Worker requests.
- for(const sql of [accountSchema,sessionSchema,sessionIndex])await db.prepare(sql).run();
+ for(const sql of [accountSchema,sessionSchema,sessionIndex,...moderationSchema])await db.prepare(sql).run();
  accountsReady.add(db);
 };
 // Cloudflare Workers caps PBKDF2 at 100 000 iterations. If sign-ins exceed the plan's CPU limit,
@@ -62,7 +62,10 @@ async function body(request,limit=8192){
 }
 export default {
  async scheduled(controller,env){
-  await env.DB.prepare("DELETE FROM verified_replays WHERE expires_ms<=? AND pinned=0 AND review!='flagged'").bind(Date.now()).run();
+  const revision=env.SIMULATION_REVISION||BUILD_REVISION;
+  // Without a valid revision the ranking is empty and every recording would be deleted.
+  if(!validPlayer(revision))return;
+  await env.DB.batch(retentionStatements(env.DB,revision));
  },
  async fetch(request,env){
   const revision=env.SIMULATION_REVISION||BUILD_REVISION;
@@ -77,12 +80,14 @@ export default {
    if(!env.DB||!validPlayer(revision)||typeof env.VERIFICATION_SECRET!=='string'||env.VERIFICATION_SECRET.length<32)return reply({error:'Verification not configured'},503);
    const url=new URL(request.url);
    await ensureAccounts(env.DB);
-   if(url.pathname.startsWith('/api/verified/replays/')||url.pathname.startsWith('/api/verified/admin/'))return await replayRoute(request,env,url,reply,headers,body);
+   if(url.pathname.startsWith('/api/verified/replays/')||url.pathname.startsWith('/api/verified/admin/'))return await replayRoute(request,env,url,reply,headers,body,revision);
    if(url.pathname==='/api/verified/leaderboard'&&request.method==='GET'){
+    const series=url.searchParams.get('series')||'human';
+    if(!SERIES.includes(series))return reply({error:'Invalid series'},400);
     const rows=await env.DB.prepare(`SELECT a.nickname,l.lap_ticks,l.sector1,l.sector2,l.sector3,l.session_id,l.lap,
      CASE WHEN r.pinned=1 THEN 1 ELSE 0 END AS replay_available FROM verified_laps l JOIN verified_replays r USING(session_id,lap) JOIN verified_accounts a ON a.player_hash=l.player_hash
-     WHERE l.revision=? AND r.pinned=1 ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision).all();
-    return reply({protocol,revision:revision,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
+     WHERE l.revision=? AND r.pinned=1 AND ${seriesOf('l.player_hash')}=? ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision,series).all();
+    return reply({protocol,revision:revision,series,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
    }
    const limit=async(id,max,windowMs)=>{
     const result=await env.DB.prepare('INSERT INTO verified_limits(key,attempts,expires) VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(id,Date.now()+windowMs).first();
@@ -117,16 +122,20 @@ export default {
      return reply({...await newSession(env.DB,account,env.VERIFICATION_SECRET),created:false});
     }
     if(data.create!==true)return reply({error:'Account not found'},404);
+    const series=data.series??'human';
+    if(!SERIES.includes(series))return reply({error:'Invalid account'},400);
     const created={name_key:key,nickname:data.nickname,credential_salt:randomHex(),password_salt:randomHex(),iterations:passwordIterations(env),created_ms:now};
     created.password_hash=await passwordHash(data.password,created.password_salt,created.iterations);
     created.player_hash=randomHex()+randomHex();
-    const inserted=await env.DB.prepare(`INSERT OR IGNORE INTO verified_accounts
+    const [inserted]=await env.DB.batch([env.DB.prepare(`INSERT OR IGNORE INTO verified_accounts
      (name_key,nickname,player_hash,credential_salt,password_salt,password_hash,iterations,created_ms) VALUES (?,?,?,?,?,?,?,?)`)
-     .bind(key,created.nickname,created.player_hash,created.credential_salt,created.password_salt,created.password_hash,created.iterations,now).run();
+     .bind(key,created.nickname,created.player_hash,created.credential_salt,created.password_salt,created.password_hash,created.iterations,now),
+     env.DB.prepare(`INSERT OR IGNORE INTO verified_account_series(player_hash,series,changed_ms)
+      SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM verified_accounts WHERE player_hash=?)`).bind(created.player_hash,series,now,created.player_hash)]);
     if(!inserted.meta.changes)return reply({error:'Nickname taken'},409);
     return reply({...await newSession(env.DB,created,env.VERIFICATION_SECRET),created:true},201);
    }
-   if(!['/api/verified/start','/api/verified/chat-ticket','/api/verified/laps','/api/verified/logout'].includes(url.pathname))return reply({error:'Not found'},404);
+   if(!['/api/verified/start','/api/verified/chat-ticket','/api/verified/laps','/api/verified/logout','/api/verified/report'].includes(url.pathname))return reply({error:'Not found'},404);
    if(request.method!=='POST')return reply({error:'POST required'},405);
    const token=request.headers.get('Authorization')?.replace(/^Bearer /,'');
    if(!validPlayer(token))return reply({error:'Player credential required'},401);
@@ -151,6 +160,7 @@ export default {
     return reply({protocol,nickname:owner.nickname,expiresInMs:CHAT_TICKET_MS,
      ticket:await sign({kind:'chat',protocol,playerHash,nickname:owner.nickname,issuedAt:now,expiresAt},env.VERIFICATION_SECRET)});
    }
+   if(url.pathname==='/api/verified/report')return await reportReplay(env,await body(request,4096),playerHash,revision,now,reply);
    const data=await body(request,starting?8192:950000);
    if(starting){
     if(data?.revision!==revision)return reply({error:'Invalid start'},400);

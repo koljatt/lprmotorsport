@@ -22,3 +22,12 @@ CREATE TABLE IF NOT EXISTS verified_replays (
  expires_ms INTEGER NOT NULL,pinned INTEGER NOT NULL DEFAULT 0,review TEXT NOT NULL DEFAULT 'unreviewed',
  PRIMARY KEY(session_id,lap));
 CREATE INDEX IF NOT EXISTS replay_expiry ON verified_replays(pinned,review,expires_ms);
+
+-- Leaderboard series per account; a missing row means the human series.
+CREATE TABLE IF NOT EXISTS verified_account_series (
+ player_hash TEXT PRIMARY KEY,series TEXT NOT NULL CHECK(series IN ('human','bot')),changed_ms INTEGER NOT NULL);
+-- One report per signed-in viewer and recording; removed together with the recording.
+CREATE TABLE IF NOT EXISTS verified_reports (
+ session_id TEXT NOT NULL,lap INTEGER NOT NULL,reporter_hash TEXT NOT NULL,reason TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',
+ created_ms INTEGER NOT NULL,PRIMARY KEY(session_id,lap,reporter_hash));
+CREATE INDEX IF NOT EXISTS verified_report_author ON verified_reports(reporter_hash,created_ms);

@@ -68,8 +68,18 @@
   if(!response.ok)throw Object.assign(Error('Varmennettu tuloslista ei ole saatavilla ('+response.status+').'),{status:response.status});
   return response.json();
  }
+ let series='human';
+ const seriesTabs=[['human','#verified-series-human'],['bot','#verified-series-bot']].map(([value,selector])=>[value,document.querySelector(selector)]);
+ function showSeries(value){
+  if(!['human','bot'].includes(value)||series===value)return;
+  series=value;for(const [option,tab]of seriesTabs)tab?.setAttribute?.('aria-pressed',String(option===value));
+  void refresh();
+ }
+ for(const [value,tab]of seriesTabs)tab?.addEventListener?.('click',()=>showSeries(value));
  async function refresh(){
-  try{const data=await api('/api/verified/leaderboard');
+  const wanted=series;
+  try{const data=await api('/api/verified/leaderboard?series='+wanted);
+   if(wanted!==series)return;
    if(data.protocol!=='driving-v1'||data.revision!==revision)throw Error('Versio ei täsmää.');
    list.textContent='';
    for(const row of data.results){
@@ -84,7 +94,7 @@
     list.append(li);
    }
    if(!data.results.length)list.textContent='Ei vielä kierrosaikoja.';
-  }catch{list.textContent='Tuloslista ei ole juuri nyt saatavilla.';}
+  }catch{if(wanted===series)list.textContent='Tuloslista ei ole juuri nyt saatavilla.';}
  }
  let sending=null;
  async function save(){
@@ -203,7 +213,7 @@
  function sync(){restore();return save();}
  setInterval(()=>{if(!document.hidden&&document.querySelector('#settings-dialog').open)void sync();},15000);
  window.LPRVerifiedDriving.identityCleared=()=>{cancel(null);identity=null;pending.length=0;};
- window.LPRVerifiedDriving.identityReady=()=>{restore();if(identity){void save();void start();}};
+ window.LPRVerifiedDriving.identityReady=()=>{restore();showSeries(window.LPRLeaderboard.identity?.series);if(identity){void save();void start();}};
  document.addEventListener('visibilitychange',()=>{
   if(document.hidden){autoRetryAllowed=false;cancel();}
   else if(connectionUnavailable&&autoRetryAllowed&&window.LPRLeaderboard.identity)void start({reconnect:true});

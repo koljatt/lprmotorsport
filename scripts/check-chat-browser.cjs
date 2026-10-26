@@ -28,7 +28,7 @@ const {chromium}=require('playwright');
    await page.goto(origin);await page.waitForFunction(()=>window.__chatGame,null,{polling:50});
    await page.locator('#leaderboard-create').click();
    await page.locator('#leaderboard-name').fill(name);await page.locator('#leaderboard-password').fill('chat-browser-password');
-   await page.locator('#leaderboard-start').click();await page.waitForFunction(()=>!window.LPRLeaderboard.requiresName,null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),errors});throw error;});
+   await page.locator('#leaderboard-start').click();await page.locator('label:has(#leaderboard-series-human)').click();await page.locator('#leaderboard-start').click();await page.waitForFunction(()=>!window.LPRLeaderboard.requiresName,null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),errors});throw error;});
    await page.locator('#chat-button').click();return page;
   }
   const first=await player('Kuljettaja'),second=await player('Varikko');

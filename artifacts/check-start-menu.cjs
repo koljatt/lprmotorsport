@@ -26,14 +26,14 @@ const { chromium } = require('playwright');
       assert.equal(await page.locator('#leaderboard-password').getAttribute('autocomplete'), 'current-password');
       await page.click('#leaderboard-back');
       await page.click('#leaderboard-create');
-      assert.equal(await page.locator('#leaderboard-start-label').textContent(), 'Luo käyttäjätunnus');
+      assert.equal(await page.locator('#leaderboard-start-label').textContent(), 'Jatka');
       assert.equal(await page.locator('#leaderboard-password').getAttribute('autocomplete'), 'new-password');
       await page.click('#leaderboard-back');
     }
     await page.evaluate(() => window.LPRI18n.setLanguage('en'));
     assert.equal(await page.locator('#leaderboard-practice').textContent(), 'Practice without signing in');
     await page.click('#leaderboard-create');
-    assert.equal(await page.locator('#leaderboard-start-label').textContent(), 'Create an account');
+    assert.equal(await page.locator('#leaderboard-start-label').textContent(), 'Continue');
     await page.click('#leaderboard-back');
     await page.click('#leaderboard-practice');
     assert(await page.evaluate(() => !window.LPRLeaderboard.requiresName && !window.LPRLeaderboard.identity));
