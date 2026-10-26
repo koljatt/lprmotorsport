@@ -1,13 +1,15 @@
 const http=require('node:http');
 const {timingSafeEqual}=require('node:crypto');
 const {Sessions}=require('./sessions.cjs');
+const {createCapacityReporter}=require('./capacity-reporter.cjs');
 const {revision}=require('./world.cjs');
 const {createChat}=require('./chat.cjs');
-async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],sessionsOptions={},metricsToken=process.env.VERIFICATION_METRICS_TOKEN}={}) {
+async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],sessionsOptions={},metricsToken=process.env.VERIFICATION_METRICS_TOKEN,capacityReportURL=process.env.CAPACITY_REPORT_URL}={}) {
  const {sign,verify,protocol,validPlayer,validName}=await import('./protocol.mjs');
  if(typeof secret!=='string'||secret.length<32)throw Error('VERIFICATION_SECRET must contain at least 32 characters');
+ const reporter=createCapacityReporter({url:capacityReportURL,token:metricsToken});
  const used=new Map();
- const sessions=new Sessions({maxSessions:Number(process.env.MAX_VERIFIED_SESSIONS||2),maxStartsPerMinute:Number(process.env.MAX_VERIFIED_STARTS_PER_MINUTE||8),...sessionsOptions,signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
+ const sessions=new Sessions({maxSessions:Number(process.env.MAX_VERIFIED_SESSIONS||2),maxStartsPerMinute:Number(process.env.MAX_VERIFIED_STARTS_PER_MINUTE||8),...sessionsOptions,onMetric:(key,count)=>reporter.record(key,count),signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
   sessionId:s.id,playerHash:s.identity.playerHash,nickname:s.identity.nickname,...lap,issuedAt:Date.now()},secret)});
  const allowed=new Set(origins);
  const chat=createChat({protocol});
@@ -63,7 +65,8 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
   }catch(error){reply(error.status||500,{error:error.status?error.message:'Verification unavailable',code:error.code,retryable:!!error.retryable,retryAfterMs:error.retryAfterMs});}
  });
  server.requestTimeout=15000;
- server.on('close',()=>{void sessions.close();});
+ server.on('close',()=>{void sessions.close();void reporter.close();});
+ server.capacityReporter=reporter;
  server.sessions=sessions;
  return server;
 }
@@ -76,5 +79,10 @@ async function readJSON(req,maxBytes=16384){
 }
 module.exports={createServer};
 if(require.main===module)createServer({origins:(process.env.GAME_ORIGINS||'http://localhost:8000,http://127.0.0.1:8000').split(',')})
- .then(server=>server.listen(Number(process.env.PORT)||8081,process.env.VERIFICATION_PUBLIC==='1'?'0.0.0.0':'127.0.0.1',()=>console.log('Driving verification on port '+server.address().port)))
+ .then(server=>{
+  let stopping=false;
+  const stop=async()=>{if(stopping)return;stopping=true;server.close();await server.sessions.close();await server.capacityReporter.close();};
+  for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{void stop().catch(error=>{console.error('Shutdown failed',error.message);process.exitCode=1;});});
+  server.listen(Number(process.env.PORT)||8081,process.env.VERIFICATION_PUBLIC==='1'?'0.0.0.0':'127.0.0.1',()=>console.log('Driving verification on port '+server.address().port));
+ })
  .catch(error=>{console.error(error.message);process.exitCode=1;});

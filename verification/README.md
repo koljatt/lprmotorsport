@@ -394,19 +394,30 @@ varmennussimulaation päälle. Tätä käyttöliittymää ja tiedonjakelua ei ol
 - Katselijoiden määrä, tiedonsiirto ja julkaisun kustannus mitataan erikseen. Tietojen
   jakelu keskitetään ennen suuria katsojamääriä; jokainen katsoja ei pollaa ajosäiettä.
 
-### Adminin kapasiteettinäkymä
+### Adminin kapasiteettinäkymä ja pysyvä historia
 
-`cloudflare/admin.html` näyttää nykyisen varmennuspalvelinprosessin laskurit
-suojatun `/api/admin/capacity`-välityksen kautta. Käyttöönotto:
+`/admin` näyttää valitun aikavälin tietokantaan tallennetun kapasiteettihistorian
+sekä erillisen nykyisen palvelinprosessin tilannekuvan. Historia säilyy 90 päivää
+myös varmennuspalvelimen uudelleenkäynnistyksissä ja on luettavissa sen ollessa
+pois käytöstä. Adminin ei tarvitse olla auki tiedon keräämiseksi.
 
-- Julkaise tämän haaran varmennuspalvelin ja analytiikan Worker (`cloudflare/worker.mjs`).
-- Aseta varmennuspalvelimelle `VERIFICATION_METRICS_TOKEN` (vähintään 32 merkkiä).
-- Aseta analytiikan Workerille sama `VERIFICATION_METRICS_TOKEN` salaisuutena sekä
-  `VERIFICATION_METRICS_URL=https://<varmennuspalvelin>/metrics`.
-- Avaa nykyinen `/admin` ylläpitoavaimella ja paina Päivitä.
+Käyttöönotto:
 
+1. Julkaise tämän haaran varmennuspalvelin ja analytiikan Worker
+   (`cloudflare/worker.mjs`, ei erillinen verified-worker).
+2. Aseta varmennuspalvelimelle `VERIFICATION_METRICS_TOKEN` (vähintään 32 merkkiä)
+   ja `CAPACITY_REPORT_URL=https://<analytiikan-worker>/api/internal/capacity`.
+3. Aseta analytiikan Workerille sama `VERIFICATION_METRICS_TOKEN` salaisuutena
+   sekä `VERIFICATION_METRICS_URL=https://<varmennuspalvelin>/metrics` nykytilaa varten.
+   Nykyinen D1-sidos `DB` riittää; historiataulu luodaan automaattisesti.
+4. Avaa `/admin` nykyisellä ylläpitoavaimella. Päivitä hakee historian ja nykytilan.
+
+Palvelin lähettää nimettömät tuntikohtaiset laskurit suojattuun vastaanottoon.
+Kukin käynnistyskerta käyttää eri satunnaista lähdetunnusta. Samojen tai vanhempien
+laskurien uusinnat eivät lisää eivätkä vähennä jo tallennettuja lukuja.
+Tietokantaan ei tallenneta nimiä, pelaajatunnuksia, IP-osoitteita tai salasanoja.
 Mittausavain ei ole adminin kirjautumisavain eikä sitä lähetetä selaimeen.
-Puuttuva tai katkennut mittaus näytetään puuttuvana tietona, ei nollana.
+
 `capacityRejected` laskee täyden palvelimen estämät aloitukset; saman
 aloituslipukkeen uusinnat eivät kasvata laskuria, mutta uusi aloitusyritys voi.
 `startRateRejected` on erillinen aloitusnopeusraja. `practiceLaps` laskee
@@ -415,8 +426,21 @@ palvelimen simuloimat mutta ajoitusehdon vuoksi ilman kuittia jääneet kierroks
 `lagTerminations` liialliseen saapumisviiveeseen päättyneet ajot. Viiveestä ei
 voi päätellä, johtuiko se palvelimesta, verkosta vai pelaajan laitteesta.
 
-Laskenta alkaa `since`-hetkestä ja **nollautuu uudelleenkäynnistyksessä**.
-Aikavälivalitsin ei suodata näitä laskureita; historiallisia menetyksiä ei voi
-palauttaa jälkikäteen. Näkymä ei väitä mittaavansa kaikkia tallentumatta jääneitä
-aikoja tai yksittäisten pelaajien määrää. Usean palvelininstanssin tapauksessa
-näkymä koskee sitä instanssia, jolle metrics-pyyntö ohjautuu.
+Lähetys käynnistyy heti laskurin muuttuessa; peli ei odota tietokantaverkkoa.
+Epäonnistunut lähetys uusitaan viiden sekunnin välein. SIGTERM/SIGINT yrittää
+lähettää viimeiset tiedot ennen sulkemista. **Tietokantaan jo hyväksytyt tiedot
+säilyvät.** Äkillinen prosessin kaatuminen tai pakotettu sammutus ennen lähetyksen
+onnistumista voi menettää lähettämättömän osuuden, etenkin verkkokatkon aikana.
+Lähettämättömät tuntitiedot pidetään rajatussa muistijonossa (2161 tuntia);
+lähetysvirheistä kirjataan lokiin. Tämä ei ole levylle tallentuva tapahtumajono.
+
+Aikavälin alku pyöristetään alaspäin tunnin alkuun ja näytetään adminissa.
+Päivät ovat UTC-ajassa. Puuttuva historia näytetään puuttuvana tietona, ei nollana.
+Historiaa ennen tämän ominaisuuden käyttöönottoa ei voi palauttaa jälkikäteen.
+Nykytilan prosessikohtaiset laskurit nollautuvat yhä uudelleenkäynnistyksessä,
+mutta erillisen historian luvut eivät. Useat palvelininstanssit raportoivat
+samaan tietokantaan erillisillä lähdetunnuksilla, jolloin historia summaa ne.
+
+Tarkistukset: `node tests/capacity-history.test.cjs` testaa palvelimen/Workerin
+uudelleenkäynnistykset, kadonneen kuittauksen, uusinnat, verkkokatkosta palautumisen,
+aikavälit, todennuksen sekä todellisen kapasiteettihylkäyksen tallennuskytkennän.

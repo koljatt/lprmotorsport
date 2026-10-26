@@ -7,14 +7,15 @@ const hz=120;
 const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,code,...extra});
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
- constructor({clock=()=>performance.now(),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
-  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
+ constructor({clock=()=>performance.now(),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,onMetric=()=>{},signLap=async()=>{throw Error('Missing signer')}}={}){
+  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap,onMetric});this.sessions=new Map();this.creations=[];
   for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
   this.metricsSince=Date.now();
   this.metrics={started:performance.now(),starts:0,capacityRejected:0,startRateRejected:0,batches:0,ticks:0,verifiedLaps:0,practiceLaps:0,processingTimeouts:0,lagTerminations:0};
   this.timings={};
   this.timer=setInterval(()=>this.sweep(),1000);this.timer.unref();
  }
+ countMetric(key,count=1){this.metrics[key]+=count;this.onMetric(key,count);}
  get activeCount(){return [...this.sessions.values()].filter(s=>s.slot).length;}
  observe(name,value){
   if(!Number.isFinite(value)||value<0)return;
@@ -27,9 +28,9 @@ class Sessions {
  async create(version,identity,{armed=false}={}){
   this.sweep();
   if(version!==revision)throw fail(409,'revision','Simulation revision changed');
-  if(this.activeCount>=this.maxSessions){this.metrics.capacityRejected++;throw fail(429,'capacity','Verified session capacity reached');}
+  if(this.activeCount>=this.maxSessions){this.countMetric('capacityRejected');throw fail(429,'capacity','Verified session capacity reached');}
   const now=this.clock();this.creations=this.creations.filter(t=>now-t<60000);
-  if(this.creations.length>=this.maxStartsPerMinute){this.metrics.startRateRejected++;throw fail(429,'rate_limit','Too many session starts');}
+  if(this.creations.length>=this.maxStartsPerMinute){this.countMetric('startRateRejected');throw fail(429,'rate_limit','Too many session starts');}
   this.creations.push(now);
   // Bound completed receipt caches even when starts fail or clients disappear.
   for(const [id,s] of this.sessions){if(!s.slot&&this.sessions.size>=8)this.sessions.delete(id);}
@@ -38,7 +39,7 @@ class Sessions {
   this.sessions.set(id,s);
   try{
    const initStart=performance.now(),initial=await this.spawn(s);
-   this.observe('initializationMs',performance.now()-initStart);this.metrics.starts++;
+   this.observe('initializationMs',performance.now()-initStart);this.countMetric('starts');
    s.started=this.clock();s.lastAccepted=s.started;s.phase=armed?'armed':'running';
    return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs,lapLagMs:this.lapLagMs};
   }catch(error){this.invalidate(s,'initialization');throw error;}
@@ -128,7 +129,7 @@ class Sessions {
    const reply={sessionId:s.id,seq:data.seq,ackTick:s.ticks,phase:'running',result:message.result,
     wallMs:message.wallMs,serverElapsedMs:this.clock()-s.started,laps,practiceLaps,
     eligibility:{eligible:s.lapEligible,fromTick:s.eligibleFromTick,lap:message.result.lap,lagMs:Math.max(0,arrivalLagMs)}};
-   this.metrics.batches++;this.metrics.ticks+=data.inputs.length;this.metrics.verifiedLaps+=laps.length;this.metrics.practiceLaps+=practiceLaps.length;
+   this.metrics.batches++;this.metrics.ticks+=data.inputs.length;this.metrics.verifiedLaps+=laps.length;this.countMetric('practiceLaps',practiceLaps.length);
    this.observe('batchResponseMs',performance.now()-processingStart);this.observe('arrivalLagMs',Math.max(0,arrivalLagMs));
    this.observe('ackLagMs',Math.max(0,this.clock()-s.started-endTick*1000/hz));
    s.receipts.set(data.seq,{digest,reply});
@@ -137,7 +138,7 @@ class Sessions {
  }
  release(s){s.slot=false;if(s.pending){clearTimeout(s.pending.timer);s.pending.reject(fail(410,'session_closed','Session closed'));s.pending=null;}
   if(s.worker){const worker=s.worker;s.worker=null;void worker.terminate();}}
- invalidate(s,reason){if(s.slot){if(reason==='budget')this.metrics.processingTimeouts++;if(reason==='lag')this.metrics.lagTerminations++;}s.phase='invalid';s.reason=reason;this.release(s);}
+ invalidate(s,reason){if(s.slot){if(reason==='budget')this.countMetric('processingTimeouts');if(reason==='lag')this.countMetric('lagTerminations');}s.phase='invalid';s.reason=reason;this.release(s);}
  cancel(id,token){const s=this.owned(id,token);this.invalidate(s,'cancelled');return {cancelled:true};}
  sweep(){const now=this.clock();for(const [id,s] of this.sessions){
   if(s.slot&&((s.phase!=='starting'&&now-s.lastAccepted>this.idleMs)||now-s.created>this.ttlMs))this.invalidate(s,'expired');
