@@ -80,4 +80,18 @@ assert.equal(ffb.steerValue({ ...ffb.defaults, steerInvert: true }, pads), -.375
 pads[0].axes[0] = .5;
 assert.equal(ffb.steerValue({ ...ffb.defaults }, pads), 1, 'steering clamps at full lock');
 
+// A physical wheel drives the rack directly; keyboard keeps its smoothed rack.
+{
+  const m = new context.window.VehicleDynamics(), car = { x: 0, y: 0, angle: 0 };
+  m.reset(car); car.vx = 15;
+  m.step(car, { steer: .8, gas: 0, brake: 0, analog: true, wheel: true }, 1 / 120, 0);
+  assert.equal(car.steerAngle, .8 * m.parameters.maxRoadWheelAngle, 'wheel input reaches the rack in one step');
+  m.step(car, { steer: -.8, gas: 0, brake: 0, analog: true, wheel: true }, 1 / 120, 0);
+  assert.equal(car.steerAngle, -.8 * m.parameters.maxRoadWheelAngle, 'no rate limit on a fast correction');
+  const k = new context.window.VehicleDynamics(), kc = { x: 0, y: 0, angle: 0 };
+  k.reset(kc); kc.vx = 15;
+  k.step(kc, { steer: 1, gas: 0, brake: 0 }, 1 / 120, 0);
+  assert(kc.steerAngle < .05, 'keyboard steering is still smoothed');
+}
+
 console.log('wheel-ffb ok', { right: right.torque.toFixed(3), gentle: gentle.toFixed(3), sliding: sliding.toFixed(3) });

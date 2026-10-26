@@ -201,7 +201,10 @@ return class VehicleDynamics {
     // First unwind to centre before building lock in the opposite direction.
     const steerTarget = !analog && reversing ? 0 : desiredSteer;
     const steerChange = steerTarget - state.steer;
-    state.steer += Math.max(-response * dt, Math.min(response * dt, steerChange));
+    // A physical wheel is the rack's position: the driver's hands are the only
+    // rate limit. Keyboard, touch and gamepad keep the smoothed rack below.
+    if (!assisted) state.steer = desiredSteer;
+    else state.steer += Math.max(-response * dt, Math.min(response * dt, steerChange));
     // Keyboard buttons request a turn rate. The steering rack adds a little angle
     // when the car responds less than requested, while keeping lateral demand sane.
     let targetAngle;
@@ -226,7 +229,8 @@ return class VehicleDynamics {
       targetAngle = Math.max(-p.maxRoadWheelAngle, Math.min(p.maxRoadWheelAngle, targetAngle));
     }
     const rackChange = (targetAngle - state.steerAngle) * (analog ? 1 : 1 - Math.exp(-18 * dt));
-    state.steerAngle += Math.max(-2.8 * dt, Math.min(2.8 * dt, rackChange));
+    if (!assisted) state.steerAngle = targetAngle;
+    else state.steerAngle += Math.max(-2.8 * dt, Math.min(2.8 * dt, rackChange));
 
     const speed = Math.max(0, state.vx);
     const drag = 0.5 * 1.225 * p.dragArea * speed * speed;
