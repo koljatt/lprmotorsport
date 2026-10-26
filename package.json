@@ -43,6 +43,8 @@
     "test:collision-cache": "node tests/collision-shape-cache.test.cjs",
     "measure:collision-cache": "node scripts/measure-collision-cache.cjs",
     "test:shared-track-state": "node tests/shared-track-state.test.cjs",
-    "measure:shared-track-state": "node scripts/measure-shared-track-state.cjs"
+    "measure:shared-track-state": "node scripts/measure-shared-track-state.cjs",
+    "test:worker-pool": "node tests/worker-pool.test.cjs",
+    "measure:worker-pool": "node scripts/measure-worker-pool.cjs"
   }
 }

@@ -1,3 +1,4 @@
+// Dedicated-worker reference for local comparisons; production uses pool-worker.cjs.
 const {parentPort}=require('node:worker_threads');
 const {createWorld,revision}=require('./world.cjs');
 const {world,api}=createWorld();

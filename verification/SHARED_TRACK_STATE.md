@@ -33,16 +33,14 @@ ajovarmennusta varten eikä sisällä näkymän rakentavaa `campus.build`-rajapi
 
 ## Käyttöönoton raja
 
-**Tämä vaihe ei muuta tuotannon säiemallia tai pelaajarajaa.** Nykyinen
-`createWorld()` käyttää edelleen erillistä maailmaa: yksi ajosessio yhdessä säikeessä.
-Yhden session tapauksessa valmisteltu tehdas ja sen ensimmäinen klooni käyttäisivät
-lisämuistia ilman jakamisen hyötyä. Uusi rajapinta otetaan käyttöön myöhemmässä
-rajatun säiejoukon toteutuksessa, jossa sama tehdas palvelee useita ajosessioita.
+Vaihe 1 valmisteli tehtaan muuttamatta yhden session säiemallia.
+Tämän haaran [vaihe 2](WORKER_POOL.md) ottaa sen nyt ajovarmennuksen rajattuun
+säiejoukkoon: sama tehdas palvelee useita toisistaan eristettyjä ajosessioita.
+`createWorld()` säilyy erillisen maailman apurajapintana työkaluille ja vertailuille.
 
 Tehdas kuuluu sitä käyttävälle säikeelle. Se ei käytä `SharedArrayBuffer`-muistia
 säikeiden välillä eikä mahdollista yhtäaikaisia kirjoituksia yhteiseen ajotilaan.
-Koko ajosimulaatio säilytetään samalla säikeellä; tätä vaihetta seuraavan työn on
-huolehdittava syöte-erien reitityksestä, vuorottelusta, määräajoista ja siivouksesta.
+Syöte-erien reititys, vuorottelu, määräajat ja siivous on kuvattu vaiheen 2 ohjeessa.
 
 ## Tarkistukset
 

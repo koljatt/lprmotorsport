@@ -27,7 +27,7 @@ function createWorldFactory(){
   }
  });
 }
-// A production worker currently owns one session. Keep that path lean until the
-// worker pool is introduced; multi-session callers explicitly own a factory.
+// Isolated worlds remain useful for tools and reference tests. Production pool
+// workers explicitly own a shared factory for their multiple sessions.
 function createWorld(options){return createIsolatedWorld(options);}
 module.exports={createWorld,createWorldFactory,createIsolatedWorld,revision,files};

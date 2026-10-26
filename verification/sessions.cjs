@@ -1,15 +1,15 @@
 // Server-owned driving state. Restarts and timeouts invalidate unfinished laps.
-const {Worker}=require('node:worker_threads');
-const path=require('node:path');
+const {VerificationPool}=require('./worker-pool.cjs');
 const {randomBytes,createHash,timingSafeEqual}=require('node:crypto');
 const {revision}=require('./world.cjs');
 const hz=120;
 const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,code,...extra});
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
- constructor({clock=()=>performance.now(),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
-  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
+ constructor({clock=()=>performance.now(),workerCount=1,workerHeapMb=256,executorFactory=options=>new VerificationPool(options),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
+  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];this.closed=false;
   for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
+  this.pool=executorFactory({workerCount,workerHeapMb,onLost:id=>{const s=this.sessions.get(id);if(s?.slot)this.invalidate(s,'worker_lost');}});
   this.metrics={started:performance.now(),starts:0,capacityRejected:0,startRateRejected:0,batches:0,ticks:0,verifiedLaps:0,practiceLaps:0};
   this.timings={};
   this.timer=setInterval(()=>this.sweep(),1000);this.timer.unref();
@@ -21,9 +21,10 @@ class Sessions {
   h.count++;h.sumMs+=value;h.maxMs=Math.max(h.maxMs,value);h.buckets[Math.min(15,Math.ceil(Math.log2(Math.max(1,value))))]++;
  }
  snapshotMetrics(){return {uptimeMs:performance.now()-this.metrics.started,activeSessions:this.activeCount,maxSessions:this.maxSessions,
-  maxStartsPerMinute:this.maxStartsPerMinute,counters:{...this.metrics,started:undefined},timings:JSON.parse(JSON.stringify(this.timings)),
+  maxStartsPerMinute:this.maxStartsPerMinute,pool:this.pool.snapshot(),counters:{...this.metrics,started:undefined},timings:JSON.parse(JSON.stringify(this.timings)),
   cpuMicroseconds:process.cpuUsage(),memoryBytes:process.memoryUsage()};}
  async create(version,identity,{armed=false}={}){
+  if(this.closed)throw fail(410,'session_closed','Verification service closed');
   this.sweep();
   if(version!==revision)throw fail(409,'revision','Simulation revision changed');
   if(this.activeCount>=this.maxSessions){this.metrics.capacityRejected++;throw fail(429,'capacity','Verified session capacity reached');}
@@ -37,26 +38,13 @@ class Sessions {
   this.sessions.set(id,s);
   try{
    const initStart=performance.now(),initial=await this.spawn(s);
+   if(!s.slot)throw fail(410,'session_closed','Session was interrupted during initialization');
    this.observe('initializationMs',performance.now()-initStart);this.metrics.starts++;
    s.started=this.clock();s.lastAccepted=s.started;s.phase=armed?'armed':'running';
    return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs,lapLagMs:this.lapLagMs};
   }catch(error){this.invalidate(s,'initialization');throw error;}
  }
- spawn(s){
-  s.worker=new Worker(path.join(__dirname,'session-worker.cjs'),{resourceLimits:{maxOldGenerationSizeMb:128}});
-  return new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>reject(fail(503,'initialization','Session initialization timed out')),20000);
-   s.initReject=reject;
-   s.worker.on('message',message=>{
-    if(message.ready){clearTimeout(timer);s.initReject=null;resolve(message);return;}
-    const pending=s.pending;
-    if(pending&&pending.id===message.id){s.pending=null;clearTimeout(pending.timer);message.error?pending.reject(fail(422,'physics',message.error)):pending.resolve(message);}
-   });
-   const lost=()=>{clearTimeout(timer);const error=fail(410,'worker_lost','Verification worker stopped');s.initReject?.(error);s.pending?.reject(error);if(s.pending)clearTimeout(s.pending.timer);s.pending=null;
-    if(s.phase==='running'||s.phase==='starting'||s.phase==='armed')this.invalidate(s,'worker_lost');};
-   s.worker.once('error',lost);s.worker.once('exit',lost);
-  });
- }
+ spawn(s){return this.pool.create(s.id);}
  owned(id,token){
   this.sweep();const s=this.sessions.get(id);
   if(!s)throw fail(410,'session_lost','Session expired or server restarted; continue in practice mode');
@@ -100,10 +88,8 @@ class Sessions {
  async process(s,data,digest,endTick,arrivalLagMs){
   const processingStart=performance.now();
   try{
-   const message=await new Promise((resolve,reject)=>{
-    const id=data.seq,timer=setTimeout(()=>reject(fail(504,'budget','Input verification exceeded its time budget')),10000);
-    s.pending={id,resolve,reject,timer};s.worker.postMessage({id,inputs:data.inputs});
-   });
+   const message=await this.pool.inputs(s.id,data.inputs);
+   this.observe('queueMs',message.queueMs);
    this.observe('workerWallMs',message.wallMs);this.observe('physicsMs',message.physicsMs);this.observe('replayMs',message.replayMs);
    if(s.phase!=='running')throw fail(410,'session_closed','Session was interrupted');
    if(message.result.crashed)throw fail(422,'crashed','Car crashed; session is not a verified lap');
@@ -134,14 +120,13 @@ class Sessions {
    return reply;
   }catch(error){this.invalidate(s,error.code||'physics');throw error;}
  }
- release(s){s.slot=false;if(s.pending){clearTimeout(s.pending.timer);s.pending.reject(fail(410,'session_closed','Session closed'));s.pending=null;}
-  if(s.worker){const worker=s.worker;s.worker=null;void worker.terminate();}}
+ release(s){s.slot=false;void this.pool.release(s.id);}
  invalidate(s,reason){s.phase='invalid';s.reason=reason;this.release(s);}
  cancel(id,token){const s=this.owned(id,token);this.invalidate(s,'cancelled');return {cancelled:true};}
  sweep(){const now=this.clock();for(const [id,s] of this.sessions){
   if(s.slot&&((s.phase!=='starting'&&now-s.lastAccepted>this.idleMs)||now-s.created>this.ttlMs))this.invalidate(s,'expired');
   if(!s.slot&&now-s.lastAccepted>120000)this.sessions.delete(id);
  }}
- async close(){clearInterval(this.timer);const workers=[...this.sessions.values()].map(s=>s.worker).filter(Boolean);for(const s of this.sessions.values())this.invalidate(s,'shutdown');await Promise.all(workers.map(w=>w.terminate()));this.sessions.clear();}
+ async close(){this.closed=true;clearInterval(this.timer);for(const s of this.sessions.values())this.invalidate(s,'shutdown');await this.pool.close();this.sessions.clear();}
 }
 module.exports={Sessions};

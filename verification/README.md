@@ -370,8 +370,8 @@ Syöte-erän käsittelyviiveen p95 oli 74,2 ms ja suurin kuittausviive 306,9 ms.
 Prosessin RSS oli lopussa noin 1 523 MiB. RSS sisältää myös testiajurin,
 vertailumaailman ja valmistellut ohjaussyötteet, eikä se ole Renderin muistimittaus.
 Tulos ei tue pelaajarajan nostamista 16:een nykyisessä 512 MiB:n palvelussa.
-Rajattu säiejoukko ja maailmojen muistin vähentäminen ovat seuraava erillinen työvaihe;
-niitä ei toteuteta tässä muutoksessa.
+Tämä mittaus tehtiin ennen jaetun ratadatan ja säiejoukon toteutusta.
+Uudempi työ ja vertailu on kuvattu kohdassa [Rajattu säiejoukko](WORKER_POOL.md).
 
 ### Seuraava ominaisuus: aula ja ajon seuraaminen
 
@@ -403,4 +403,9 @@ Seuraavan optimointivaiheen toiminta, vertailutestit ja paikallinen CPU-/muistim
 
 Ensimmäisen muistiuudistusvaiheen rajapinta, eristystestit, mittaustulokset ja
 käyttöönoton raja: [SHARED_TRACK_STATE.md](SHARED_TRACK_STATE.md).
-Nykyinen yhden ajon säiemalli säilyy; yhteinen tehdas on seuraavan säieuudistuksen pohja.
+Yhteinen tehdas on otettu tässä haarassa [rajatun säiejoukon](WORKER_POOL.md) käyttöön.
+
+### Rajattu säiejoukko
+
+Ajonvarmennuksen säikeiden reititys, vuorottelu, siivous, asetukset ja paikalliset kuormakokeet:
+[WORKER_POOL.md](WORKER_POOL.md). Oletus on yksi laskentasäie ja enintään kaksi ajosessiota.
