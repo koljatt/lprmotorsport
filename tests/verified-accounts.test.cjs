@@ -60,6 +60,7 @@ const {revision}=require('../verification/world.cjs');
    {DB:raceBinding,SIMULATION_REVISION:revision,VERIFICATION_SECRET:secret});
   assert.equal(racing.status,401,'Revocation during an in-flight upload prevents the database write');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_laps WHERE session_id=?').get('7'.repeat(32)).n,0);
+  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM championship_laps WHERE session_id=?').get('7'.repeat(32)).n,0,'Revocation also blocks competition writes');
   const logout=()=>post('/api/verified/logout',{},panu.token);
   assert(board.db.prepare('SELECT 1 FROM verified_login_sessions WHERE token_hash=?').get(await hash(panu.token)));
   assert.equal((await logout()).status,200);

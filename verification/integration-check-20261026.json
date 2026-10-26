@@ -1,0 +1,174 @@
+{
+  "checkedAt": "2026-10-26T15:31:42.219572+00:00",
+  "branch": "integration/next-update-20261026",
+  "mainBase": "2f70a4549c2203b616e35c8dcc36b5ebf1027e99",
+  "simulationRevision": "e9cec7741f4d835d64b247fb1bf925572f32032380fcb9ce9074a747344ad2a2",
+  "readyForMain": false,
+  "localSuites": [
+    {
+      "suite": "test:chat",
+      "exitCode": 0,
+      "seconds": 0.32
+    },
+    {
+      "suite": "test:audio",
+      "exitCode": 0,
+      "seconds": 0.22
+    },
+    {
+      "suite": "test:physics",
+      "exitCode": 0,
+      "seconds": 3.17
+    },
+    {
+      "suite": "test:determinism",
+      "exitCode": 0,
+      "seconds": 10.57
+    },
+    {
+      "suite": "test:tools",
+      "exitCode": 0,
+      "seconds": 5.12
+    },
+    {
+      "suite": "test:performance",
+      "exitCode": 0,
+      "seconds": 1.04
+    },
+    {
+      "suite": "test:leaderboard",
+      "exitCode": 0,
+      "seconds": 0.74
+    },
+    {
+      "suite": "test:analytics",
+      "exitCode": 0,
+      "seconds": 0.44
+    },
+    {
+      "suite": "test:replay-service",
+      "exitCode": 0,
+      "seconds": 0.58
+    },
+    {
+      "suite": "test:collision-index",
+      "exitCode": 0,
+      "seconds": 0.26
+    },
+    {
+      "suite": "test:asphalt-index",
+      "exitCode": 0,
+      "seconds": 15.69
+    },
+    {
+      "suite": "test:replay",
+      "exitCode": 0,
+      "seconds": 8.47
+    },
+    {
+      "suite": "test:live-sessions",
+      "exitCode": 0,
+      "seconds": 6.0
+    },
+    {
+      "suite": "test:live-client",
+      "exitCode": 0,
+      "seconds": 0.81
+    },
+    {
+      "suite": "test:live-lab",
+      "exitCode": 0,
+      "seconds": 0.21
+    },
+    {
+      "suite": "test:verified",
+      "exitCode": 0,
+      "seconds": 27.33
+    },
+    {
+      "suite": "test:recordings",
+      "exitCode": 0,
+      "seconds": 0.51
+    },
+    {
+      "suite": "test:verification-capacity",
+      "exitCode": 0,
+      "seconds": 15.97
+    },
+    {
+      "suite": "test:staging",
+      "exitCode": 0,
+      "seconds": 0.22
+    },
+    {
+      "suite": "test:collision-cache",
+      "exitCode": 0,
+      "seconds": 10.06
+    },
+    {
+      "suite": "test:championship",
+      "exitCode": 0,
+      "seconds": null,
+      "note": "Run separately after final Worker changes; see tests/championship.test.cjs"
+    }
+  ],
+  "rerunAfterFinalChanges": [
+    "test:verified",
+    "test:championship",
+    "test:staging"
+  ],
+  "builds": {
+    "game": "passed",
+    "verifiedWorker": "passed",
+    "analyticsWorker": "passed"
+  },
+  "browser": {
+    "generatedAt": "2026-10-26T15:28:45.007Z",
+    "browser": "153.0.8010.0",
+    "revision": "e9cec7741f4d835d64b247fb1bf925572f32032380fcb9ce9074a747344ad2a2",
+    "ticks": 23220,
+    "verifiedLaps": 2,
+    "scope": "Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim",
+    "automaticStart": true,
+    "automaticRestart": true,
+    "startLights": true,
+    "heldDuringPreparation": true,
+    "optionalAnalytics": true,
+    "driverSeatReplay": true,
+    "replaySeek": true,
+    "viewerReports": true,
+    "adminSeriesMoves": true,
+    "dailyChampionship": true,
+    "tamperedPhysicsRejected": true,
+    "tamperedPowerRejected": true,
+    "errors": []
+  },
+  "additionalBrowserChecks": {
+    "championship": "passed, desktop/mobile 390px, series/date/localization",
+    "chat": "passed, two clients, mobile, localization"
+  },
+  "remoteTwoPlayerTest": {
+    "status": "not rerun for this candidate",
+    "previousResult": "one of two clients lost timing eligibility",
+    "evidence": "staging-check-20261026.json"
+  },
+  "localRealtimeTest": {
+    "status": "failed",
+    "command": "npm run test:verified-realtime",
+    "scope": "Two full 3D Chromium clients, software rendering, unmodified local server clock",
+    "reason": "Client switched to practice with lag",
+    "interpretation": "Does not separate slow software rendering, local scheduling and server/network delay; not evidence of Render capacity"
+  },
+  "blockers": [
+    "Separate network arrival from server-side wait and define bounded recovery",
+    "Pass two-player staging driving and public replay retrieval from candidate commit",
+    "Configure and verify persistent capacity history across staging restart",
+    "Coordinated four-component deployment and backup"
+  ],
+  "notImplemented": [
+    "Shared immutable track data and bounded worker pool",
+    "Lobby and real-time spectator",
+    "Moving obstacle spatial search",
+    "HttpOnly login migration"
+  ]
+}

@@ -1,18 +1,19 @@
 # Integraation julkaisu
 
-Julkaistava kokonaisuus: `integration/main-updates-20261025` (integraation `405a235` ja
-kapasiteettihaaran `a7efa4a` yhdistelmä).
-Päiväkisa `feature/daily-championship` ei kuulu tähän julkaisuun.
+Valmisteltava kokonaisuus: `integration/next-update-20261026`. Mukana edellinen
+integraatio, päiväkilpailu, auton törmäysmuodon välimuisti ja adminin pysyvä
+kapasiteettihistoria. Tilanne, testit ja julkaisuesteet: [INTEGRATION-20261026.md](INTEGRATION-20261026.md).
+**Luonnos: ei vielä hyväksytty mainiin tai tuotantojulkaisuun.**
 Mainiin vienti käynnistää `.github/workflows/deploy-pages.yml`-julkaisun automaattisesti.
 Pelkkä main-push ei päivitä Cloudflare Workeria eikä takaa Renderin päivittymistä.
 
 ## Ennen julkaisua
 
 1. Valitse tarkistettu integraatiohaaran commit ja kirjaa sen täydellinen SHA.
-   Rakenna kaikki kolme osaa tästä samasta commitista. Varmista mainin ja
+   Rakenna kaikki neljä osaa (peli, varmennuspalvelin, verified-Worker, analytiikka-Worker) tästä samasta commitista. Varmista mainin ja
    integraatiohaaran päät uudelleen ennen yhdistämistä.
 2. Aja `.github/workflows/tests.yml`-tiedoston testikokonaisuudet,
-   `npm run test:chat-browser`, `npm run test:verified-browser`,
+   `npm run test:chat-browser`, `npm run test:verified-browser`, `npm run test:championship-browser`,
    `npm run build` ja `npm run build:verified-worker`.
    Varmista, ettei bundlen uudelleenrakentaminen muuta versionhallinnan bundlea.
    Selainkokeet tarvitsevat Playwrightin ja Chromen tai Playwright Chromiumin.
@@ -44,14 +45,19 @@ vanhat pelivälilehdet pitää päivittää. Älä kuvaa vaihtoa katkottomaksi.
 2. Julkaise Renderin `lpr-verification` valitusta commitista ja tarkista `/health`:
    `ready=true`, `protocol=driving-v1`, `hz=120` ja sama fysiikkarevisio kuin bundlessa.
    Säilytä automaattijulkaisu pois päältä vaihdon ajan, jos se on jo pois käytöstä.
-3. Julkaise juuri rakennettu `cloudflare/verified-worker.bundle.mjs` **lpr-verified**-
+3. Julkaise analytiikan `cloudflare/worker.mjs` ja päivitetty admin (`npm run build:worker`
+   ennen pakkausta). Aseta erillinen `VERIFICATION_METRICS_TOKEN` molempiin palveluihin,
+   varmennuspalvelimen `CAPACITY_REPORT_URL` sekä analytiikan `VERIFICATION_METRICS_URL`
+   [README:n](README.md#adminin-kapasiteettinäkymä-ja-pysyvä-historia) mukaan.
+   Varmista kapasiteettihistorian tallennus ja säilyminen testipalvelimen restartissa.
+4. Julkaise juuri rakennettu `cloudflare/verified-worker.bundle.mjs` **lpr-verified**-
    Workeriin. Älä aktivoi historiallista versiota 6: siitä puuttuvat myöhemmät muutokset.
    Säilytä bindingit ja salaisuudet. Lisää Cron Trigger `0 3 * * *` (UTC).
    Tarkista `SIMULATION_REVISION`, jos se on asetettu: se ohittaa bundlen revision.
    Väärä mutta kelvollisen muotoinen revisio voi poistaa säilytettävät uusinnat.
-4. Yhdistä sama tarkistettu sisältö mainiin ja odota GitHub Pages -työnkulun
+5. Yhdistä sama tarkistettu sisältö mainiin ja odota GitHub Pages -työnkulun
    onnistuminen. Tämä on varsinainen pelin julkaisu, ei pelkkä testiajo.
-5. Tarkista alla olevat kohdat julkisella sivulla. Palauta Renderin
+6. Tarkista alla olevat kohdat julkisella sivulla. Palauta Renderin
    automaattijulkaisu vasta kun main sisältää saman testatun palvelinkoodin.
 
 ## Julkaisun hyväksymiskoe
@@ -67,12 +73,16 @@ vanhat pelivälilehdet pitää päivittää. Älä kuvaa vaihtoa katkottomaksi.
   ja pystyy vaihtamaan tilin sarjaa. Siirto koskee tilin kaikkia tuloksia.
 - Ylläpitonäkymä hylkää avaimettoman pyynnön. Konsolissa ei ole JavaScript- tai
   CORS-virheitä. Tarkista myös mobiilileveys ja päivitettyjen tiedostojen latautuminen.
-- Kirjaa julkaistut SHA:t, Worker-versio, Pages-työnkulku ja testitulokset.
+- Päiväkisa näyttää ihmiset ja botit erikseen. Varmennettu kierros kasvattaa
+  kierrosmäärää vain kerran; uusinta toimii samalla. Päivän vaihto tapahtuu Suomen
+  keskiyöllä ja kuukausipisteet lasketaan vahvistetuista päivistä.
+- Admin näyttää pysyvän kapasiteettihistorian myös varmennuspalvelimen restartin jälkeen.
+- Kirjaa julkaistut SHA:t, molempien Workerien versiot, Pages-työnkulku ja testitulokset.
 
 Uusi julkinen lista sisältää vain tilien ajat, joilla on julkinen uusinta.
 Vanhoja tuloksia ei poisteta kierrostaulusta, mutta tallenteettomat ajat eivät
 näy uudessa TOP 10:ssä. Kapasiteettioptimointi vaihtaa simulaatiorevision arvoon
-`ec564e6d6d7f3aff4cd6764fdfb81b421bfeaa0ec1552bc538413614e4cb8b83`.
+`e9cec7741f4d835d64b247fb1bf925572f32032380fcb9ce9074a747344ad2a2`.
 Myös kaikki aiemman revision ajat suodattuvat uudelta listalta. Niille ei tehdä
 migraatiota, vaikka pariteettitestit vahvistavat fysiikan vastaavuuden.
 Vanhan revision uusinnat voivat poistua heti uuden revision säilytyssiivouksessa;

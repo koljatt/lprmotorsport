@@ -161,11 +161,14 @@ const {driver}=require('../tests/helpers-driving.cjs');
   await page.waitForFunction(()=>!window.LPRVerifiedDriving.active,{},{timeout:10000,polling:20});
   assert.match(await page.textContent('#verification-status'),/Harjoittelu/,'Altered engine power cannot remain verified');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_laps').get().n,2);
+  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM championship_laps').get().n,2,'Both actual driven laps also enter the daily race');
+  const daily=await (await fetch(boardURL+'/api/verified/championship?series=human')).json();
+  assert.equal(daily.fastest[0].laps,2,'Driving updates daily count without duplicating retries');
   await page.evaluate(()=>{const consent=document.querySelector('#analytics-consent');consent.checked=false;consent.dispatchEvent(new Event('change'));});
   assert(await page.evaluate(()=>!window.LPRLeaderboard.requiresName&&!!window.LPRLeaderboard.identity),'Withdrawing analytics consent keeps leaderboard participation');
   assert.deepEqual(errors,[]);
   const report={generatedAt:new Date().toISOString(),browser:browser.version(),revision,ticks,verifiedLaps:2,
-   scope:'Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim',automaticStart:true,automaticRestart:true,startLights:true,heldDuringPreparation:true,optionalAnalytics:true,driverSeatReplay:true,replaySeek:true,viewerReports:true,adminSeriesMoves:true,tamperedPhysicsRejected:true,tamperedPowerRejected:true,errors};
+   scope:'Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim',automaticStart:true,automaticRestart:true,startLights:true,heldDuringPreparation:true,optionalAnalytics:true,driverSeatReplay:true,replaySeek:true,viewerReports:true,adminSeriesMoves:true,dailyChampionship:true,tamperedPhysicsRejected:true,tamperedPowerRejected:true,errors};
   fs.writeFileSync(path.join(artifacts,'browser-report.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
  }finally{if(browser)await browser.close();await service.sessions.close();await Promise.all([game,service,board].map(server=>new Promise(r=>server.close(r))));}

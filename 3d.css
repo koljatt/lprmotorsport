@@ -338,3 +338,12 @@ dialog { touch-action: pan-y pinch-zoom; }
 
 
 #verified-list .replay-link{font-size:.72rem;color:#d1ef85;text-decoration:underline;margin-left:auto;white-space:nowrap;padding:8px}#verified-list li{flex-wrap:wrap}
+.championship{margin-top:18px;text-align:left}
+.championship-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.championship-controls input,.championship-controls button{font:inherit;padding:8px;min-height:42px;max-width:100%}
+.championship-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:20px}
+.championship-grid ol{padding:0;list-style:none}
+.championship-grid li{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid #ffffff20}
+.championship-grid li span:last-child{white-space:nowrap}
+.championship-personal{white-space:pre-line;line-height:1.6}
+.championship details p{font-size:.85rem;line-height:1.6}

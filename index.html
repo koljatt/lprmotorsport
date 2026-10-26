@@ -12,11 +12,11 @@
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
     <link rel="stylesheet" href="styles.css?v=integration-20261025" />
-    <link rel="stylesheet" href="3d.css?v=integration-20261025" />
-    <script src="i18n.js?v=integration-20261025" defer></script>
+    <link rel="stylesheet" href="3d.css?v=next-20261026" />
+    <script src="i18n.js?v=next-20261026" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
-    <script src="campus.js?v=deterministic-math-20261024" defer></script>
+    <script src="campus.js?v=collision-cache-20261026" defer></script>
     <script src="shared/track-document.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/terrain.js?v=deterministic-math-20261024" defer></script>
     <script src="data/track-data.js?v=2" defer></script>
@@ -37,7 +37,8 @@
     <script src="leaderboard.js?v=expiring-sessions-20261025" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
-    <script src="verified-driving.js?v=integration-20261025" defer></script>
+    <script src="verified-driving.js?v=next-20261026" defer></script>
+    <script src="championship.js?v=daily-20261026" defer></script>
     <script src="chat.js?v=chat-visibility-20261025" defer></script>
     <script src="game.js?v=chat-20261025" defer></script>
   </head>
@@ -168,6 +169,34 @@
             <p id="leaderboard-status" role="status"></p>
           </form>
       </div>
+      <section id="championship" class="leaderboard-panel championship" aria-labelledby="championship-title">
+        <h3 id="championship-title">Päivän kisa</h3>
+        <p>Uusi kisa joka päivä Suomen aikaa. Vain varmennetut kierrokset.</p>
+        <div class="series-tabs" role="group" aria-label="Päiväkisan sarja">
+          <button id="championship-series-human" type="button" aria-pressed="true">Ihmiset</button>
+          <button id="championship-series-bot" type="button" aria-pressed="false">Botit</button>
+        </div>
+        <div class="championship-controls">
+          <label for="championship-day">Kisapäivä</label>
+          <input id="championship-day" type="date" min="2026-01-01" />
+          <button id="championship-today" type="button">Tänään</button>
+          <button id="championship-refresh" type="button">Päivitä</button>
+        </div>
+        <p id="championship-clock"></p><p id="championship-notice" role="status"></p>
+        <p id="championship-personal" class="championship-personal"></p>
+        <div class="championship-grid">
+          <section><h4>Päivän nopeimmat</h4><div id="championship-fastest"></div></section>
+          <section><h4>Eniten kierroksia</h4><div id="championship-volume"></div></section>
+          <section><h4>Kuukauden pistekisa</h4><p id="championship-month"></p><div id="championship-monthly"></div></section>
+        </div>
+        <details><summary>Mistä pisteitä saa?</summary>
+          <p>Nopeuskisan sijat 1–10: 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 pistettä.</p>
+          <p>Kierrosmääräkisan sijat 1–8: 10, 8, 6, 5, 4, 3, 2, 1 pistettä.</p>
+          <p>Päivän ensimmäinen kierros: 5 pistettä. Rajapyykit 5, 15 ja 30 kierrosta: kukin +2 pistettä.</p>
+          <p>Ajoputki: yksi varmennettu kierros päivässä. Bonus 1 piste per peräkkäinen päivä, enintään 7 pistettä päivässä. Väliin jäänyt päivä aloittaa putken alusta.</p>
+          <p>Tasatulokset jakavat sijan ja pisteet. Päivän pisteet vahvistuvat heti keskiyöllä Suomen aikaa. Kuukausikisaan lasketaan vain vahvistetut päivät. Myöhäisemmät tallennukset pääsevät edelleen kaikkien aikojen listalle.</p>
+        </details>
+      </section>
     </dialog>
   </body>
 </html>

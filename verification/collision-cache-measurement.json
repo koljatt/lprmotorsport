@@ -1,0 +1,215 @@
+{
+  "generatedAt": "2026-10-26T10:53:11.366Z",
+  "revision": "e9cec7741f4d835d64b247fb1bf925572f32032380fcb9ce9074a747344ad2a2",
+  "node": "v24.22.1",
+  "scope": "Three alternating pairs of isolated Node processes, each with 24000 identical ticks, recording and state hashing after 1200 warmup ticks. Memory includes benchmark inputs and runtime. No remote capacity or browser FPS claim.",
+  "cpuReductionPercent": 8.687290035959649,
+  "elapsedReductionPercent": 7.430334281175554,
+  "rounds": [
+    {
+      "uncached": {
+        "variant": "uncached",
+        "ticks": 24000,
+        "laps": 2,
+        "replayBytes": 1096072,
+        "hash": "498a8bf12b179a6003ca649a7a2c18644d2fef2acbf8c85006d848d3749f5a00",
+        "elapsedMs": 3986.4790739999994,
+        "cpuMs": 4620.01,
+        "memoryBytes": {
+          "before": {
+            "rss": 99852288,
+            "heapTotal": 54693888,
+            "heapUsed": 19490528,
+            "external": 4041324,
+            "arrayBuffers": 146595
+          },
+          "beforeGC": {
+            "rss": 163115008,
+            "heapTotal": 98942976,
+            "heapUsed": 40776984,
+            "external": 7430053,
+            "arrayBuffers": 3535284
+          },
+          "afterGC": {
+            "rss": 158691328,
+            "heapTotal": 90845184,
+            "heapUsed": 14671488,
+            "external": 7430053,
+            "arrayBuffers": 1017915
+          }
+        },
+        "peakRssKiB": 159536
+      },
+      "cached": {
+        "variant": "cached",
+        "ticks": 24000,
+        "laps": 2,
+        "replayBytes": 1096072,
+        "hash": "498a8bf12b179a6003ca649a7a2c18644d2fef2acbf8c85006d848d3749f5a00",
+        "elapsedMs": 3745.2560310000003,
+        "cpuMs": 4310.236,
+        "memoryBytes": {
+          "before": {
+            "rss": 98013184,
+            "heapTotal": 54448128,
+            "heapUsed": 19561752,
+            "external": 4041324,
+            "arrayBuffers": 146595
+          },
+          "beforeGC": {
+            "rss": 157818880,
+            "heapTotal": 98426880,
+            "heapUsed": 58910312,
+            "external": 7430053,
+            "arrayBuffers": 3535284
+          },
+          "afterGC": {
+            "rss": 154103808,
+            "heapTotal": 90329088,
+            "heapUsed": 14690760,
+            "external": 7430053,
+            "arrayBuffers": 1017915
+          }
+        },
+        "peakRssKiB": 154120
+      }
+    },
+    {
+      "cached": {
+        "variant": "cached",
+        "ticks": 24000,
+        "laps": 2,
+        "replayBytes": 1096072,
+        "hash": "498a8bf12b179a6003ca649a7a2c18644d2fef2acbf8c85006d848d3749f5a00",
+        "elapsedMs": 3902.625769,
+        "cpuMs": 4492.148,
+        "memoryBytes": {
+          "before": {
+            "rss": 99160064,
+            "heapTotal": 54710272,
+            "heapUsed": 19563368,
+            "external": 4041324,
+            "arrayBuffers": 146595
+          },
+          "beforeGC": {
+            "rss": 161603584,
+            "heapTotal": 98426880,
+            "heapUsed": 47532576,
+            "external": 7430053,
+            "arrayBuffers": 3535284
+          },
+          "afterGC": {
+            "rss": 158121984,
+            "heapTotal": 90329088,
+            "heapUsed": 14633024,
+            "external": 7430053,
+            "arrayBuffers": 1017915
+          }
+        },
+        "peakRssKiB": 157816
+      },
+      "uncached": {
+        "variant": "uncached",
+        "ticks": 24000,
+        "laps": 2,
+        "replayBytes": 1096072,
+        "hash": "498a8bf12b179a6003ca649a7a2c18644d2fef2acbf8c85006d848d3749f5a00",
+        "elapsedMs": 4232.187421,
+        "cpuMs": 4968.473,
+        "memoryBytes": {
+          "before": {
+            "rss": 98996224,
+            "heapTotal": 54956032,
+            "heapUsed": 19490832,
+            "external": 4041324,
+            "arrayBuffers": 146595
+          },
+          "beforeGC": {
+            "rss": 159760384,
+            "heapTotal": 99205120,
+            "heapUsed": 35894432,
+            "external": 7430053,
+            "arrayBuffers": 3535284
+          },
+          "afterGC": {
+            "rss": 155467776,
+            "heapTotal": 90320896,
+            "heapUsed": 14672712,
+            "external": 7430053,
+            "arrayBuffers": 1017915
+          }
+        },
+        "peakRssKiB": 156144
+      }
+    },
+    {
+      "uncached": {
+        "variant": "uncached",
+        "ticks": 24000,
+        "laps": 2,
+        "replayBytes": 1096072,
+        "hash": "498a8bf12b179a6003ca649a7a2c18644d2fef2acbf8c85006d848d3749f5a00",
+        "elapsedMs": 4565.149563,
+        "cpuMs": 5326.571,
+        "memoryBytes": {
+          "before": {
+            "rss": 98729984,
+            "heapTotal": 54431744,
+            "heapUsed": 19490400,
+            "external": 4041324,
+            "arrayBuffers": 146595
+          },
+          "beforeGC": {
+            "rss": 162873344,
+            "heapTotal": 98680832,
+            "heapUsed": 37965048,
+            "external": 7430053,
+            "arrayBuffers": 3535284
+          },
+          "afterGC": {
+            "rss": 158531584,
+            "heapTotal": 91107328,
+            "heapUsed": 14620184,
+            "external": 7430053,
+            "arrayBuffers": 1017915
+          }
+        },
+        "peakRssKiB": 159056
+      },
+      "cached": {
+        "variant": "cached",
+        "ticks": 24000,
+        "laps": 2,
+        "replayBytes": 1096072,
+        "hash": "498a8bf12b179a6003ca649a7a2c18644d2fef2acbf8c85006d848d3749f5a00",
+        "elapsedMs": 4186.053991,
+        "cpuMs": 4816.956,
+        "memoryBytes": {
+          "before": {
+            "rss": 100020224,
+            "heapTotal": 54972416,
+            "heapUsed": 19573760,
+            "external": 4041324,
+            "arrayBuffers": 146595
+          },
+          "beforeGC": {
+            "rss": 158949376,
+            "heapTotal": 98689024,
+            "heapUsed": 47000344,
+            "external": 7430053,
+            "arrayBuffers": 3535284
+          },
+          "afterGC": {
+            "rss": 155725824,
+            "heapTotal": 92426240,
+            "heapUsed": 14693248,
+            "external": 7430053,
+            "arrayBuffers": 1017915
+          }
+        },
+        "peakRssKiB": 155224
+      }
+    }
+  ],
+  "baselineCommit": "d4db5c754a412aa71d72d3bd9191f06e60b4748c"
+}
