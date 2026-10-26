@@ -393,3 +393,8 @@ varmennussimulaation päälle. Tätä käyttöliittymää ja tiedonjakelua ei ol
   ajon aulassa. Lista ja tilavirta eivät saa paljastaa sessioavaimia tai ohjausvaltuuksia.
 - Katselijoiden määrä, tiedonsiirto ja julkaisun kustannus mitataan erikseen. Tietojen
   jakelu keskitetään ennen suuria katsojamääriä; jokainen katsoja ei pollaa ajosäiettä.
+
+### Auton törmäysmuodon välimuisti
+
+Seuraavan optimointivaiheen toiminta, vertailutestit ja paikallinen CPU-/muistimittaus:
+[COLLISION_CACHE.md](COLLISION_CACHE.md). Muutos ei nosta pelaajarajaa.

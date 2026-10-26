@@ -39,6 +39,8 @@
     "load:verification": "node scripts/load-verification.cjs",
     "build:staging": "node scripts/build-staging.cjs",
     "test:staging": "node tests/staging-build.test.cjs",
-    "test:verified-remote": "node scripts/check-verified-remote.cjs"
+    "test:verified-remote": "node scripts/check-verified-remote.cjs",
+    "test:collision-cache": "node tests/collision-shape-cache.test.cjs",
+    "measure:collision-cache": "node scripts/measure-collision-cache.cjs"
   }
 }

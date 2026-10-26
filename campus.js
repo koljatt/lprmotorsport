@@ -123,25 +123,59 @@ window.LPRCampus = (() => {
         [panel.rear-panel.sweep*.72*10.25,side*10.25],[panel.rear-panel.sweep*.72*1.35,side*1.35]]);
     bodyParts.push([[12.45,side*10.05],[12.4,side*10.28],[11,side*10.28],[11.1,side*10.05]]);
   }
+  // Collision parts are read-only local coordinates. One entry per live car;
+  // WeakMap ownership prevents abandoned cars from retaining cached geometry.
+  const collisionShapes=new WeakMap();
+  let tyreHullCache;
+  function tyreCollisionHull() {
+    const profile=carGeometry.tyreProfile,cached=tyreHullCache;
+    let same=!!cached&&Object.is(cached.rimRadius,carGeometry.rimRadius)&&
+      Object.is(cached.tyreRadius,carGeometry.tyreRadius)&&Object.is(cached.halfWidth,carGeometry.tyreHalfWidth)&&cached.profile.length===profile.length;
+    if(same)for(let i=0;i<profile.length;i++)if(!Object.is(profile[i][0],cached.profile[i][0])||!Object.is(profile[i][1],cached.profile[i][1])){same=false;break;}
+    if(same)return cached.hull;
+    const points=[...profile.map(([axial,r])=>[r,axial]),
+      ...profile.slice().reverse().map(([axial,r])=>[-r,axial])];
+    const band=carGeometry.rimRadius+(1.88-1.12)/1.18*(carGeometry.tyreRadius-carGeometry.rimRadius);
+    for(const axial of [-carGeometry.tyreHalfWidth,carGeometry.tyreHalfWidth])points.push([band,axial],[-band,axial]);
+    const hull=freezeCollisionParts([convexHull(points)])[0];
+    tyreHullCache={rimRadius:carGeometry.rimRadius,tyreRadius:carGeometry.tyreRadius,halfWidth:carGeometry.tyreHalfWidth,
+      profile:profile.map(p=>p.slice()),hull};
+    return hull;
+  }
+  function freezeCollisionParts(parts) {
+    for(const part of parts){if(Object.isFrozen(part))continue;for(const point of part)Object.freeze(point);Object.freeze(part);}
+    return Object.freeze(parts);
+  }
   function carCollisionParts(state) {
-    const damage=state.damage || 0,impactSide=state.impactSide || .3;
-    const parts=bodyParts.map(part=>part.map(([f,s])=>{
-      f*=spec.bodyLengthScale;
-      const crush=Math.max(0,f-2)*damage;
-      return [f-crush*.55,s+impactSide*crush*.25];
-    }));
-    for(const axle of [0,1]) for(const side of [-1,1]) {
-      const angle=axle===0?(state.steerAngle || 0)+side*damage*.65:0,c=Math.cos(angle),s=Math.sin(angle);
+    const damage=state.damage || 0,impactSide=state.impactSide || .3,steerAngle=state.steerAngle || 0;
+    const hull=tyreCollisionHull();
+    let cached=collisionShapes.get(state);
+    const sameBody=!!cached&&Object.is(cached.damage,damage)&&Object.is(cached.impactSide,impactSide)&&
+      Object.is(cached.bodyLengthScale,spec.bodyLengthScale)&&cached.hull===hull&&
+      Object.is(cached.wheelForward,carGeometry.wheelForward)&&Object.is(cached.wheelRear,carGeometry.wheelRear)&&Object.is(cached.wheelSide,carGeometry.wheelSide);
+    if(sameBody&&Object.is(cached.steerAngle,steerAngle))return cached.parts;
+    if(!sameBody){
+      const body=freezeCollisionParts(bodyParts.map(part=>part.map(([f,s])=>{
+        f*=spec.bodyLengthScale;
+        const crush=Math.max(0,f-2)*damage;
+        return [f-crush*.55,s+impactSide*crush*.25];
+      })));
+      cached={damage,impactSide,bodyLengthScale:spec.bodyLengthScale,hull,
+        wheelForward:carGeometry.wheelForward,wheelRear:carGeometry.wheelRear,wheelSide:carGeometry.wheelSide,body};
+      collisionShapes.set(state,cached);
+    }
+    // Rear tyre geometry is independent of steering. Keep it with the body;
+    // only the front pair needs rebuilding when steering changes.
+    function wheelPart(axle,side) {
+      const angle=axle===0?steerAngle+side*damage*.65:0,c=Math.cos(angle),s=Math.sin(angle);
       const crush=axle===0?6.1*damage:0;
       const f=(axle===0?carGeometry.wheelForward:carGeometry.wheelRear)-crush*.55,lateral=side*carGeometry.wheelSide+impactSide*crush*.25;
-      const profile=[...carGeometry.tyreProfile.map(([axial,r])=>[r,axial]),
-        ...carGeometry.tyreProfile.slice().reverse().map(([axial,r])=>[-r,axial])];
-      // Raised sidewall mouldings also belong to the visible wheel.
-      const band=carGeometry.rimRadius+(1.88-1.12)/1.18*(carGeometry.tyreRadius-carGeometry.rimRadius);
-      for(const axial of [-carGeometry.tyreHalfWidth,carGeometry.tyreHalfWidth]) profile.push([band,axial],[-band,axial]);
-      parts.push(convexHull(profile).map(([x,y])=>[f+x*c-y*s,lateral+x*s+y*c]));
+      return hull.map(([x,y])=>[f+x*c-y*s,lateral+x*s+y*c]);
     }
-    return parts;
+    if(!sameBody)cached.rear=freezeCollisionParts([-1,1].map(side=>wheelPart(1,side)));
+    const front=freezeCollisionParts([-1,1].map(side=>wheelPart(0,side)));
+    cached.parts=Object.freeze([...cached.body,...front,...cached.rear]);cached.steerAngle=steerAngle;
+    return cached.parts;
   }
   function convexHull(points) {
     const sorted=points.slice().sort((a,b)=>a[0]-b[0] || a[1]-b[1]);
