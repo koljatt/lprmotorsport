@@ -10,7 +10,8 @@ class Sessions {
  constructor({clock=()=>performance.now(),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
   Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
   for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
-  this.metrics={started:performance.now(),starts:0,capacityRejected:0,startRateRejected:0,batches:0,ticks:0,verifiedLaps:0,practiceLaps:0};
+  this.metricsSince=Date.now();
+  this.metrics={started:performance.now(),starts:0,capacityRejected:0,startRateRejected:0,batches:0,ticks:0,verifiedLaps:0,practiceLaps:0,processingTimeouts:0,lagTerminations:0};
   this.timings={};
   this.timer=setInterval(()=>this.sweep(),1000);this.timer.unref();
  }
@@ -20,7 +21,7 @@ class Sessions {
   const h=this.timings[name]||(this.timings[name]={count:0,sumMs:0,maxMs:0,buckets:Array(16).fill(0)});
   h.count++;h.sumMs+=value;h.maxMs=Math.max(h.maxMs,value);h.buckets[Math.min(15,Math.ceil(Math.log2(Math.max(1,value))))]++;
  }
- snapshotMetrics(){return {uptimeMs:performance.now()-this.metrics.started,activeSessions:this.activeCount,maxSessions:this.maxSessions,
+ snapshotMetrics(){return {since:this.metricsSince,uptimeMs:performance.now()-this.metrics.started,activeSessions:this.activeCount,maxSessions:this.maxSessions,
   maxStartsPerMinute:this.maxStartsPerMinute,counters:{...this.metrics,started:undefined},timings:JSON.parse(JSON.stringify(this.timings)),
   cpuMicroseconds:process.cpuUsage(),memoryBytes:process.memoryUsage()};}
  async create(version,identity,{armed=false}={}){
@@ -136,7 +137,7 @@ class Sessions {
  }
  release(s){s.slot=false;if(s.pending){clearTimeout(s.pending.timer);s.pending.reject(fail(410,'session_closed','Session closed'));s.pending=null;}
   if(s.worker){const worker=s.worker;s.worker=null;void worker.terminate();}}
- invalidate(s,reason){s.phase='invalid';s.reason=reason;this.release(s);}
+ invalidate(s,reason){if(s.slot){if(reason==='budget')this.metrics.processingTimeouts++;if(reason==='lag')this.metrics.lagTerminations++;}s.phase='invalid';s.reason=reason;this.release(s);}
  cancel(id,token){const s=this.owned(id,token);this.invalidate(s,'cancelled');return {cancelled:true};}
  sweep(){const now=this.clock();for(const [id,s] of this.sessions){
   if(s.slot&&((s.phase!=='starting'&&now-s.lastAccepted>this.idleMs)||now-s.created>this.ttlMs))this.invalidate(s,'expired');

@@ -393,3 +393,30 @@ varmennussimulaation päälle. Tätä käyttöliittymää ja tiedonjakelua ei ol
   ajon aulassa. Lista ja tilavirta eivät saa paljastaa sessioavaimia tai ohjausvaltuuksia.
 - Katselijoiden määrä, tiedonsiirto ja julkaisun kustannus mitataan erikseen. Tietojen
   jakelu keskitetään ennen suuria katsojamääriä; jokainen katsoja ei pollaa ajosäiettä.
+
+### Adminin kapasiteettinäkymä
+
+`cloudflare/admin.html` näyttää nykyisen varmennuspalvelinprosessin laskurit
+suojatun `/api/admin/capacity`-välityksen kautta. Käyttöönotto:
+
+- Julkaise tämän haaran varmennuspalvelin ja analytiikan Worker (`cloudflare/worker.mjs`).
+- Aseta varmennuspalvelimelle `VERIFICATION_METRICS_TOKEN` (vähintään 32 merkkiä).
+- Aseta analytiikan Workerille sama `VERIFICATION_METRICS_TOKEN` salaisuutena sekä
+  `VERIFICATION_METRICS_URL=https://<varmennuspalvelin>/metrics`.
+- Avaa nykyinen `/admin` ylläpitoavaimella ja paina Päivitä.
+
+Mittausavain ei ole adminin kirjautumisavain eikä sitä lähetetä selaimeen.
+Puuttuva tai katkennut mittaus näytetään puuttuvana tietona, ei nollana.
+`capacityRejected` laskee täyden palvelimen estämät aloitukset; saman
+aloituslipukkeen uusinnat eivät kasvata laskuria, mutta uusi aloitusyritys voi.
+`startRateRejected` on erillinen aloitusnopeusraja. `practiceLaps` laskee
+palvelimen simuloimat mutta ajoitusehdon vuoksi ilman kuittia jääneet kierrokset.
+`processingTimeouts` laskee palvelimen käsittelyaikarajan ylitykset ja
+`lagTerminations` liialliseen saapumisviiveeseen päättyneet ajot. Viiveestä ei
+voi päätellä, johtuiko se palvelimesta, verkosta vai pelaajan laitteesta.
+
+Laskenta alkaa `since`-hetkestä ja **nollautuu uudelleenkäynnistyksessä**.
+Aikavälivalitsin ei suodata näitä laskureita; historiallisia menetyksiä ei voi
+palauttaa jälkikäteen. Näkymä ei väitä mittaavansa kaikkia tallentumatta jääneitä
+aikoja tai yksittäisten pelaajien määrää. Usean palvelininstanssin tapauksessa
+näkymä koskee sitä instanssia, jolle metrics-pyyntö ohjautuu.
