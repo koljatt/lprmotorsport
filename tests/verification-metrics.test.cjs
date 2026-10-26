@@ -17,7 +17,7 @@ const assert=require('node:assert/strict');
   assert.deepEqual(await sessions.batch(s.id,s.sessionToken,batch),first);
   const response=await fetch(url+'/metrics',{headers:{Authorization:'Bearer '+secret}}),m=await response.json();
   assert.equal(response.status,200);assert.equal(m.counters.starts,1);assert.equal(m.counters.capacityRejected,1);
-  assert.equal(m.counters.batches,1);assert.equal(m.counters.ticks,60);assert.equal(m.activeSessions,1);
+  assert.equal(m.counters.batches,1);assert.equal(m.counters.ticks,60);assert.equal(m.activeSessions,1);assert.equal(m.pool.workers,1);assert.equal(m.pool.sessions,1);
   assert(m.timings.physicsMs.count===1&&m.timings.batchResponseMs.count===1);assert.equal(m.timings.physicsMs.buckets.length,16);
   assert(!JSON.stringify(m).includes(identity.nickname));assert(!JSON.stringify(m).includes(s.sessionToken));
   sessions.cancel(s.id,s.sessionToken);

@@ -6,7 +6,7 @@ lähtöpiste on `2f70a4549c2203b616e35c8dcc36b5ebf1027e99`.
 
 ## Löydetyt työt ja niiden tallennus
 
-Tarkastettiin keskusteluhistoriasta tunnistetut työt, GitHubin kaikki 23 haaraa
+Aiemmassa kartoituksessa tarkastettiin keskusteluhistoriasta tunnistetut työt ja GitHubin silloiset 23 haaraa
 sekä tämän ympäristön kahdeksan LPR-työtilan ja erillisen replay-työtilan Git-tila.
 Muiden koneiden tai tavoittamattomien chat-ympäristöjen tallentamattomia tiedostoja
 kartoitus ei voi todistaa talteen otetuiksi.
@@ -19,6 +19,8 @@ kartoitus ei voi todistaa talteen otetuiksi.
 | Radan hakuindeksi, kevyempi tallennin, gzip ja mittarit | `perf/verification-capacity` / `a7efa4a` | Sisältyy |
 | Kapasiteettinäkymä ja 90 päivän D1-historia | `feature/admin-capacity-impact` / `66ff6c4` | Yhdistetty; käyttöönottoasetukset tarvitaan |
 | Törmäysmuodon välimuisti | `perf/collision-shape-cache` / `a385349` | Yhdistetty; fysiikan ja tallenteiden pariteettitestit |
+| Yhteinen ratadata ja erilliset ajotilat | `perf/shared-track-state` / `4044d41` | Yhdistetty; tarkat eristys- ja pariteettitestit |
+| Rajattu säiejoukko | `perf/verification-worker-pool` / `244daff` | Yhdistetty; pysyvän kapasiteettihistorian kytkentä sovitettu |
 | Päiväkisa, kuukausipisteet ja ajoputket | `feature/daily-championship` / `9abbe03` | Yhdistetty ja sovitettu julkisiin uusintoihin sekä erillisiin sarjoihin |
 | Aiemman testipelin erilliset build-skriptit | `testing` / `2d1500d` | Säilyvät alkuperäisessä haarassa; nykyinen `build:staging` on integraation testijulkaisutapa |
 | Vanha palvelinvarmennuksen suunnitelma, aiemmin vain paikallinen | `docs/archive/server-verification-plan-20261024.md` | Arkistoitu tähän haaraan; ei nykyinen julkaisuohje |
@@ -49,16 +51,29 @@ rakennetaan aina yhdistetystä lähteestä.
   uusinta ei lisää kierrosmäärää. Päivän sulkeminen säilyy Suomen keskiyössä.
 - Pelipakettiin sisältyy `championship.js`, ja Worker-bundle sisältää sekä uusinnat
   että kilpailun. Muutettujen selainresurssien versioparametrit on päivitetty.
-- CI sisältää nyt myös päiväkilpailun ja törmäysvälimuistin testit.
+- CI sisältää myös päiväkilpailun, törmäysvälimuistin, jaetun ajotilan ja säiejoukon testit.
+- Säiejoukon ja kapasiteettihistorian ristiriidat on sovitettu: `onMetric`, `since`,
+  käynnistys-/hylkäyslaskurit, aikakatkaisut ja viivekatkaisut säilyvät. Todellinen
+  poolisessio testaa käynnistysten ja kapasiteettihylkäyksen D1-kytkennän.
+- Palvelimen säiejoukko käyttää jaettua ratatehdasta. Oletus on yksi säie ja kaksi
+  samanaikaista ajosessiota; tuotannon asetuksiin ei ole tehty muutosta.
 
 ## Tarkistukset
 
-Node 24.22.1. Kaikki CI:n 21 testikokonaisuutta läpäisivät paikallisesti
-(20 koko matriisin ajossa ja lisäksi `test:championship`; muutettujen varmennus-
-ja kilpailuosien testit uusittiin viimeistelyn jälkeen). `build`,
-`build:verified-worker`, `build:worker` ja staging-eristystesti läpäisivät.
+Node 24.22.1. Yhdistetyn kokonaisuuden kaikki **23 CI-testikokonaisuutta**
+läpäisivät paikallisesti. Lisäksi yhdistettyjen kapasiteettimittarien,
+pysyvän historian ja säiejoukon kohdennetut testit uusittiin viimeistelyn jälkeen.
+`build`, `build:verified-worker`, `build:worker` ja staging-eristystesti läpäisivät.
+Bundle on rakennettu yhdistetystä lähteestä revisiolle
+`a16f61c7d0e6e86402fe8c1aaab5a42a4a17cda3e6a314f8ee118c228bcd4b2a`.
 
-Chromium 153 -selainkokeet:
+Nykyisen ehdokkaan kolme selainkoetta yritettiin, mutta ne estyivät ennen testejä:
+Chromium/Chrome puuttuu ympäristöstä. Playwrightin asennusyritys sai virheellisen
+latauspaketin, joten selainta ei saatu asennettua. Tätä ei merkitä läpäistyksi.
+Seuraavat onnistuneet selainhavainnot koskevat **aiempaa `2c69b38`-lähdettä**,
+eivät tätä säiejoukon sisältävää yhdistelmää.
+
+Aiemman integraation Chromium 153 -selainkokeet:
 
 - `test:verified-browser`: oikea 3D-peli, synteettiset ohjaukset, nopeutettu
   palvelinkello, lähtö- ja lentävä kierros, julkinen 3D-uusinta, katsojailmoitus,
@@ -73,7 +88,7 @@ Raakatestit kirjoittuvat `artifacts/integration/` ja `artifacts/verification/`;
 niitä ei julkaista pelipaketissa. Tiivistetty tarkastusnäyttö tallennetaan
 `integration-check-20261026.json`-tiedostoon.
 
-Kahden täyden 3D-selaimen paikallinen `test:verified-realtime` ajettiin myös
+Aiemman integraation kahden täyden 3D-selaimen paikallinen `test:verified-realtime` ajettiin myös
 ilman muita testejä. Se **ei läpäissyt**: asiakas siirtyi harjoitteluksi `lag`-syyllä.
 Ohjelmistografiikkaa käyttävä koe ei erota selaimen hitautta, paikallista
 ajastusta ja palvelinviivettä eikä mittaa Renderin kapasiteettia. Sitä ei merkitä
@@ -81,12 +96,17 @@ hyväksytyksi. Nopeutetun kellon selainkoe läpäisi erikseen.
 
 ## Julkaisun estävät keskeneräiset työt
 
+Selainkokeet (`test:verified-browser`, `test:chat-browser` ja
+`test:championship-browser`) on uusittava onnistuneesti tästä yhdistetystä
+lähteestä ympäristössä, jossa Chromium on käytettävissä.
+
 1. **Varmennuksen viiveiden erottelu ja palautumissääntö.** Nykyinen sääntö voi
    vaihtaa kierroksen harjoitteluksi yhden yli 1,5 s:n saapumisviiveen jälkeen.
    Paikalliset rajatun viiveen/kiinnioton testit eivät todista oikean verkkoreitin
    toimivuutta. Aiemmassa julkisessa HTTPS-kokeessa vain yksi kahdesta pelaajasta
    sai molemmat kierrokset virallisiksi. Tätä ei korjattu rajoja löysäämällä.
-   Seuraava korjaus erottaa HTTP-vastaanoton, syötejonon, säikeen odotuksen,
+   Säiejoukko mittaa nyt säikeen jonotusta erikseen. Täysi korjaus erottaa edelleen
+   HTTP-vastaanoton, syötejonon, säikeen odotuksen,
    fysiikan ja uusinnan pakkauksen; päätös käyttää syötteen vastaanottohetkeä.
    Palvelimen oma työ ei saa siirtyä huomaamatta seuraavan erän verkkoviiveeksi.
    Rajattu yksittäinen katko, jatkuvasti hidas tallenne, toistuvat viiveet ja
@@ -107,12 +127,6 @@ hyväksytyksi. Nopeutetun kellon selainkoe läpäisi erikseen.
 
 ## Suunnitellut mutta toteuttamattomat ominaisuudet
 
-- **Yhteinen muuttumaton ratadata ja rajattu säiejoukko:** ei löytynyt toteutusta
-  työtiloista tai GitHubista. Aloita mittaamalla maailman rakenneosien muisti ja
-  erottamalla jaettava muuttumaton geometria pelaajakohtaisesta muuttuvasta tilasta.
-  Säie käsittelee useampia sessioita rajatulla työjonolla; varmennuksen omistajuus,
-  järjestys, peruuttaminen, aikarajat ja oikeudenmukainen työvuorotus säilyvät.
-  Etene omassa haarassa vasta deterministisen pariteetti- ja kuormitustestin kautta.
 - **Aula ja reaaliaikainen seuranta:** nykyinen koodi ei näytä ajavia pelaajia tai
   tarjoa live-katselua. Toteuta erillinen julkinen tunniste ja listaus palvelimen
   aktiivisista ajoista. Hyödynnä varmennuksen valmiita tilanäytteitä, yhtä jakelijaa,
@@ -133,7 +147,7 @@ Niitä ei merkitä valmiiksi eikä niiden odotettuja kapasiteettihyötyjä laske
 2. Tee viiveiden diagnostiikka ja palautumisen korjaus tämän haaran päälle.
 3. Uusi kohdennetut testit, buildit ja kahden pelaajan staging-kokeet täsmälleen
    julkaistavasta commitista. Varmista myös päiväkilpailu ja kapasiteettihistoria.
-4. Toteuta jaetun ratadatan/säiejoukon ja aulan muutokset omissa haaroissaan;
-   yhdistä vasta omien hyväksymiskokeidensa jälkeen, jos ne valitaan samaan julkaisuun.
+4. Jaettu ratadata ja säiejoukko sisältyvät nyt tähän haaraan. Aula/live-katselu
+   jää erilliseksi ominaisuudeksi eikä kuulu tämän julkaisun toimintoihin.
 5. Käy läpi [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md), lukitse julkaisucommit ja
    tarkista mainin lähtöpiste uudelleen. Tuotantoon/mainiin siirtyminen on erillinen vaihe.

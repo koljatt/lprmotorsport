@@ -1,0 +1,289 @@
+{
+  "generatedAt": "2026-10-26T15:25:28.151Z",
+  "revision": "a16f61c7d0e6e86402fe8c1aaab5a42a4a17cda3e6a314f8ee118c228bcd4b2a",
+  "node": "v24.22.1",
+  "scope": "Local retained JavaScript heap and initialization costs in fresh Node processes after explicit GC. Multiple worlds in one thread. Production still uses one session per worker; these savings require the later worker-pool stage. Not a Render capacity claim.",
+  "rows": [
+    {
+      "worlds": 1,
+      "isolated": {
+        "variant": "isolated",
+        "worlds": 1,
+        "createMs": 85.317654,
+        "cpuMs": 126.846,
+        "retainedHeapBytes": 3595152,
+        "memoryBytes": {
+          "before": {
+            "rss": 43728896,
+            "heapTotal": 17260544,
+            "heapUsed": 7939440,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 62435328,
+            "heapTotal": 29319168,
+            "heapUsed": 11534592,
+            "external": 4041372,
+            "arrayBuffers": 146603
+          }
+        },
+        "hash": "42661acd20a16be25b47ba40b29a2d210646342d98da674481322a15425c64c8",
+        "sharedTrack": false,
+        "sharedIndex": false
+      },
+      "shared": {
+        "variant": "shared",
+        "worlds": 1,
+        "createMs": 125.562004,
+        "cpuMs": 163.627,
+        "retainedHeapBytes": 6874880,
+        "memoryBytes": {
+          "before": {
+            "rss": 44101632,
+            "heapTotal": 17522688,
+            "heapUsed": 7939440,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 70569984,
+            "heapTotal": 32464896,
+            "heapUsed": 14814320,
+            "external": 4041372,
+            "arrayBuffers": 146603
+          }
+        },
+        "hash": "42661acd20a16be25b47ba40b29a2d210646342d98da674481322a15425c64c8",
+        "sharedTrack": false,
+        "sharedIndex": false
+      },
+      "heapReductionPercent": -91.22640711713996
+    },
+    {
+      "worlds": 2,
+      "isolated": {
+        "variant": "isolated",
+        "worlds": 2,
+        "createMs": 208.58357999999998,
+        "cpuMs": 249.207,
+        "retainedHeapBytes": 6876760,
+        "memoryBytes": {
+          "before": {
+            "rss": 43724800,
+            "heapTotal": 17260544,
+            "heapUsed": 7939440,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 70709248,
+            "heapTotal": 49504256,
+            "heapUsed": 14816200,
+            "external": 4041380,
+            "arrayBuffers": 146611
+          }
+        },
+        "hash": "a52dec544b1d1d63a029409e9e8651ae7f8f2162a2444ecaa93636eacd4e42da",
+        "sharedTrack": false,
+        "sharedIndex": false
+      },
+      "shared": {
+        "variant": "shared",
+        "worlds": 2,
+        "createMs": 171.63704700000002,
+        "cpuMs": 194.98,
+        "retainedHeapBytes": 8377680,
+        "memoryBytes": {
+          "before": {
+            "rss": 44257280,
+            "heapTotal": 17522688,
+            "heapUsed": 7939440,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 73195520,
+            "heapTotal": 51077120,
+            "heapUsed": 16317120,
+            "external": 4041372,
+            "arrayBuffers": 146603
+          }
+        },
+        "hash": "a52dec544b1d1d63a029409e9e8651ae7f8f2162a2444ecaa93636eacd4e42da",
+        "sharedTrack": true,
+        "sharedIndex": true
+      },
+      "heapReductionPercent": -21.825976186459894
+    },
+    {
+      "worlds": 4,
+      "shared": {
+        "variant": "shared",
+        "worlds": 4,
+        "createMs": 110.55962,
+        "cpuMs": 182.703,
+        "retainedHeapBytes": 11372240,
+        "memoryBytes": {
+          "before": {
+            "rss": 43728896,
+            "heapTotal": 17260544,
+            "heapUsed": 7939536,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 82497536,
+            "heapTotal": 53436416,
+            "heapUsed": 19311776,
+            "external": 4041372,
+            "arrayBuffers": 146603
+          }
+        },
+        "hash": "c10ee63a447765eaff41501404ed4674bead51763dc31f2f930d8135fd47f196",
+        "sharedTrack": true,
+        "sharedIndex": true
+      },
+      "isolated": {
+        "variant": "isolated",
+        "worlds": 4,
+        "createMs": 360.747057,
+        "cpuMs": 456.404,
+        "retainedHeapBytes": 13362992,
+        "memoryBytes": {
+          "before": {
+            "rss": 43823104,
+            "heapTotal": 17260544,
+            "heapUsed": 7939440,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 94928896,
+            "heapTotal": 55795712,
+            "heapUsed": 21302432,
+            "external": 4041396,
+            "arrayBuffers": 146627
+          }
+        },
+        "hash": "c10ee63a447765eaff41501404ed4674bead51763dc31f2f930d8135fd47f196",
+        "sharedTrack": false,
+        "sharedIndex": false
+      },
+      "heapReductionPercent": 14.897501996558859
+    },
+    {
+      "worlds": 8,
+      "shared": {
+        "variant": "shared",
+        "worlds": 8,
+        "createMs": 128.98071499999998,
+        "cpuMs": 222.447,
+        "retainedHeapBytes": 17289504,
+        "memoryBytes": {
+          "before": {
+            "rss": 44056576,
+            "heapTotal": 17522688,
+            "heapUsed": 7939440,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 96325632,
+            "heapTotal": 59727872,
+            "heapUsed": 25228944,
+            "external": 4041372,
+            "arrayBuffers": 146603
+          }
+        },
+        "hash": "cabadeb95848a79176764eba6c2686b04c9c20149619a27034be44dfd6fe8609",
+        "sharedTrack": true,
+        "sharedIndex": true
+      },
+      "isolated": {
+        "variant": "isolated",
+        "worlds": 8,
+        "createMs": 653.580613,
+        "cpuMs": 804.319,
+        "retainedHeapBytes": 26223328,
+        "memoryBytes": {
+          "before": {
+            "rss": 43544576,
+            "heapTotal": 17522688,
+            "heapUsed": 7939440,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 145588224,
+            "heapTotal": 102719488,
+            "heapUsed": 34162768,
+            "external": 4041428,
+            "arrayBuffers": 146659
+          }
+        },
+        "hash": "cabadeb95848a79176764eba6c2686b04c9c20149619a27034be44dfd6fe8609",
+        "sharedTrack": false,
+        "sharedIndex": false
+      },
+      "heapReductionPercent": 34.06823115662513
+    },
+    {
+      "worlds": 16,
+      "shared": {
+        "variant": "shared",
+        "worlds": 16,
+        "createMs": 193.0429,
+        "cpuMs": 295.39,
+        "retainedHeapBytes": 29110464,
+        "memoryBytes": {
+          "before": {
+            "rss": 44331008,
+            "heapTotal": 17260544,
+            "heapUsed": 7939464,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 120045568,
+            "heapTotal": 106127360,
+            "heapUsed": 37049928,
+            "external": 4041372,
+            "arrayBuffers": 146603
+          }
+        },
+        "hash": "7b1d8615a6df5496e355eb31084606f009eef446980103f8ec92e8ecf7cdcd9e",
+        "sharedTrack": true,
+        "sharedIndex": true
+      },
+      "isolated": {
+        "variant": "isolated",
+        "worlds": 16,
+        "createMs": 1039.123949,
+        "cpuMs": 1569.566,
+        "retainedHeapBytes": 51935128,
+        "memoryBytes": {
+          "before": {
+            "rss": 44290048,
+            "heapTotal": 17522688,
+            "heapUsed": 7939536,
+            "external": 4041308,
+            "arrayBuffers": 146579
+          },
+          "after": {
+            "rss": 214286336,
+            "heapTotal": 197877760,
+            "heapUsed": 59874664,
+            "external": 4041492,
+            "arrayBuffers": 146723
+          }
+        },
+        "hash": "7b1d8615a6df5496e355eb31084606f009eef446980103f8ec92e8ecf7cdcd9e",
+        "sharedTrack": false,
+        "sharedIndex": false
+      },
+      "heapReductionPercent": 43.9484119496153
+    }
+  ],
+  "baselineCommit": "a38534944947bfd1e3a188d8fd2f5926e2c9ce2a"
+}

@@ -42,7 +42,16 @@ function binding(db){return {async batch(statements){db.exec('BEGIN');try{const 
  report=await (await coldWorker.fetch(request('/api/admin/capacity-history?days=7'),{...env,VERIFICATION_METRICS_URL:undefined})).json();assert.equal(report.totals.capacityRejected,6);
  const {Sessions}=require('../verification/sessions.cjs'),{revision}=require('../verification/world.cjs');
  const hook=make(),sessions=new Sessions({maxSessions:1,onMetric:hook.record});
- try{sessions.sessions.set('occupied',{slot:true,phase:'running',lastAccepted:performance.now(),created:performance.now()});await assert.rejects(()=>sessions.create(revision,{}),e=>e.code==='capacity');await hook.flush();assert.equal((await history()).totals.capacityRejected,7);}finally{await sessions.close();await hook.close();}
+ try{
+  const live=await sessions.create(revision,{});
+  assert.equal(sessions.snapshotMetrics().pool.workers,1,'The live session runs in the shared worker pool');
+  await assert.rejects(()=>sessions.create(revision,{}),e=>e.code==='capacity');
+  // Startup may already be uploading the same hour bucket; drain the newer version too.
+  await hook.flush();await hook.flush();
+  const combined=await history();assert.equal(combined.totals.capacityRejected,7);assert.equal(combined.totals.starts,1,'Pooled initialization reaches durable history exactly once');
+  sessions.cancel(live.id,live.sessionToken);await sessions.pool.drain();
+  assert((await sessions.pool.inspect()).every(s=>s.worlds===0));
+ }finally{await sessions.close();await hook.close();}
  // A change made during an in-flight upload must also be drained at shutdown.
  let release;const gate=new Promise(r=>{release=r;});let writes=0;
  const draining=createCapacityReporter({url,token,fetcher:async(endpoint,options)=>{if(++writes===1)await gate;return fetcher(endpoint,options);},clock:()=>now});

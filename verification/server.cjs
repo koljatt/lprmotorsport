@@ -9,7 +9,7 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
  if(typeof secret!=='string'||secret.length<32)throw Error('VERIFICATION_SECRET must contain at least 32 characters');
  const reporter=createCapacityReporter({url:capacityReportURL,token:metricsToken});
  const used=new Map();
- const sessions=new Sessions({maxSessions:Number(process.env.MAX_VERIFIED_SESSIONS||2),maxStartsPerMinute:Number(process.env.MAX_VERIFIED_STARTS_PER_MINUTE||8),...sessionsOptions,onMetric:(key,count)=>reporter.record(key,count),signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
+ const sessions=new Sessions({workerCount:Number(process.env.VERIFICATION_WORKERS||1),workerHeapMb:Number(process.env.VERIFICATION_WORKER_HEAP_MB||256),maxSessions:Number(process.env.MAX_VERIFIED_SESSIONS||2),maxStartsPerMinute:Number(process.env.MAX_VERIFIED_STARTS_PER_MINUTE||8),...sessionsOptions,onMetric:(key,count)=>reporter.record(key,count),signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
   sessionId:s.id,playerHash:s.identity.playerHash,nickname:s.identity.nickname,...lap,issuedAt:Date.now()},secret)});
  const allowed=new Set(origins);
  const chat=createChat({protocol});

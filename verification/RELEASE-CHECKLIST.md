@@ -1,8 +1,8 @@
 # Integraation julkaisu
 
 Valmisteltava kokonaisuus: `integration/next-update-20261026`. Mukana edellinen
-integraatio, päiväkilpailu, auton törmäysmuodon välimuisti ja adminin pysyvä
-kapasiteettihistoria. Tilanne, testit ja julkaisuesteet: [INTEGRATION-20261026.md](INTEGRATION-20261026.md).
+integraatio, päiväkilpailu, auton törmäysmuodon välimuisti, adminin pysyvä
+kapasiteettihistoria, jaettu ratadata ja rajattu säiejoukko. Tilanne, testit ja julkaisuesteet: [INTEGRATION-20261026.md](INTEGRATION-20261026.md).
 **Luonnos: ei vielä hyväksytty mainiin tai tuotantojulkaisuun.**
 Mainiin vienti käynnistää `.github/workflows/deploy-pages.yml`-julkaisun automaattisesti.
 Pelkkä main-push ei päivitä Cloudflare Workeria eikä takaa Renderin päivittymistä.
@@ -44,6 +44,8 @@ vanhat pelivälilehdet pitää päivittää. Älä kuvaa vaihtoa katkottomaksi.
    Lisäykset ovat `CREATE ... IF NOT EXISTS` -muotoisia; älä pudota vanhoja tauluja.
 2. Julkaise Renderin `lpr-verification` valitusta commitista ja tarkista `/health`:
    `ready=true`, `protocol=driving-v1`, `hz=120` ja sama fysiikkarevisio kuin bundlessa.
+   Säilytä `VERIFICATION_WORKERS=1` ja `MAX_VERIFIED_SESSIONS=2` tässä julkaisussa;
+   pelaajarajaa ei nosteta paikallisten kuormakokeiden perusteella.
    Säilytä automaattijulkaisu pois päältä vaihdon ajan, jos se on jo pois käytöstä.
 3. Julkaise analytiikan `cloudflare/worker.mjs` ja päivitetty admin (`npm run build:worker`
    ennen pakkausta). Aseta erillinen `VERIFICATION_METRICS_TOKEN` molempiin palveluihin,
@@ -82,7 +84,7 @@ vanhat pelivälilehdet pitää päivittää. Älä kuvaa vaihtoa katkottomaksi.
 Uusi julkinen lista sisältää vain tilien ajat, joilla on julkinen uusinta.
 Vanhoja tuloksia ei poisteta kierrostaulusta, mutta tallenteettomat ajat eivät
 näy uudessa TOP 10:ssä. Kapasiteettioptimointi vaihtaa simulaatiorevision arvoon
-`e9cec7741f4d835d64b247fb1bf925572f32032380fcb9ce9074a747344ad2a2`.
+`a16f61c7d0e6e86402fe8c1aaab5a42a4a17cda3e6a314f8ee118c228bcd4b2a`.
 Myös kaikki aiemman revision ajat suodattuvat uudelta listalta. Niille ei tehdä
 migraatiota, vaikka pariteettitestit vahvistavat fysiikan vastaavuuden.
 Vanhan revision uusinnat voivat poistua heti uuden revision säilytyssiivouksessa;

@@ -5,10 +5,29 @@ const files=['shared/dmath.js','shared/vehicle-spec.js','campus.js','shared/trac
 const sources=files.map(file=>fs.readFileSync(path.join(root,file),'utf8').replaceAll('\r\n','\n'));
 const data=JSON.stringify(JSON.parse(fs.readFileSync(path.join(root,'data/track-objects.json'),'utf8')));
 const revision=createHash('sha256').update(JSON.stringify({files,sources,data,protocol:'driving-v1'})).digest('hex');
-function createWorld({trackIndexed=true}={}){
+// Compile the trusted source once per thread; never evaluate client data.
+const initialize=new Function('window','module',sources.join('\n'));
+function createIsolatedWorld({trackIndexed=true}={}){
  const window={LPRTrackData:JSON.parse(data)};
- // Only trusted project code is compiled. Client data is never executable code.
- new Function('window','module',sources.join('\n'))(window,undefined);
- return {world:window.LPRDriving.create({trackIndexed}),api:window.LPRDriving,math:window.LPRMath};
+ initialize(window,undefined);
+ return {world:window.LPRDriving.create({trackIndexed}),api:window.LPRDriving,math:window.LPRMath,campus:window.LPRCampus};
 }
-module.exports={createWorld,revision,files};
+function createWorldFactory(){
+ const root={LPRTrackData:JSON.parse(data)};
+ initialize(root,undefined);
+ const prepared=root.LPRCampus.prepareSessionFactory();
+ const collisionIndex=root.LPRCreateCollisionIndex.prepare(root.LPRCampus.obstacleBounds);
+ // These functions close over immutable document/terrain lookup data only.
+ const trackObjects=Object.freeze({onAsphalt:root.LPRTrackObjects.onAsphalt,
+  terrain:Object.freeze({heightAt:root.LPRTrackObjects.terrain.heightAt,sample:root.LPRTrackObjects.terrain.sample})});
+ return Object.freeze({definition:prepared.definition,
+  create({trackIndexed=true}={}){
+   const campus=prepared.createSession();campus.collisionIndex=collisionIndex;
+   return {world:root.LPRDriving.create({trackIndexed,campus,trackObjects}),api:root.LPRDriving,math:root.LPRMath,campus,definition:prepared.definition};
+  }
+ });
+}
+// Isolated worlds remain useful for tools and reference tests. Production pool
+// workers explicitly own a shared factory for their multiple sessions.
+function createWorld(options){return createIsolatedWorld(options);}
+module.exports={createWorld,createWorldFactory,createIsolatedWorld,revision,files};
