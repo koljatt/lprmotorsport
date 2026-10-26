@@ -21,23 +21,35 @@ Rakennus korvaa vain `dist`-paketin päätepisteet. Tavallinen `npm run build`
 ja tuotannon lähdeasetukset säilyvät ennallaan. Rakennus hylkää tunnetut
 tuotanto-osoitteet. `staging.json` sisältää julkiset testiosoitteet,
 simulaatiorevision ja Renderin lähdecommitin; se ei sisällä salaisuuksia.
-Testin lopullinen pelilinkki ja suoritetun kokeen tulos kirjataan tähän tiedostoon
-kun julkaisu ja verkkokoe ovat valmistuneet.
+Testipeli: https://lpr-motorsport-test-a1gg.onrender.com/
+
+Renderin testipalvelin: `srv-dbfht27b9u1s73d0uoqg`, staattinen testipeli:
+`srv-dbfhusdg1s2s73ft0dfg`, työtila `LPR Motorsport`.
+Molemmissa on julkaistuna commit `56b14516d25f6416a7b9719bcfc82a64ead45a90`.
+Varmennuspalvelimen julkaisu `dep-dbfhv3j4qb4c73aergu0` ja testipelin julkaisu
+`dep-dbfhuslg1s2s73ft0eo0` valmistuivat tilaan `live`.
+Testipalvelin käyttää Free-suunnitelmaa ja samaa Oregonin aluetta kuin tuotanto.
+Testipalvelimelle määriteltyjä avaimia ei sisällytetä tähän ohjeeseen tai Gitiin.
 
 ## Automaattinen HTTPS-koe
 
 Käytä samaa checkoutia kuin testipelissä. Aja ilman muita testaajia palvelimella:
 
 ```sh
-LPR_TEST_SITE_URL=https://TESTIPELIN-OSOITE npm run test:verified-remote
+LPR_TEST_SITE_URL=https://lpr-motorsport-test-a1gg.onrender.com npm run test:verified-remote
 ```
 
 Koe lukee testisivun `staging.json`-tiedoston ja tarkistaa testipäätepisteet sekä
 paikallisen ja etäpalvelimen simulaatiorevision. Se herättää varmennuspalvelimen,
 luo kaksi satunnaista `NetTest ...` -tiliä ja alustaa kummallekin oman allekirjoitetun
 ajosession. Molemmat aktivoidaan ja ajavat lähtökierroksen sekä lentävän kierroksen
-samanaikaisesti oikeassa ajassa noin 194 sekunnissa. Syötteet valmistellaan ennen
-ajoa, joten paikallinen 3D-piirto ei kuormita koetta.
+samanaikaisesti oikeassa ajassa noin 194 sekunnissa. Koe käyttää samaa
+`experiment/live-client.js`-yhteysasiakasta kuin peli: syöte-erien kuittaukset,
+jonon purku, uusintayritykset ja maalilinjan erärajat vastaavat selainta.
+Syötteet ja vertailutilat valmistellaan ennen ajoa, joten paikallinen
+3D-piirto tai fysiikan laskenta ei kuormita ajon aikataulutusta.
+Jos ympäristö vaatii HTTP-välityspalvelimen, Node 24.22:n `--use-env-proxy`
+-valinta ottaa sen ympäristöasetukset käyttöön.
 
 Jokaisen kuittauksen ajotilaa verrataan paikalliseen vertailuun. Kierroskuitit ja
 uusinnat lähetetään Workerille taustalla seuraavan kierroksen jatkuessa. Koe vaatii,
@@ -70,3 +82,27 @@ Testipalvelimessa on sama kahden session oletusraja kuin tuotannossa. Automaatti
 julkaisu on pois käytöstä, jotta käynnissä olevan kokeen versio ei vaihdu uuden
 pushin takia. Uuden testiversion julkaisu tehdään erikseen. Testipalvelu voi nukkua
 käyttämättömänä; odota ensimmäisellä avauksella palvelimen heräämistä.
+
+## Suoritettu valmistelukoe 26.10.2026
+
+Testisivun 390 px:n selainkoe läpäisi: TESTIVERSIO-merkintä, harjoittelun aloitus,
+CORS-yhteys testipalvelimeen, ei JavaScript-virheitä eikä pyyntöjä tuotantopalveluihin.
+Ensimmäisellä selainlatauksella yhden skriptin verkkolataus epäonnistui; uusintakokeen
+kaikki pyynnöt ja sivun toiminnot läpäisivät. Tämä ei ollut kahden laitteen ajokoe.
+
+Kahden samanaikaisen Node-asiakkaan HTTPS-koe pelin omalla verkkoyhteysasiakkaalla
+**ei läpäissyt**. `NetTest 3f54d6c5 1` sai lähtö- ja lentävän kierroksen varmennettua,
+tallennettua ja julkiset uusinnat ladattua. Aikaa kului noin 202,4 s, kuittausviiveen
+p95 oli 634,9 ms ja suurin kuittausviive 2 021,3 ms. Toinen asiakas menetti
+kelpoisuuden vastaanottoajoituksen vuoksi eikä tallentanut virallista kierrosta.
+Palvelin ei hylännyt aloituksia kapasiteetin tai aloitustaajuuden vuoksi.
+
+Raakamuotoinen raportti ja selainvarmistus: [staging-check-20261026.json](staging-check-20261026.json).
+Mittareiden kokonaislaskurit sisältävät myös ensimmäisen, yksinkertaisempaa
+verkkotestiasiakasta käyttäneen valmisteluyrityksen. Molempien yritysten sessiot
+suljettiin ja testikirjautumiset peruttiin. Lopuksi aktiivisia sessioita oli nolla.
+
+Tulos ei yksin erottele verkkoreitin viivettä, välityspalvelinta ja Renderin
+laskentakuormaa. Aikarajoja ei muutettu eikä kahden pelaajan toimivuutta merkitty
+hyväksytyksi. Testiympäristö on valmis kahden oikean laitteen kokeeseen ja jatkodiagnostiikkaan.
+Mainia tai tuotantopalveluita ei julkaistu.

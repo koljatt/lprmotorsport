@@ -1,0 +1,253 @@
+{
+  "environment": "isolated staging",
+  "applicationCommit": "56b14516d25f6416a7b9719bcfc82a64ead45a90",
+  "remoteProbeMethod": "game LiveClient over public HTTPS, real clock",
+  "remote": {
+    "generatedAt": "2026-10-26T09:44:23.852Z",
+    "site": "https://lpr-motorsport-test-a1gg.onrender.com",
+    "service": "https://lpr-verification-test-ziev.onrender.com",
+    "leaderboard": "https://lpr-verified-test.panu-musakka-0bf.workers.dev",
+    "revision": "ec564e6d6d7f3aff4cd6764fdfb81b421bfeaa0ec1552bc538413614e4cb8b83",
+    "commit": "56b14516d25f6416a7b9719bcfc82a64ead45a90",
+    "runId": "3f54d6c5",
+    "scope": "Two paced Node clients through public HTTPS, signed account/start/lap APIs and D1; excludes real browser rendering and human input",
+    "passed": false,
+    "players": [
+      {
+        "nickname": "NetTest 3f54d6c5 1",
+        "sessionId": "f55a7680f181e11149ea6c45ad9c0e92",
+        "completedLaps": [
+          1,
+          2
+        ],
+        "elapsedMs": 202427.85541999998,
+        "batches": 371,
+        "ackLagP95Ms": 634.8878779999795,
+        "maxAckLagMs": 2021.292558666648
+      }
+    ],
+    "testAccounts": [
+      "NetTest 3f54d6c5 1",
+      "NetTest 3f54d6c5 2"
+    ],
+    "error": "The run must remain eligible\n\nfalse !== true\n"
+  },
+  "browserSmoke": {
+    "passed": true,
+    "errors": [],
+    "failed": [],
+    "productionRequests": [],
+    "cors": {
+      "ok": true,
+      "health": {
+        "ready": true,
+        "protocol": "driving-v1",
+        "revision": "ec564e6d6d7f3aff4cd6764fdfb81b421bfeaa0ec1552bc538413614e4cb8b83",
+        "hz": 120,
+        "streaming": true,
+        "activeSessions": 2
+      },
+      "config": {
+        "service": "https://lpr-verification-test-ziev.onrender.com",
+        "leaderboard": "https://lpr-verified-test.panu-musakka-0bf.workers.dev"
+      }
+    }
+  },
+  "savedPublicReplays": {
+    "verified": true,
+    "sessionId": "f55a7680f181e11149ea6c45ad9c0e92",
+    "laps": [
+      1,
+      2
+    ]
+  },
+  "finalMetricsIncludingBothPreparationAttempts": {
+    "uptimeMs": 677973.504143,
+    "activeSessions": 0,
+    "maxSessions": 2,
+    "maxStartsPerMinute": 8,
+    "counters": {
+      "starts": 4,
+      "capacityRejected": 0,
+      "startRateRejected": 0,
+      "batches": 691,
+      "ticks": 43219,
+      "verifiedLaps": 2,
+      "practiceLaps": 0
+    },
+    "timings": {
+      "initializationMs": {
+        "count": 4,
+        "sumMs": 5716.69950599999,
+        "maxMs": 1541.0026919999946,
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "workerWallMs": {
+        "count": 691,
+        "sumMs": 81957.20267099976,
+        "maxMs": 1801.489424999978,
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          267,
+          102,
+          76,
+          71,
+          86,
+          50,
+          34,
+          5,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "physicsMs": {
+        "count": 691,
+        "sumMs": 79419.96840199995,
+        "maxMs": 1800.4047049999353,
+        "buckets": [
+          0,
+          0,
+          0,
+          1,
+          272,
+          105,
+          72,
+          70,
+          85,
+          51,
+          30,
+          5,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "replayMs": {
+        "count": 691,
+        "sumMs": 2386.712151003201,
+        "maxMs": 544.30372299999,
+        "buckets": [
+          655,
+          15,
+          3,
+          1,
+          2,
+          0,
+          0,
+          13,
+          0,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "batchResponseMs": {
+        "count": 691,
+        "sumMs": 84234.26959300089,
+        "maxMs": 1833.7936880000052,
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          251,
+          107,
+          80,
+          76,
+          85,
+          47,
+          40,
+          5,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "arrivalLagMs": {
+        "count": 691,
+        "sumMs": 94122.6036396629,
+        "maxMs": 6166.036783000003,
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          638,
+          22,
+          15,
+          9,
+          4,
+          0,
+          3,
+          0,
+          0
+        ]
+      },
+      "ackLagMs": {
+        "count": 691,
+        "sumMs": 178360.26256066095,
+        "maxMs": 6190.540263999996,
+        "buckets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          350,
+          185,
+          84,
+          51,
+          18,
+          0,
+          3,
+          0,
+          0
+        ]
+      }
+    },
+    "cpuMicroseconds": {
+      "user": 19640289,
+      "system": 654034
+    },
+    "memoryBytes": {
+      "rss": 106237952,
+      "heapTotal": 13406208,
+      "heapUsed": 12049480,
+      "external": 3261402,
+      "arrayBuffers": 733767
+    }
+  }
+}

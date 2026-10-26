@@ -88,3 +88,18 @@ virallinen kierros, chat ja uusinta. Pelkkä main-push ei julkaise koko palvelua
 Kahden samanaikaisen pelaajan reaaliaikaisuutta ei saatu tässä vahvistettua;
 se pitää tarkistaa riittävällä selainlaitteistolla ja testipalvelimella ennen
 kuin tätä haaraa kuvataan kaikilta osin julkaisuvalmiiksi.
+
+## Erillinen testijulkaisu
+
+Integraatiohaaran `56b1451` julkaistiin erilliseen Render-testiympäristöön.
+Tuotannon palvelut ja main säilyivät ennallaan. Testin asetukset, linkki ja tulokset
+ovat [STAGING.md](verification/STAGING.md)-ohjeessa. Julkaisussa on erillinen
+D1-tietokanta, testiavain, testianalytiikka ja TESTIVERSIO-merkintä.
+Uusi testirakennuksen eristystesti lisättiin CI:hin (nyt 19 kokonaisuutta), ja
+`56b1451`-commitin GitHub-testit läpäisivät.
+
+HTTPS-koe pelin omalla yhteysasiakkaalla ei läpäissyt kahta samanaikaista pelaajaa:
+toinen sai kaksi virallista kierrosta tallennettua, toinen menetti kelpoisuuden
+ajoitusviiveessä. Oikean sivun mobiilileveyden selainvarmistus läpäisi ilman
+JavaScript- tai CORS-virheitä ja ilman tuotantopyyntöjä. Kahden laitteen varsinainen
+ajokoe sekä ajoitusviiveen syyn erottelu ovat edelleen tekemättä.
