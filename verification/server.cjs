@@ -9,7 +9,7 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
  if(typeof secret!=='string'||secret.length<32)throw Error('VERIFICATION_SECRET must contain at least 32 characters');
  const reporter=createCapacityReporter({url:capacityReportURL,token:metricsToken});
  const used=new Map();
- const lapLagMs=Number(process.env.VERIFICATION_LAP_LAG_MS??1500);
+ const lapLagMs=Number(process.env.VERIFICATION_LAP_LAG_MS??2000);
  if(!Number.isSafeInteger(lapLagMs)||lapLagMs<1||lapLagMs>16000)throw Error('VERIFICATION_LAP_LAG_MS must be an integer from 1 to 16000');
  const sessions=new Sessions({lapLagMs,workerCount:Number(process.env.VERIFICATION_WORKERS||1),workerHeapMb:Number(process.env.VERIFICATION_WORKER_HEAP_MB||256),maxSessions:Number(process.env.MAX_VERIFIED_SESSIONS||2),maxStartsPerMinute:Number(process.env.MAX_VERIFIED_STARTS_PER_MINUTE||8),...sessionsOptions,onMetric:(key,count)=>reporter.record(key,count),signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
   sessionId:s.id,playerHash:s.identity.playerHash,nickname:s.identity.nickname,...lap,issuedAt:Date.now()},secret)});
