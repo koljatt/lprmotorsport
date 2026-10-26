@@ -6,7 +6,7 @@ const hz=120;
 const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,code,...extra});
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
- constructor({clock=()=>performance.now(),workerCount=1,workerHeapMb=256,executorFactory=options=>new VerificationPool(options),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,onMetric=()=>{},signLap=async()=>{throw Error('Missing signer')}}={}){
+ constructor({clock=()=>performance.now(),workerCount=1,workerHeapMb=256,executorFactory=options=>new VerificationPool(options),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=2000,idleMs=24000,ttlMs=620000,onMetric=()=>{},signLap=async()=>{throw Error('Missing signer')}}={}){
   Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap,onMetric});this.sessions=new Map();this.creations=[];this.closed=false;
   for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
   this.pool=executorFactory({workerCount,workerHeapMb,onLost:id=>{const s=this.sessions.get(id);if(s?.slot)this.invalidate(s,'worker_lost');}});
