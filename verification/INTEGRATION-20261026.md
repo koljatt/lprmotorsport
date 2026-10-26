@@ -101,10 +101,10 @@ Selainkokeet (`test:verified-browser`, `test:chat-browser` ja
 lähteestä ympäristössä, jossa Chromium on käytettävissä.
 
 1. **Varmennuksen viiveiden erottelu ja palautumissääntö.** Nykyinen sääntö voi
-   vaihtaa kierroksen harjoitteluksi yhden yli 1,5 s:n saapumisviiveen jälkeen.
+   vaihtaa kierroksen harjoitteluksi yhden yli 2 s:n saapumisviiveen jälkeen.
    Paikalliset rajatun viiveen/kiinnioton testit eivät todista oikean verkkoreitin
    toimivuutta. Aiemmassa julkisessa HTTPS-kokeessa vain yksi kahdesta pelaajasta
-   sai molemmat kierrokset virallisiksi. Tätä ei korjattu rajoja löysäämällä.
+   sai molemmat kierrokset virallisiksi. Käyttäjän päätöksellä oletusraja nostettiin myöhemmin kahteen sekuntiin; uutta rajaa ei kuormitustestattu.
    Säiejoukko mittaa nyt säikeen jonotusta erikseen. Täysi korjaus erottaa edelleen
    HTTP-vastaanoton, syötejonon, säikeen odotuksen,
    fysiikan ja uusinnan pakkauksen; päätös käyttää syötteen vastaanottohetkeä.
