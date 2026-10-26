@@ -3,12 +3,14 @@
   // Shared physics must give bit-identical results in the browser and on the verification server.
   const Math=root.LPRMath||globalThis.Math;
   const hz=120;
-  function create({car,dynamics=new root.VehicleDynamics(),onImpact=()=>{},indexed=true,trackIndexed=true}={}) {
-    const LPRCampus=root.LPRCampus,window=root;
+  const preparedTracks=new WeakMap();
+  function create({car,dynamics=new root.VehicleDynamics(),onImpact=()=>{},indexed=true,trackIndexed=true,campus=root.LPRCampus,trackObjects=root.LPRTrackObjects}={}) {
+    const LPRCampus=campus,window={LPRTrackObjects:trackObjects};
     const track=LPRCampus.track,POINTS=track.length,WORLD=LPRCampus.bounds;
     const {halfWidth:ROAD_HALF,kerbOuter:KERB_OUTER,shoulderOuter:SHOULDER_OUTER}=LPRCampus.road;
-    const trackDistances=[0];
-    for(let i=0;i<POINTS;i++)trackDistances.push(trackDistances[i]+Math.hypot(track[(i+1)%POINTS].x-track[i].x,track[(i+1)%POINTS].y-track[i].y));
+    const prepared=Object.isFrozen(track)?preparedTracks.get(track):null;
+    const trackDistances=prepared?.distances||[0];
+    if(!prepared)for(let i=0;i<POINTS;i++)trackDistances.push(trackDistances[i]+Math.hypot(track[(i+1)%POINTS].x-track[i].x,track[(i+1)%POINTS].y-track[i].y));
   function nearestTrackLinear(x, y) {
     let bestDist = Infinity;
     let index = 0;
@@ -40,7 +42,8 @@
     ids.sort((i,j)=>(track[i][axis]+track[(i+1)%POINTS][axis])-(track[j][axis]+track[(j+1)%POINTS][axis])||i-j);
     const mid=ids.length>>1;node.left=buildTrackIndex(ids.slice(0,mid));node.right=buildTrackIndex(ids.slice(mid));return node;
   }
-  const trackIndex=trackIndexed?buildTrackIndex(Array.from({length:POINTS},(_,i)=>i)):null;
+  const trackIndex=trackIndexed?(prepared?.index||buildTrackIndex(Array.from({length:POINTS},(_,i)=>i))):null;
+  if(Object.isFrozen(track))preparedTracks.set(track,{distances:Object.freeze(trackDistances),index:trackIndex||prepared?.index});
   function nearestTrack(x,y){
     if(!trackIndex||!Number.isFinite(x)||!Number.isFinite(y))return nearestTrackLinear(x,y);
     let bestDist=Infinity,index=0,along=0;
@@ -95,7 +98,7 @@
   }
 
 
-    const people=root.LPRPeople.create();
+    const people=root.LPRPeople.create({campus:LPRCampus});
     let ticks=0,lapStartTick=0,lastSplit=0,stage=0,lap=1,sectors=[],lastLap=null;
     let query;
     function reset(state) {
@@ -103,7 +106,7 @@
       car=state||{x:track[0].x,y:track[0].y,angle:Math.atan2(track[1].y-track[0].y,track[1].x-track[0].x)};
       dynamics.reset(car);dynamics.parameters.tractionControlEnabled=true;car.tcEnabled=true;
       ticks=0;lapStartTick=0;lastSplit=0;stage=0;lap=1;sectors=[];lastLap=null;
-      people.update(0);query=root.LPRCreateCollisionIndex(LPRCampus.obstacleBounds);return car;
+      people.update(0);query=root.LPRCreateCollisionIndex(LPRCampus.obstacleBounds,160,LPRCampus.collisionIndex);return car;
     }
     function step(input) {
       if(car.crashed)throw Error('Car crashed');

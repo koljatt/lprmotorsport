@@ -445,13 +445,13 @@ window.LPRCampus = (() => {
   const obstacleBounds=[...buildingBounds,...saleAccessBounds,...treeBounds,...vehicleBounds,...tyreBarrierBounds,poolBounds];
   // SI velocities and masses; only positions and mesh coordinates use world units.
   const bodies=[];
-  function makeBody(bounds,kind,mass=Infinity) {
+  function makeBody(bounds,kind,mass=Infinity,targetBodies=bodies) {
     const body={bounds,kind,mass,x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2,
       angle:bounds.angle||0,vx:0,vy:0,spin:0,damage:0,bend:0,bendVelocity:0,dents:[]};
     body.origin={x:body.x,y:body.y,angle:body.angle};
     body.spawn={...body.origin};
     body.width=bounds.maxX-bounds.minX;body.depth=bounds.maxY-bounds.minY;
-    Object.defineProperty(bounds,'body',{value:body,enumerable:false});bodies.push(body);return body;
+    Object.defineProperty(bounds,'body',{value:body,enumerable:false});targetBodies.push(body);return body;
   }
   buildingBounds.forEach(b=>makeBody(b,'wall'));
   treeBounds.forEach((b,i)=>{Object.defineProperty(trees[i],'body',{value:makeBody(b,'tree'),enumerable:false});});
@@ -531,7 +531,8 @@ window.LPRCampus = (() => {
     }
     return {depth,normal};
   }
-  function stepObstacles(seconds,car,onImpact) {
+  function stepObstacles(seconds,car,onImpact,sessionBodies=bodies) {
+    const bodies=sessionBodies;
     const duration=Math.max(0,Math.min(seconds,.1));
     const motion=bodies.reduce((max,b)=>Number.isFinite(b.mass)?Math.max(max,
       Math.hypot(b.vx,b.vy)/spec.metresPerWorldUnit+Math.abs(b.spin)*Math.hypot(b.width,b.depth)/2):max,0);
@@ -574,7 +575,8 @@ window.LPRCampus = (() => {
       b.vx*=drag;b.vy*=drag;b.spin*=Math.exp(-3*dt);updateBounds(b);
     }
   }
-  function resetObstacles() {
+  function resetObstacles(sessionBodies=bodies) {
+    const bodies=sessionBodies;
     for(const b of bodies) {
       b.origin={...b.spawn};b.pose=undefined;
       Object.assign(b,{...b.origin,vx:0,vy:0,spin:0,damage:0,bend:0,bendVelocity:0,dents:[],direction:undefined});updateBounds(b);
@@ -606,6 +608,60 @@ window.LPRCampus = (() => {
   }
   const resolveBuildingCollision=(state,previous,onImpact)=>resolveBoundsCollision(state,previous,buildingBounds,onImpact);
   const resolveObstacleCollision=(state,previous,onImpact)=>resolveBoundsCollision(state,previous,obstacleBounds,onImpact);
+  function prepareSessionFactory() {
+    const campus=this;
+    if(peopleBounds.length||bodies.some(b=>b.damage||b.vx||b.vy||b.spin))throw Error('Prepare track before starting any driving worlds');
+    resetObstacles();
+    const freeze=value=>{
+      if(value&&typeof value==='object'&&!Object.isFrozen(value)){
+        for(const child of Object.values(value))freeze(child);Object.freeze(value);
+      }return value;
+    };
+    const bodyIds=new Map(bodies.map((body,i)=>[body,i]));
+    const boundIds=new Map();
+    const spawns=campus.obstacleBounds.map((bounds,i)=>{
+      boundIds.set(bounds,i);return {...bounds,bodyIndex:bodyIds.get(bounds.body)};
+    });
+    const bodySpawns=bodies.map(body=>{
+      const {bounds,...fields}=body;
+      return {...fields,origin:{...body.origin},spawn:{...body.spawn},dents:body.dents.map(d=>({...d}))};
+    });
+    const indices=list=>list.map(b=>boundIds.get(b));
+    const definition=freeze({track:campus.track,road:campus.road,length:campus.length,
+      saunaSite:{...campus.saunaSite},bonfireSite:{...campus.bonfireSite},poolSite:{...campus.poolSite},
+      peopleSites:(campus.peopleSites||[]).map(p=>({...p})),carGeometry:campus.carGeometry,
+      bounds:{...campus.bounds},spawns,bodySpawns,
+      buildings:indices(campus.buildingBounds),trees:indices(campus.treeBounds),vehicles:indices(campus.vehicleBounds),
+      tyres:indices(campus.tyreBarrierBounds),bodyBounds:bodies.map(b=>boundIds.get(b.bounds)),pool:bodyIds.get(campus.poolBody)});
+    function createSession(){
+      const sessionBodies=[],localBounds=definition.spawns.map(({bodyIndex,...bounds})=>({...bounds}));
+      // Body registration order matters for contact resolution. Preserve it exactly.
+      for(let i=0;i<definition.bodySpawns.length;i++){
+        const original=definition.bodySpawns[i],boundIndex=definition.bodyBounds[i];
+        const body=makeBody(localBounds[boundIndex],original.kind,original.mass,sessionBodies);
+        Object.assign(body,original,{bounds:localBounds[boundIndex],origin:{...original.origin},spawn:{...original.spawn},dents:original.dents.map(d=>({...d}))});
+      }
+      const localPeople=[];
+      const select=ids=>ids.map(i=>localBounds[i]);
+      return {track:definition.track,road:definition.road,length:definition.length,world,
+        saunaSite:definition.saunaSite,bonfireSite:definition.bonfireSite,poolSite:definition.poolSite,
+        peopleSites:definition.peopleSites,carGeometry:definition.carGeometry,bounds:definition.bounds,
+        obstacleBounds:localBounds,buildingBounds:select(definition.buildings),treeBounds:select(definition.trees),
+        vehicleBounds:select(definition.vehicles),tyreBarrierBounds:select(definition.tyres),
+        bodies:sessionBodies,poolBody:sessionBodies[definition.pool],carCollisionParts,resolveBoundsCollision,
+        resolveBuildingCollision:(state,previous,onImpact)=>resolveBoundsCollision(state,previous,select(definition.buildings),onImpact),
+        resolveObstacleCollision:(state,previous,onImpact)=>resolveBoundsCollision(state,previous,localBounds,onImpact),
+        registerPerson(index,x,y){
+          if(localPeople[index])return localPeople[index].body;
+          const bounds=footprint(x,y,5,5);localPeople[index]=bounds;localBounds.push(bounds);
+          return makeBody(bounds,'person',80,sessionBodies);
+        },
+        makeBody:(bounds,kind,mass)=>makeBody(bounds,kind,mass,sessionBodies),
+        stepObstacles:(seconds,car,onImpact)=>stepObstacles(seconds,car,onImpact,sessionBodies),
+        resetObstacles:()=>resetObstacles(sessionBodies),movePerson,placeBody,deformPoint};
+    }
+    return Object.freeze({definition,createSession});
+  }
   function build({box,quad,materialBox=box,objectGeometry=(body,draw)=>draw()}) {
     const block = (x,z,w,d,h,color,y=0,material) => { const p=world(x,z); (material ? materialBox : box)(p.x,y,p.y,w*scale,h,d*scale,color,material); };
     const windowPane = (x,y,z,side,shade) => {
@@ -1022,5 +1078,5 @@ window.LPRCampus = (() => {
   return { track, road, length, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
     campusCars, studentCarModels, lakesideCars, vehicleBounds, buildingBounds, obstacleBounds, resolveBoundsCollision, resolveBuildingCollision,
     resolveObstacleCollision, carGeometry, carCollisionParts, tyreBarrier, tyreBarrierBounds,
-    bodies,poolSite,poolBody,registerPerson,movePerson,placeBody,makeBody,stepObstacles,resetObstacles,deformPoint, bounds:{width:5200,height:4400} };
+    prepareSessionFactory,bodies,poolSite,poolBody,registerPerson,movePerson,placeBody,makeBody,stepObstacles,resetObstacles,deformPoint, bounds:{width:5200,height:4400} };
 })();

@@ -398,3 +398,9 @@ varmennussimulaation päälle. Tätä käyttöliittymää ja tiedonjakelua ei ol
 
 Seuraavan optimointivaiheen toiminta, vertailutestit ja paikallinen CPU-/muistimittaus:
 [COLLISION_CACHE.md](COLLISION_CACHE.md). Muutos ei nosta pelaajarajaa.
+
+### Yhteinen ratadata ja erilliset ajotilat
+
+Ensimmäisen muistiuudistusvaiheen rajapinta, eristystestit, mittaustulokset ja
+käyttöönoton raja: [SHARED_TRACK_STATE.md](SHARED_TRACK_STATE.md).
+Nykyinen yhden ajon säiemalli säilyy; yhteinen tehdas on seuraavan säieuudistuksen pohja.
