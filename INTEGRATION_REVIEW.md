@@ -2,7 +2,8 @@
 
 ## Rajaus ja tulos
 
-Julkaisuehdokas on `integration/main-updates-20261025`, lähtöcommit `c094c54`.
+Julkaisuehdokas on `integration/main-updates-20261025`. Tarkastuksen `405a235`
+päälle yhdistetään `perf/verification-capacity` (`a7efa4a`).
 Mainia tai tuotantopalveluita ei muutettu tässä tarkastuksessa. Päiväkisa
 `feature/daily-championship` ei kuulu tähän pakettiin; sen yhdistäminen tähän
 haaraan tuottaa ristiriitoja 13 tiedostoon ja vaatii erillisen yhteistestauksen.
@@ -20,6 +21,12 @@ allekirjoituksen. Selain ei voi määrätä viestin nimimerkkiä itse.
 
 ## Tämän tarkastuksen viimeistelyt
 
+- Kapasiteettihaara yhdistyi ilman ristiriitoja. Mukana ovat ratasegmenttien BVH-haku,
+  askelnumeron kevyempi lukeminen uusintatallentimessa, asynkroninen gzip-pakkaus,
+  suojattu `/metrics`, säädettävät kapasiteettirajat sekä vertailu- ja kuormitusskriptit.
+  Oletusrajat ovat edelleen kaksi sessiota ja kahdeksan aloitusta minuutissa.
+  Aulan ja reaaliaikaisen katselun toteutus ei kuulu tähän haaraan; README sisältää
+  niitä koskevan jatkosuunnitelman.
 - Selainkokeet tukevat `LPR_BROWSER_EXECUTABLE_PATH`-muuttujaa sekä asennettua
   Playwright Chromiumia; järjestelmän Chrome säilyy varavaihtoehtona.
 - Chatin selainkoe avaa Lisäasetukset ennen piilotetun asetuksen käyttämistä.
@@ -32,10 +39,14 @@ allekirjoituksen. Selain ei voi määrätä viestin nimimerkkiä itse.
 
 ## Suoritetut tarkistukset
 
-- Kaikki **17** `.github/workflows/tests.yml`-tiedoston testikokonaisuutta läpäisivät
+- Kaikki **18** `.github/workflows/tests.yml`-tiedoston testikokonaisuutta läpäisivät
   Node 24.22.1:llä. Mukana ovat tili-, varmennus-, reaaliaikaisuus-, tallenne-,
-  chat-, fysiikka-, determinismi-, leaderboard- ja analytiikkatestit.
-- `npm run test:chat-browser`: läpi Chromium 153.0.8010.0:ssa; kaksi pelaajaa,
+  chat-, fysiikka-, determinismi-, leaderboard-, analytiikka- ja kapasiteettitestit.
+  Uudet testit vertaavat indeksoitua ja lineaarista hakua sekä jokaista ajotilaa
+  kahdella kierroksella, tarkistavat vanhan tallentimen sisältöpariteetin ja
+  mittarirajapinnan käyttöoikeudet sekä kapasiteettilaskurit.
+- `npm run test:chat-browser`: läpi ennen kapasiteettihaaran yhdistämistä Chromium
+  153.0.8010.0:ssa; kaksi pelaajaa,
   tekstin turvallinen näyttäminen, näppäimistöohjaus chatin yhteydessä,
   kielenvaihto, näkyvyysasetuksen muistaminen ja 360 px:n mobiilileveys.
 - `npm run test:verified-browser`: läpi samassa selaimessa; kaksi palvelimen
@@ -45,7 +56,8 @@ allekirjoituksen. Selain ei voi määrätä viestin nimimerkkiä itse.
   JavaScript-virheitä ei ollut. Tässä ajokokeessa palvelinkello on nopeutettu.
 - `npm run build`, `npm run build:verified-worker` ja muutettujen skriptien
   syntaksitarkistukset läpäisivät. Generoitu Worker vastaa versionhallinnan bundlea.
-- `npm run test:verified-realtime`: **ei läpäissyt** tässä ympäristössä. Kaksi
+- `npm run test:verified-realtime`: **ei läpäissyt ennen kapasiteettihaaran
+  yhdistämistä** tässä ympäristössä. Kaksi
   640 × 480:n 3D-selainta käynnistyi, mutta noin 16 sekunnin kohdalla selaimet
   olivat simuloineet vasta 752 ja 729 fysiikka-askelta (noin kuusi sekuntia).
   Molemmat olivat jo harjoittelutilassa, ja myöhemmin varmennus keskeytyi
@@ -53,11 +65,16 @@ allekirjoituksen. Selain ei voi määrätä viestin nimimerkkiä itse.
   ajoi myös paikallispalvelimet. Koe ei erota näiden kuormituksia eikä mittaa
   Renderin kapasiteettia. Aikarajoja ei väljennetty testin läpäisemiseksi.
 
-Tämä ei ole kaikkien 51 irrallisen testitiedoston uusi ajo. Aiemman tarkastuksen
+Tämä ei ole kaikkien irrallisten testitiedostojen uusi ajo. Aiemman tarkastuksen
 `sale-exterior.test.cjs`-havainto koski mainissakin olevaa Sale-kaidetta; sitä ei
-ole korjattu tässä julkaisussa eikä fysiikkaa tai ratadataa ole muutettu.
-Fysiikkarevisio säilyy arvossa
-`d8d41e628bb3b62ff574c4a95bcbb410a549ba79432c268ce7dbe9cbf6013875`.
+ole korjattu tässä julkaisussa. Ratadataa ei ole muutettu.
+Kapasiteettihaara muuttaa jaettua lähdekoodia ja siten simulaatiorevisiota.
+Yhdistetyn version revisio on
+`ec564e6d6d7f3aff4cd6764fdfb81b421bfeaa0ec1552bc538413614e4cb8b83`.
+Pariteettitestit varmistavat samoilla syötteillä saman fysiikan ja tallenteiden
+sisällön, mutta vanhoja tuloksia ei siirretä uuden revision alle. Vanhan revision
+ajat eivät näy uudessa julkisessa listassa, ja sen uusinnat voivat poistua
+säilytyssiivouksessa. Kierrosrivit säilyvät tietokannassa.
 Paikalliset selainraportit ovat Gitin ohittamassa `artifacts/verification/`-
 kansiossa. Ne eivät sisälly pelin julkaisupakettiin.
 

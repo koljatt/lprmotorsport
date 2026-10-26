@@ -7,17 +7,28 @@ const hz=120;
 const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,code,...extra});
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
- constructor({clock=()=>performance.now(),maxSessions=2,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
-  Object.assign(this,{clock,maxSessions,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
+ constructor({clock=()=>performance.now(),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
+  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
+  for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
+  this.metrics={started:performance.now(),starts:0,capacityRejected:0,startRateRejected:0,batches:0,ticks:0,verifiedLaps:0,practiceLaps:0};
+  this.timings={};
   this.timer=setInterval(()=>this.sweep(),1000);this.timer.unref();
  }
  get activeCount(){return [...this.sessions.values()].filter(s=>s.slot).length;}
+ observe(name,value){
+  if(!Number.isFinite(value)||value<0)return;
+  const h=this.timings[name]||(this.timings[name]={count:0,sumMs:0,maxMs:0,buckets:Array(16).fill(0)});
+  h.count++;h.sumMs+=value;h.maxMs=Math.max(h.maxMs,value);h.buckets[Math.min(15,Math.ceil(Math.log2(Math.max(1,value))))]++;
+ }
+ snapshotMetrics(){return {uptimeMs:performance.now()-this.metrics.started,activeSessions:this.activeCount,maxSessions:this.maxSessions,
+  maxStartsPerMinute:this.maxStartsPerMinute,counters:{...this.metrics,started:undefined},timings:JSON.parse(JSON.stringify(this.timings)),
+  cpuMicroseconds:process.cpuUsage(),memoryBytes:process.memoryUsage()};}
  async create(version,identity,{armed=false}={}){
   this.sweep();
   if(version!==revision)throw fail(409,'revision','Simulation revision changed');
-  if(this.activeCount>=this.maxSessions)throw fail(429,'capacity','Two verified sessions are already active');
+  if(this.activeCount>=this.maxSessions){this.metrics.capacityRejected++;throw fail(429,'capacity','Verified session capacity reached');}
   const now=this.clock();this.creations=this.creations.filter(t=>now-t<60000);
-  if(this.creations.length>=8)throw fail(429,'rate_limit','Too many session starts');
+  if(this.creations.length>=this.maxStartsPerMinute){this.metrics.startRateRejected++;throw fail(429,'rate_limit','Too many session starts');}
   this.creations.push(now);
   // Bound completed receipt caches even when starts fail or clients disappear.
   for(const [id,s] of this.sessions){if(!s.slot&&this.sessions.size>=8)this.sessions.delete(id);}
@@ -25,7 +36,8 @@ class Sessions {
   const s={id,token,identity,phase:'starting',slot:true,nextSeq:0,ticks:0,receipts:new Map(),lastAccepted:now,created:now,failures:0,lapEligible:true,eligibleFromTick:0};
   this.sessions.set(id,s);
   try{
-   const initial=await this.spawn(s);
+   const initStart=performance.now(),initial=await this.spawn(s);
+   this.observe('initializationMs',performance.now()-initStart);this.metrics.starts++;
    s.started=this.clock();s.lastAccepted=s.started;s.phase=armed?'armed':'running';
    return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs,lapLagMs:this.lapLagMs};
   }catch(error){this.invalidate(s,'initialization');throw error;}
@@ -86,11 +98,13 @@ class Sessions {
   try{return await promise;}finally{s.inflight=null;}
  }
  async process(s,data,digest,endTick,arrivalLagMs){
+  const processingStart=performance.now();
   try{
    const message=await new Promise((resolve,reject)=>{
     const id=data.seq,timer=setTimeout(()=>reject(fail(504,'budget','Input verification exceeded its time budget')),10000);
     s.pending={id,resolve,reject,timer};s.worker.postMessage({id,inputs:data.inputs});
    });
+   this.observe('workerWallMs',message.wallMs);this.observe('physicsMs',message.physicsMs);this.observe('replayMs',message.replayMs);
    if(s.phase!=='running')throw fail(410,'session_closed','Session was interrupted');
    if(message.result.crashed)throw fail(422,'crashed','Car crashed; session is not a verified lap');
    if(message.result.ticks!==endTick)throw fail(422,'ticks','Simulation tick mismatch');
@@ -113,6 +127,9 @@ class Sessions {
    const reply={sessionId:s.id,seq:data.seq,ackTick:s.ticks,phase:'running',result:message.result,
     wallMs:message.wallMs,serverElapsedMs:this.clock()-s.started,laps,practiceLaps,
     eligibility:{eligible:s.lapEligible,fromTick:s.eligibleFromTick,lap:message.result.lap,lagMs:Math.max(0,arrivalLagMs)}};
+   this.metrics.batches++;this.metrics.ticks+=data.inputs.length;this.metrics.verifiedLaps+=laps.length;this.metrics.practiceLaps+=practiceLaps.length;
+   this.observe('batchResponseMs',performance.now()-processingStart);this.observe('arrivalLagMs',Math.max(0,arrivalLagMs));
+   this.observe('ackLagMs',Math.max(0,this.clock()-s.started-endTick*1000/hz));
    s.receipts.set(data.seq,{digest,reply});
    return reply;
   }catch(error){this.invalidate(s,error.code||'physics');throw error;}

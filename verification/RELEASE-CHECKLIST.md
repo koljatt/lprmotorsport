@@ -1,6 +1,7 @@
 # Integraation julkaisu
 
-Julkaistava kokonaisuus: `integration/main-updates-20261025` (lähtökohta `c094c54`).
+Julkaistava kokonaisuus: `integration/main-updates-20261025` (integraation `405a235` ja
+kapasiteettihaaran `a7efa4a` yhdistelmä).
 Päiväkisa `feature/daily-championship` ei kuulu tähän julkaisuun.
 Mainiin vienti käynnistää `.github/workflows/deploy-pages.yml`-julkaisun automaattisesti.
 Pelkkä main-push ei päivitä Cloudflare Workeria eikä takaa Renderin päivittymistä.
@@ -18,7 +19,8 @@ Pelkkä main-push ei päivitä Cloudflare Workeria eikä takaa Renderin päivitt
    Omaa Chromiumia voi käyttää muuttujalla `LPR_BROWSER_EXECUTABLE_PATH`.
    `npm run test:verified-realtime` on erillinen kahden paikallisen 3D-asiakkaan
    reaaliaikakoe; se ei mittaa Renderin kapasiteettia.
-   Se ei läpäissyt 26.10. ohjelmistografiikkaa käyttäneessä tarkastusympäristössä
+   Ennen kapasiteettihaaran yhdistämistä se ei läpäissyt 26.10.
+   ohjelmistografiikkaa käyttäneessä tarkastusympäristössä
    (selainsimulaatiot jäivät reaaliajasta). Kahden pelaajan reaaliaikaisuus on
    siksi vielä varmennettava sopivalla laitteistolla ja testipalvelimella.
 3. Tarkista tuotannon todelliset asetukset ja ota D1-varmistus ennen muutoksia.
@@ -69,7 +71,12 @@ vanhat pelivälilehdet pitää päivittää. Älä kuvaa vaihtoa katkottomaksi.
 
 Uusi julkinen lista sisältää vain tilien ajat, joilla on julkinen uusinta.
 Vanhoja tuloksia ei poisteta kierrostaulusta, mutta tallenteettomat ajat eivät
-näy uudessa TOP 10:ssä. Kumpikin sarja säilyttää nykyrevision 20 nopeinta uusintaa,
+näy uudessa TOP 10:ssä. Kapasiteettioptimointi vaihtaa simulaatiorevision arvoon
+`ec564e6d6d7f3aff4cd6764fdfb81b421bfeaa0ec1552bc538413614e4cb8b83`.
+Myös kaikki aiemman revision ajat suodattuvat uudelta listalta. Niille ei tehdä
+migraatiota, vaikka pariteettitestit vahvistavat fysiikan vastaavuuden.
+Vanhan revision uusinnat voivat poistua heti uuden revision säilytyssiivouksessa;
+varmista niiden varmistus ja julkaisuvaikutus ennen Workerin vaihtamista. Kumpikin sarja säilyttää nykyrevision 20 nopeinta uusintaa,
 ja tarkastettavaksi merkityt säilyvät lisäksi. Sarjasiirto tai siivous voi poistaa
 muut uusintatiedostot pysyvästi; pelkällä version palautuksella niitä ei palauteta.
 

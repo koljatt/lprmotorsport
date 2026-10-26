@@ -3,13 +3,13 @@
   // Shared physics must give bit-identical results in the browser and on the verification server.
   const Math=root.LPRMath||globalThis.Math;
   const hz=120;
-  function create({car,dynamics=new root.VehicleDynamics(),onImpact=()=>{},indexed=true}={}) {
+  function create({car,dynamics=new root.VehicleDynamics(),onImpact=()=>{},indexed=true,trackIndexed=true}={}) {
     const LPRCampus=root.LPRCampus,window=root;
     const track=LPRCampus.track,POINTS=track.length,WORLD=LPRCampus.bounds;
     const {halfWidth:ROAD_HALF,kerbOuter:KERB_OUTER,shoulderOuter:SHOULDER_OUTER}=LPRCampus.road;
     const trackDistances=[0];
     for(let i=0;i<POINTS;i++)trackDistances.push(trackDistances[i]+Math.hypot(track[(i+1)%POINTS].x-track[i].x,track[(i+1)%POINTS].y-track[i].y));
-  function nearestTrack(x, y) {
+  function nearestTrackLinear(x, y) {
     let bestDist = Infinity;
     let index = 0;
     let along = 0;
@@ -26,6 +26,40 @@
       }
     }
     return { index, distance: Math.sqrt(bestDist), along };
+  }
+
+  // Static segment BVH. Bounds only exclude distant segments; the final projection
+  // uses the original arithmetic and ties always select the original track order.
+  function buildTrackIndex(ids) {
+    const node={minX:Infinity,minY:Infinity,maxX:-Infinity,maxY:-Infinity};
+    for(const i of ids){const a=track[i],b=track[(i+1)%POINTS];
+      node.minX=Math.min(node.minX,a.x,b.x);node.minY=Math.min(node.minY,a.y,b.y);
+      node.maxX=Math.max(node.maxX,a.x,b.x);node.maxY=Math.max(node.maxY,a.y,b.y);}
+    if(ids.length<=8){node.ids=ids;return node;}
+    const axis=node.maxX-node.minX>=node.maxY-node.minY?'x':'y';
+    ids.sort((i,j)=>(track[i][axis]+track[(i+1)%POINTS][axis])-(track[j][axis]+track[(j+1)%POINTS][axis])||i-j);
+    const mid=ids.length>>1;node.left=buildTrackIndex(ids.slice(0,mid));node.right=buildTrackIndex(ids.slice(mid));return node;
+  }
+  const trackIndex=trackIndexed?buildTrackIndex(Array.from({length:POINTS},(_,i)=>i)):null;
+  function nearestTrack(x,y){
+    if(!trackIndex||!Number.isFinite(x)||!Number.isFinite(y))return nearestTrackLinear(x,y);
+    let bestDist=Infinity,index=0,along=0;
+    function lower(node){const dx=Math.max(0,node.minX-x,x-node.maxX),dy=Math.max(0,node.minY-y,y-node.maxY);return dx*dx+dy*dy;}
+    function visit(node,bound){
+      // Conservative round-off allowance: never prune a numerically tied segment.
+      if(bound>bestDist+1e-10*Math.max(1,bound,bestDist))return;
+      if(node.ids){for(const i of node.ids){
+        const a=track[i],b=track[(i+1)%POINTS],dx=b.x-a.x,dy=b.y-a.y;
+        const t=Math.max(0,Math.min(1,((x-a.x)*dx+(y-a.y)*dy)/(dx*dx+dy*dy)));
+        const distance=(x-a.x-t*dx)*(x-a.x-t*dx)+(y-a.y-t*dy)*(y-a.y-t*dy);
+        if(distance<bestDist||(distance===bestDist&&i<index)){
+          bestDist=distance;index=i;along=trackDistances[i]+t*(trackDistances[i+1]-trackDistances[i]);
+        }
+      }return;}
+      const l=lower(node.left),r=lower(node.right);
+      if(l<=r){visit(node.left,l);visit(node.right,r);}else{visit(node.right,r);visit(node.left,l);}
+    }
+    visit(trackIndex,0);return {index,distance:Math.sqrt(bestDist),along};
   }
 
   function grassContact(state) {
@@ -109,7 +143,7 @@
     function result(){return {ticks,stage,lap,lapStartTick,sectorTicks:[...sectors],lastLap,crashed:!!car.crashed,
       state:{x:car.x,y:car.y,angle:car.angle,vx:car.vx,vy:car.vy,yawRate:car.yawRate,damage:car.damage??0}};}
     reset(car);
-    return {reset,step,result,nearestTrack,grassContact,get car(){return car},dynamics,people,track,trackDistances};
+    return {reset,step,result,get ticks(){return ticks},nearestTrack,grassContact,get car(){return car},dynamics,people,track,trackDistances};
   }
   function encode(input){return [input.gas,input.brake,input.steer,!!input.analog,!!input.wheel,input.tc!==false];}
   function valid(a){return Array.isArray(a)&&a.length===6&&a.slice(0,3).every(Number.isFinite)&&a[0]>=0&&a[0]<=1&&a[1]>=0&&a[1]<=1&&Math.abs(a[2])<=1&&a.slice(3).every(v=>typeof v==='boolean');}

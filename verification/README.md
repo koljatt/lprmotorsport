@@ -83,7 +83,7 @@ pelikäyttöliittymä enää lähetä harjoitteluaikoja vanhaan tuloslistaan.
    pelaajatunnukseen, tilin nimimerkkiin ja simulaatioversioon, ja se on voimassa kaksi minuuttia.
 2. `verification/server.cjs` tarkistaa luvan ja aloittaa oman 120 Hz:n
    simulaation worker-threadissa. Saman luvan uusintayritys palauttaa saman
-   session eikä nollaa palvelinkelloa. Kapasiteetti on enintään kaksi sessiota.
+   session eikä nollaa palvelinkelloa. Oletuskapasiteetti on enintään kaksi sessiota (ks. kapasiteettiasetukset alla).
    Pelin sessio valmistellaan ensin odottamaan lähtöä. Valmistelun jälkeen
    erillinen, uusintayritykset salliva aktivointi
    käynnistää palvelinkellon. Harjoittelun odotusaikaa ei lasketa ajoon.
@@ -294,3 +294,102 @@ Tunniste on edelleen selaimen localStoragessa. Tämä muutos ei toteuta HttpOnly
 
 Tallennus, TOP 10 -uusinnat, ylläpidon tarkastusjono ja käyttöönotto:
 [REPLAYS.md](REPLAYS.md).
+
+## Kapasiteetin mittaus ja kevennys
+
+Jaettu 120 Hz:n fysiikka hakee lähimmän ratasegmentin staattisesta BVH-hakurakenteesta.
+Lopullinen etäisyys lasketaan vanhalla kaavalla, ja tasatuloksessa voittaa alkuperäisen
+ratajärjestyksen ensimmäinen segmentti. `createWorld({trackIndexed:false})` käyttää
+vertailutoteutusta mittauksia varten; verkkoasiakas ei voi valita hakutapaa.
+Uusintatallennin lukee askelnumeron ilman koko tilan kopiointia. Valmiin uusinnan
+gzip-pakkaus on asynkroninen, mutta kierroskuittaus odottaa edelleen valmista,
+allekirjoitettuun tiivisteeseen sidottua uusintaa. Katselun 20 Hz ja tallenteen tiedot säilyvät.
+
+Palvelimen ympäristömuuttujat:
+
+| Muuttuja | Oletus | Merkitys |
+| --- | --- | --- |
+| `MAX_VERIFIED_SESSIONS` | `2` | Yhtä aikaa varattujen ajosessioiden raja, myös valmistelussa olevat |
+| `MAX_VERIFIED_STARTS_PER_MINUTE` | `8` | Koko palvelimen uusien aloitusten minuuttiraja |
+| `VERIFICATION_METRICS_TOKEN` | ei asetettu | Erillinen vähintään 32 merkin ylläpitotunniste mittareille |
+
+Kapasiteettirajojen on oltava kokonaislukuja väliltä 1–256. Tämä on asetuksen
+validointiraja, ei lupaus tuetusta pelaajamäärästä. Oletusrajoja ei ole nostettu.
+Älä käytä mittaritunnisteena allekirjoitusavainta äläkä lisää tunnistetta pelin tiedostoihin.
+
+`GET /metrics`, otsake `Authorization: Bearer <mittaritunniste>`, palauttaa
+käynnistykset, kapasiteetti- ja aloitusrajahylkäykset, lasketut askeleet, hyväksytyt ja
+harjoittelukierrokset, prosessin CPU- ja muistitiedot sekä aikajakaumat.
+Ilman määriteltyä tunnistetta reitti palauttaa 404; väärällä tunnisteella 401.
+Mittareissa ei ole nimimerkkejä, pelaajatunnuksia, sessioavaimia tai ohjaussyötteitä.
+Laskurit nollautuvat prosessin käynnistyksessä. CPU-mikrosekunnit ovat kumulatiivisia:
+vertaa kahden näytteen erotusta kuluneeseen seinäkelloaikaan. Aikajakaumissa on
+16 lokeroa: <=1, <=2, <=4, ... <=16384 ja >16384 ms; viimeinen lokero sisältää
+myös kaikki tätä suuremmat arvot. `sumMs`, `count` ja `maxMs` mahdollistavat keskiarvon
+ja huippujen seurannan. `physicsMs` mittaa laskentaa ja `replayMs` tallennusta sekä
+pakkauksen odotusta; ne ovat seinäkelloaikoja, eivät erillisiä CPU-mittauksia.
+`arrivalLagMs` ja `ackLagMs` erottavat vastaanotto- ja käsittelyviiveen.
+
+```sh
+npm run test:verification-capacity
+npm run measure:verification-capacity
+npm run load:verification -- 90 2,4,8,16
+```
+
+Vertailumittaus ajaa vuorotellen vanhan lineaarisen haun ja uuden hakurakenteen
+neljä kertaa samoilla 24 000 syötteellä sekä täydellä uusintatallennuksella. Se
+varmistaa jokaisen tilan ja valmiiden tallenteiden yhteisen tiivisteen yhtäsuuruuden.
+CPU-säästö koskee hakurakenteen vaikutusta koko tähän testiin, ei pelkkää hakua.
+Aja mittaus ilman muita paikallisia testejä. Raportit kirjoitetaan
+`artifacts/verification/capacity-benchmark.json` ja `capacity-load.json`.
+
+Kuormitustesti käyttää oikeaa monotonista palvelinkelloa, 60 askeleen syöte-eriä,
+erillisiä ajosäikeitä, uusintatallennusta ja sessioiden normaaleja tarkistuksia.
+Se ei käytä selainta, HTTP-välitystä tai Render-palvelinta. Nosta tuotannon
+pelaajarajaa vasta kohdepalvelimella tehdyn mittauksen perusteella; säilytä
+varaa yhtäaikaisille aloituksille ja kierrosten valmistumiselle. Mittaa myös
+kylmäkäynnistys ja pidempi muistinkäyttö. Ajot, joissa varmennus myöhästyy, eivät
+muutu virallisiksi optimoinnin takia.
+
+Jaetun lähdekoodin muutos vaihtaa nykyisellä versionmuodostuksella simulaatiorevision,
+vaikka fysiikan tulokset ovat samat. Julkaise palvelin, Worker-bundle ja peli yhdessä
+aiemman julkaisuohjeen mukaan. Uusi revisio suodattaa aiemman revision ajat pois
+nykyiseltä tuloslistalta; tämä päivitys ei siirrä niitä uuteen revisioon eikä poista
+niitä tietokannasta. Version migraatiota ei pidä tehdä pelkän suorituskykytestin perusteella.
+
+### Paikallinen mittaus 26.10.2026
+
+[capacity-measurement.json](capacity-measurement.json) sisältää raakamuotoiset tulokset.
+Neljän vuorottelevan vertailuparin CPU-kulutus pieneni keskimäärin 11,6 %.
+Molemmat versiot tuottivat samat tilat ja tallenteet. Vertailu eristää radan
+hakurakenteen vaikutuksen; uusittu tallennin on käytössä kummassakin versiossa.
+
+120 sekunnin reaaliaikaisessa paikallistestissä 16 sessiota laskivat yhteensä
+230 400 askelta ja tuottivat 16 varmennettua kierrosta ilman harjoittelukierroksia.
+Syöte-erän käsittelyviiveen p95 oli 74,2 ms ja suurin kuittausviive 306,9 ms.
+Prosessin RSS oli lopussa noin 1 523 MiB. RSS sisältää myös testiajurin,
+vertailumaailman ja valmistellut ohjaussyötteet, eikä se ole Renderin muistimittaus.
+Tulos ei tue pelaajarajan nostamista 16:een nykyisessä 512 MiB:n palvelussa.
+Rajattu säiejoukko ja maailmojen muistin vähentäminen ovat seuraava erillinen työvaihe;
+niitä ei toteuteta tässä muutoksessa.
+
+### Seuraava ominaisuus: aula ja ajon seuraaminen
+
+Aktiivisten kuljettajien lista ja reaaliaikainen katselu voidaan rakentaa nykyisen
+varmennussimulaation päälle. Tätä käyttöliittymää ja tiedonjakelua ei ole vielä toteutettu.
+
+- Julkinen aulatieto sisältäisi nimimerkin, ajon vaiheen, kierroksen ja sektorin.
+  Julkista katselutunnistetta käytetään erillään ajosession salaisista tunnisteista.
+- Varmennussäie voi kerätä 5–10 sijainti-/asentonäytettä sekunnissa jo laskemistaan
+  tiloista. Nykyinen palvelin saa 60 askeleen eriä noin 500 ms välein: näytteet
+  saapuisivat siksi erissä. Selaimen pieni toistopuskuri mahdollistaa tasaisen katselun
+  noin 0,5–1 sekunnin viiveellä ilman syötepyyntöjen tihentämistä.
+- Yksi julkaisija välittää hyväksytyn näyte-erän kaikille katsojille. Tila välitetään
+  rajatun puskurin kautta; hidas katsoja saa tuoreimman tilan eikä kasvavaa jonoa.
+  Katsojille ei luoda uusia fysiikkamaailmoja tai varmennussessioita.
+- Näytteissä tarvitaan myös auton visuaalinen tila sekä yhteinen revisio, jotta
+  kameran, ohjauksen ja jousituksen katselu vastaa ajoa. Selain interpoloi näytteet.
+- Ajon päättyminen, yhteyskatkos ja varmennuksen menetys poistavat tai merkitsevät
+  ajon aulassa. Lista ja tilavirta eivät saa paljastaa sessioavaimia tai ohjausvaltuuksia.
+- Katselijoiden määrä, tiedonsiirto ja julkaisun kustannus mitataan erikseen. Tietojen
+  jakelu keskitetään ennen suuria katsojamääriä; jokainen katsoja ei pollaa ajosäiettä.

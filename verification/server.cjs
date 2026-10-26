@@ -1,12 +1,13 @@
 const http=require('node:http');
+const {timingSafeEqual}=require('node:crypto');
 const {Sessions}=require('./sessions.cjs');
 const {revision}=require('./world.cjs');
 const {createChat}=require('./chat.cjs');
-async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],sessionsOptions={}}={}) {
+async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],sessionsOptions={},metricsToken=process.env.VERIFICATION_METRICS_TOKEN}={}) {
  const {sign,verify,protocol,validPlayer,validName}=await import('./protocol.mjs');
  if(typeof secret!=='string'||secret.length<32)throw Error('VERIFICATION_SECRET must contain at least 32 characters');
  const used=new Map();
- const sessions=new Sessions({...sessionsOptions,signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
+ const sessions=new Sessions({maxSessions:Number(process.env.MAX_VERIFIED_SESSIONS||2),maxStartsPerMinute:Number(process.env.MAX_VERIFIED_STARTS_PER_MINUTE||8),...sessionsOptions,signLap:async(s,lap)=>sign({kind:'lap',protocol,revision,
   sessionId:s.id,playerHash:s.identity.playerHash,nickname:s.identity.nickname,...lap,issuedAt:Date.now()},secret)});
  const allowed=new Set(origins);
  const chat=createChat({protocol});
@@ -19,6 +20,12 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
   if(req.method==='OPTIONS'){res.writeHead(204,{...headers,'Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Allow-Methods':'GET, POST, DELETE, OPTIONS'});return res.end();}
   const url=new URL(req.url,'http://localhost');
   if(req.method==='GET'&&url.pathname==='/health')return reply(200,{ready:true,protocol,revision,hz:120,streaming:true,activeSessions:sessions.activeCount});
+  if(req.method==='GET'&&url.pathname==='/metrics'){
+   if(typeof metricsToken!=='string'||metricsToken.length<32)return reply(404,{error:'Not found'});
+   const expected=Buffer.from(metricsToken),provided=Buffer.from(req.headers.authorization?.replace(/^Bearer /,'')||'');
+   if(expected.length!==provided.length||!timingSafeEqual(expected,provided))return reply(401,{error:'Unauthorized'});
+   return reply(200,sessions.snapshotMetrics());
+  }
   const route=url.pathname.match(/^\/sessions\/([a-f0-9]{32})(\/inputs|\/start)?$/);
   try{
    if(url.pathname==='/api/chat'){
