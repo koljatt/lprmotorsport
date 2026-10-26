@@ -612,9 +612,37 @@
   },saved(lapMs){showNotice('Kierrosaika '+formatTime(lapMs)+' tallennettu',3500);}});
 
   let lastPresentation = null;
-  // Fixed physics step; existing timed-v1 scoring remains on the wall clock.
+  // Fixed 120 Hz physics on its own clock, independent of the display rate.
+  // Timed-v1 scoring remains on the wall clock.
   const STEP = 1 / 120, STEP_MS = 1000 / 120;
   let simTick = 0, accumulator = 0;
+  function simulate(now) {
+    if (document.hidden) { lastFrame = Math.max(lastFrame, now); return; }
+    // The timer may already have advanced the clock past a frame's timestamp.
+    if (now <= lastFrame) return;
+    accumulator += Math.min((now - lastFrame) / 1000, .1);
+    lastFrame = now;
+    while (accumulator >= STEP) {
+      accumulator -= STEP;
+      simTick++;
+      update(STEP, simTick * STEP_MS, now);
+      // Wheel input is read inside update(); force feedback follows every tick.
+      window.LPRWheel?.updateFfb(car, !ui.dialog.open && !window.LPRWheel.dialogOpen && !car.sauna && !car.sale && !car.pool && !car.crashed, STEP);
+    }
+  }
+  // Ticks run between frames rather than in bursts at the start of each frame.
+  // Browsers clamp repeating timers to about 4 ms, so a tick runs within ~4 ms of
+  // being due; frame() catches up any remaining ticks before it renders.
+  // Only with a wheel connected: input and force feedback then gain from even
+  // 120 Hz ticks. Phones and keyboards keep the frame-driven loop and avoid
+  // 250 timer wake-ups per second. Test sandboxes have no timers at all.
+  let clock = 0;
+  function syncClock() {
+    const pad = typeof activePad === 'undefined' ? null : activePad; // absent in the frame-loop test sandbox
+    const wanted = !!pad && !!window.LPRWheel?.isWheel(pad) && !document.hidden;
+    if (wanted && !clock && typeof setInterval === 'function') clock = setInterval(() => simulate(performance.now()), 4);
+    else if (!wanted && clock) { clearInterval(clock); clock = 0; }
+  }
   function frame(now) {
     requestAnimationFrame(frame);
     if (document.hidden) { lastPresentation = null; return; }
@@ -623,15 +651,9 @@
     const elapsed = lastPresentation === null ? interval : now - lastPresentation;
     if (elapsed < interval - .01) return;
     lastPresentation = now - (elapsed >= interval ? elapsed % interval : 0);
-    accumulator += Math.min((now - lastFrame) / 1000, .1);
-    lastFrame = now;
-    while (accumulator >= STEP) {
-      accumulator -= STEP;
-      simTick++;
-      update(STEP, simTick * STEP_MS, now);
-    }
+    simulate(now);
+    syncClock();
     window.LPRAnalytics?.sample(ui.dialog.open ? 'menu' : car.crashed ? 'crashed' : car.sale ? 'shop' : car.sauna ? 'sauna' : car.pool ? 'pool' : 'driving', !!activePad && (activePad.axes.some(v => Math.abs(v) > .1) || activePad.buttons.some(b => b.pressed)), held.left || held.right || held.gas || held.brake);
-    window.LPRWheel?.updateFfb(car, !ui.dialog.open && !window.LPRWheel.dialogOpen && !car.sauna && !car.sale && !car.pool && !car.crashed);
     syncAudio();
     audio.update(car);
     if (!document.hidden) updateSteamTarget();

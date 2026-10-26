@@ -190,10 +190,10 @@
     if (hid.last && hid.last[0] !== 0x03) { hid.last = constantCmd(0); send(hid.last); }
   }
 
-  /** Called once per rendered frame. `active` = driving, not in a menu. */
-  function updateFfb(car, active) {
+  /** Called once per physics tick (dt = fixed step). `active` = driving, not in a menu. */
+  function updateFfb(car, active, step) {
     const now = performance.now();
-    const dt = Math.min(0.05, hid.lastUpdate ? (now - hid.lastUpdate) / 1000 : 1 / 60);
+    const dt = step || Math.min(0.05, hid.lastUpdate ? (now - hid.lastUpdate) / 1000 : 1 / 60);
     hid.lastUpdate = now;
     if (!hid.device) return;
     if (!active || test.until > now) { if (test.until <= now) stopForce(); return; }
