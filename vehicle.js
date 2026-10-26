@@ -293,6 +293,9 @@ return class VehicleDynamics {
       state.lateralG = state.vx * state.yawRate / gravity;
       state.longitudinalG = ax / gravity;
       state.tireUse = Math.min(1, Math.abs(state.lateralG) / mu);
+      // Force-feedback telemetry only; not read by the simulation.
+      state.frontLateralForce = 0;
+      state.frontGripLimit = frontLimit;
     } else {
       const alphaFront = Math.atan2(state.vy + p.frontAxle * state.yawRate, speed) - state.steerAngle;
       const alphaRear = Math.atan2(state.vy - p.rearAxle * state.yawRate, speed);
@@ -308,6 +311,9 @@ return class VehicleDynamics {
       frontFy *= frontScale;
       rearFx *= rearScale;
       rearFy *= rearScale;
+      // Force-feedback telemetry only; not read by the simulation.
+      state.frontLateralForce = frontFy;
+      state.frontGripLimit = frontLimit;
       const frontBodyFx = frontFx * Math.cos(state.steerAngle) - frontFy * Math.sin(state.steerAngle);
       const frontBodyFy = frontFx * Math.sin(state.steerAngle) + frontFy * Math.cos(state.steerAngle);
       const vxDot = (frontBodyFx + rearFx - drag - rolling) / p.mass + state.vy * state.yawRate+gradeForward;

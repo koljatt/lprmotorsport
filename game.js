@@ -370,12 +370,13 @@
 
   function currentPad() {
     if (!navigator.getGamepads) return null;
-    const pads = navigator.getGamepads();
-    return Array.from(pads).find(Boolean) || null;
+    const pads = Array.from(navigator.getGamepads()).filter(Boolean);
+    return pads.find(pad => window.LPRWheel?.isWheel(pad)) || pads[0] || null;
   }
 
   function padInput(pad) {
     if (!pad) return { steer: 0, gas: 0, brake: 0 };
+    if (window.LPRWheel?.isWheel(pad)) return window.LPRWheel.read();
     if (pad.mapping === 'standard') return { steer: pad.axes[0] || 0, gas: pad.buttons[7]?.value || 0, brake: pad.buttons[6]?.value || 0 };
     return { steer: 0, gas: 0, brake: 0 };
   }
@@ -387,10 +388,11 @@
     } else if (!pad) {
       activePad = null;
     }
+    if (window.LPRWheel?.dialogOpen) return { steer: 0, gas: 0, brake: 0, analog: false, wheel: false };
     const device = padInput(pad);
     const local = held.left || held.right || held.gas || held.brake;
     const steer = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-    return local ? { steer, gas: held.gas ? 1 : 0, brake: held.brake ? 1 : 0, analog: false, wheel: false } : { ...device, analog: !!pad, wheel: false };
+    return local ? { steer, gas: held.gas ? 1 : 0, brake: held.brake ? 1 : 0, analog: false, wheel: false } : { ...device, analog: !!pad, wheel: !!device.wheel };
   }
 
   function nearestTrack(x, y) {
@@ -468,7 +470,7 @@
       return;
     }
     if (now - lastDeviceUpdate > 1000) {
-      ui.input.textContent = activePad ? activePad.mapping === 'standard' ? t("PELIOHJAIN") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6");
+      ui.input.textContent = activePad ? window.LPRWheel?.isWheel(activePad) ? window.LPRWheel.label() : activePad.mapping === 'standard' ? t("PELIOHJAIN") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6");
       lastDeviceUpdate = now;
     }
     if (ui.dialog.open || car.sauna || car.sale || car.pool) {
@@ -496,7 +498,7 @@
       }
       return;
     }
-    input.steer = Math.abs(input.steer) < .04 ? 0 : input.steer;
+    if (!input.wheel) input.steer = Math.abs(input.steer) < .04 ? 0 : input.steer;
     if (!car.started && input.gas > .08) {
       car.started = true;
       window.LPRAnalytics?.event('lap_start');
@@ -578,7 +580,7 @@
 
   function updateDriving(now) {
     if(car.crashed){window.LPRVerifiedDriving.cancel();showNotice(t("Auto hajosi! Aloita uudelleen."),0);return;}
-    const input=readInput();input.steer=Math.abs(input.steer)<.04?0:input.steer;input.tc=car.tcEnabled;
+    const input=readInput();if(!input.wheel)input.steer=Math.abs(input.steer)<.04?0:input.steer;input.tc=car.tcEnabled;
     const event=drivingWorld.step(input),result=drivingWorld.result();
     renderer.peopleTime=result.ticks*1000/120;
     window.LPRVerifiedDriving.step(input,result,event);
@@ -629,6 +631,7 @@
       update(STEP, simTick * STEP_MS, now);
     }
     window.LPRAnalytics?.sample(ui.dialog.open ? 'menu' : car.crashed ? 'crashed' : car.sale ? 'shop' : car.sauna ? 'sauna' : car.pool ? 'pool' : 'driving', !!activePad && (activePad.axes.some(v => Math.abs(v) > .1) || activePad.buttons.some(b => b.pressed)), held.left || held.right || held.gas || held.brake);
+    window.LPRWheel?.updateFfb(car, !ui.dialog.open && !window.LPRWheel.dialogOpen && !car.sauna && !car.sale && !car.pool && !car.crashed);
     syncAudio();
     audio.update(car);
     if (!document.hidden) updateSteamTarget();
