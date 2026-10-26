@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {chromium}=require('playwright');
+const {launchBrowser}=require('./browser.cjs');
 (async()=>{
  const secret='chat-browser-test-'.repeat(4),{revision}=require('../verification/world.cjs');
  const game=require('../server.js').createServer();
@@ -13,7 +13,7 @@ const {chromium}=require('playwright');
  const boardURL=`http://127.0.0.1:${board.address().port}`;
  let browser;
  try{
-  browser=await chromium.launch({headless:true,channel:'chrome',args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+  browser=await launchBrowser({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const errors=[];
   async function player(name){
    const context=await browser.newContext({viewport:{width:1280,height:800}});
@@ -63,6 +63,7 @@ const {chromium}=require('playwright');
   assert(await first.locator('#chat-visible').isChecked(),'Show-chat setting remembers opening the chat');
   assert(await first.locator('#chat-panel').isVisible(),'Visible chat is restored after reload');
   assert.equal(await first.evaluate(()=>window.LPRChat.typing),false);
+  await first.locator('.leaderboard-options > summary').click();
   await first.locator('#chat-visible').uncheck();
   assert(await first.locator('#chat-panel').isHidden(),'Driver can hide chat from the settings');
   await first.reload();await first.waitForFunction(()=>window.__chatGame,null,{polling:50});

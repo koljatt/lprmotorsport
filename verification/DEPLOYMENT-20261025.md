@@ -1,6 +1,11 @@
 # Palvelinpäivitys ja tuotantotarkistus 25.10.2026
 
-## Lopputilanne
+## Historiallinen tilanne 25.10.2026
+
+> Tämä on 25.10. tehdyn kokeen historiallinen raportti, ei uusimman version julkaisuohje.
+> Nykyinen julkaisuohje: [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md).
+> Vanha Worker-versio 6 ei sisällä myöhempiä chat-lippuja, sarjoja ja katsojailmoituksia.
+> Tässä raportissa mainittua tuotantotilaa ei ole tarkistettu uudelleen 26.10.
 
 - GitHubin integraatiohaara: `integration/main-updates-20261025`. Main ja julkisen Pages-pelin tiedostot ovat ennallaan.
 - Renderin `lpr-verification` on julkaistu commitista `613df4fe980b9f80c47dcbebd0a56a8f766d5987`.
@@ -14,9 +19,9 @@
   `ANALYTICS_ADMIN_TOKEN` lisättiin salaisuutena. Avaimen paikallinen kopio on Gitin ohittamassa `.env.verified-admin`-tiedostossa.
 - Testien jälkeen julkinen Worker-liikenne palautettiin versioon
   `1ec5e213-29e7-4a40-a2c8-eb5a5dab1713`, jotta nykyinen vanha Pages-peli jatkaa toimintaansa.
-  Uusi versio 6 on valmis aktivoitavaksi main-julkaisun yhteydessä.
+  Versio 6 oli kokeen testiversio; uusinta julkaisua varten rakennetaan uusi Worker integraatiohaaran samasta julkaisukohdasta.
 - Siivouksen Cron Trigger `0 3 * * *` testattiin asetuksen osalta ja poistettiin palautuksen yhteydessä,
-  koska vanhassa Workerissa ei ole scheduled-käsittelijää. Se lisätään uudelleen version 6 aktivoinnissa.
+  koska vanhassa Workerissa ei ole scheduled-käsittelijää. Ajastus lisätään uudelleen vasta uusimman Workerin julkaisun yhteydessä.
 
 ## Oikeilla tuotantopalveluilla tehdyt testit
 
@@ -59,14 +64,8 @@ Paikalliset, Gitin ohittamat raportit ja kuvat:
 - `artifacts/integration/production-leaderboard.png`
 - `artifacts/integration/production-replay.png`
 
-## Main-julkaisun yhteydessä vielä tehtävää
+## Nykyinen julkaisuohje
 
-1. Chatin nimimerkin omistus on korjattu: nimimerkki tulee Workerin allekirjoittamasta
-   chat-lipusta (`/api/verified/chat-ticket`). Julkaise Worker uudelleen ja Render samasta commitista;
-   vanha Worker ei myönnä chat-lippuja, joten chat-viestien lähetys vaatii uuden Workerin.
-2. Huomioi, että uusi lista näyttää vain tilien kierrokset, joilla on julkinen uusinta.
-   Vanhat tulokset säilyvät tietokannassa mutta eivät näy uudessa TOP 10:ssä.
-3. Aktivoi valmis Worker-versio 6, lisää Cron Trigger `0 3 * * *` ja julkaise uusi peli mainista
-   hallittuna kokonaisuutena. Julkisen Workerin vaihtaminen yksin tekee vanhasta peliasiakkaasta yhteensopimattoman.
-4. Varmista kirjautuminen ja uusintalinkit julkisesti julkaistulla peliversiolla.
-5. Palauta Renderin automaattijulkaisut tarkoitettuun tilaan vasta, kun main sisältää testatun integraation.
+Noudata [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md)-ohjetta. Älä aktivoi tämän
+historiallisen raportin Worker-versiota 6 uuden pelin palvelimeksi. Julkaistavat
+Worker, Render ja Pages rakennetaan samasta tarkistetusta integraatiocommitista.

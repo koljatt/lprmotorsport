@@ -1,54 +1,73 @@
-# Haarojen yhdistäminen 25.10.2026
+# Integraation tarkastus 26.10.2026
 
-## Tulos
+## Rajaus ja tulos
 
-Muutokset on yhdistetty haaraan `integration/main-updates-20261025`, joka on
-käyttäjän luvalla puskettu GitHubiin. Mainia ei ole muutettu.
-Renderin tuotantopalvelin on päivitetty ja uusi Worker on tuotantotestattu.
-Julkinen Worker-reititys on palautettu vanhan Pages-pelin kanssa yhteensopivaksi
-main-julkaisua odottamaan. Julkaisun tilanne ja testit:
-[DEPLOYMENT-20261025.md](verification/DEPLOYMENT-20261025.md).
-Chatin nimimerkin omistus on edelleen varmistamatta ennen pelin julkaisua.
+Julkaisuehdokas on `integration/main-updates-20261025`, lähtöcommit `c094c54`.
+Mainia tai tuotantopalveluita ei muutettu tässä tarkastuksessa. Päiväkisa
+`feature/daily-championship` ei kuulu tähän pakettiin; sen yhdistäminen tähän
+haaraan tuottaa ristiriitoja 13 tiedostoon ja vaatii erillisen yhteistestauksen.
 
-## Mukana olevat muutokset
+Mukana ovat salasanalliset nimimerkit, seitsemän päivän erikseen peruttavat
+kirjautumiset, vapaa harjoittelu, vapaaehtoinen analytiikka, allekirjoitetut
+kierrosuusinnat, chat, ajon reaaliaikaisuuden valvonta, ihmis-/bottisarjat,
+katsojailmoitukset ja ylläpidon tarkastusnäkymä. TOP 10 vaatii julkisen uusinnan.
+Nykyrevision 20 nopeinta uusintaa säilytetään sarjaa kohti, lisäksi tarkastukseen
+merkityt. Sarja kuuluu koko tilille, ei yksittäiselle kierrokselle.
 
-- `backup/local-work-20261025` (`03b14e0`): chat, näkyvyysasetus ja ajon reaaliaikaisuus sekä palautuminen yhteyskatkoksista.
-- `origin/feature/password-accounts` (`7c62889`): salasanalliset nimimerkit, erikseen peruttavat seitsemän päivän kirjautumiset, vapaa pelaaminen ja vapaaehtoinen analytiikka.
-- `origin/codex/verified-lap-replays` (`5163d46`): allekirjoitetut kierrostallenteet, julkiset TOP 10 -uusinnat ja ylläpidon tarkastusarkisto.
+Aiemman tarkastusraportin chat-huomio on korjattu jo commitissa `bdcb37f`:
+Worker myöntää tilin nimimerkkiin sidotun chat-lipun ja Render tarkistaa sen
+allekirjoituksen. Selain ei voi määrätä viestin nimimerkkiä itse.
 
-Muut paikalliset kehityshaarat sekä suorituskykyhaarat sisältyvät jo mainiin.
-`origin/testing` jätettiin erilleen: sen tuotemuutokset ovat mukana uusintahaarasta,
-mutta testiympäristön osoitteet ja julkaisuasetukset eivät kuulu tuotantoon.
+## Tämän tarkastuksen viimeistelyt
 
-Yhdistämisessä säilytettiin tilikohtainen uusintajono, kirjautumisen vanhenemisen
-käsittely sekä harjoittelukierrosten allekirjoittamisen esto. Tulos ja tallenne
-tallentuvat samaan tietokantatransaktioon. Kesken lähetyksen peruttu kirjautuminen
-ei voi lisätä tulosta eikä irrallista tallennetta. Chatin testi lisättiin CI-ajoon.
-Selainkokeiden konfiguraatio- ja odotusvirheet sekä katkostestin liian laaja
-odotus korjattiin. Generoitu Worker rakennettiin uudelleen lähteistä.
+- Selainkokeet tukevat `LPR_BROWSER_EXECUTABLE_PATH`-muuttujaa sekä asennettua
+  Playwright Chromiumia; järjestelmän Chrome säilyy varavaihtoehtona.
+- Chatin selainkoe avaa Lisäasetukset ennen piilotetun asetuksen käyttämistä.
+- Varmennuksen selainkoe tarkistaa nyt myös pakollisen sarjavalinnan, oikean
+  WebGL-kuljettajanäkymän uusinnassa, aikajanan, oman kierroksen ilmoituseston,
+  toisen tilin ilmoituksen, ylläpidon ilmoitustiedot, sarjanvaihdon ja lukituksen.
+- Vanha tuotantoraportti on merkitty historialliseksi. Uusi
+  [julkaisuohje](verification/RELEASE-CHECKLIST.md) korvaa vanhan Worker-version
+  aktivointiohjeen ja kertoo yhteensopivan julkaisun sekä palautuksen järjestyksen.
 
-## Tarkistukset
+## Suoritetut tarkistukset
 
-- Kaikki 51 tiedostoa `tests/*.test.cjs` ajettiin. Lopullisilla korjauksilla 50/51 läpäisee; muuttuneet tili-, tallenne-, selainasiakas- ja katkostestit tarkistettiin uudelleen.
-- `sale-exterior.test.cjs` epäonnistuu kohdassa 50: kaide ulottuu Sale-rakennuksen kulkualueelle. Sama virhe toistettiin alkuperäisen `03b14e0`-commitin erillisessä kopiossa. Testi, ratadata ja sen käyttämät fysiikka-/rakennustiedostot eivät eroa mainista. Tämä ei ole yhdistämisen aiheuttama virhe.
-- `npm run test:chat-browser`: läpi Chromessa; kaksi pelaajaa, tekstin turvallinen näyttäminen, ajaminen chatia lukiessa, kielenvaihto, näkyvyyden muistaminen ja mobiilileveys.
-- `npm run test:verified-browser`: läpi Chromessa; vapaa pelaaminen, tilin varaaminen, lähtövalot, kaksi tallennettua kierrosta uusintoineen, vapaaehtoinen analytiikka sekä fysiikan ja moottoritehon väärentämisen torjunta. Ei JavaScript-virheitä.
-- `npm run build`, `npm run build:verified-worker`, syntaksitarkistukset ja `git diff --check`: läpi.
-- Selainajon palvelinkello oli nopeutettu. Kahden asiakkaan pitkää reaaliaikaista kuormituskoetta tai tuotannon uuden version ajokierrosta ei ajettu.
+- Kaikki **17** `.github/workflows/tests.yml`-tiedoston testikokonaisuutta läpäisivät
+  Node 24.22.1:llä. Mukana ovat tili-, varmennus-, reaaliaikaisuus-, tallenne-,
+  chat-, fysiikka-, determinismi-, leaderboard- ja analytiikkatestit.
+- `npm run test:chat-browser`: läpi Chromium 153.0.8010.0:ssa; kaksi pelaajaa,
+  tekstin turvallinen näyttäminen, näppäimistöohjaus chatin yhteydessä,
+  kielenvaihto, näkyvyysasetuksen muistaminen ja 360 px:n mobiilileveys.
+- `npm run test:verified-browser`: läpi samassa selaimessa; kaksi palvelimen
+  varmentamaa kierrosta, lähtövalot, vapaa pelaaminen, rekisteröinti,
+  pakollinen sarjavalinta, vapaaehtoinen analytiikka, paikallisen fysiikan ja
+  moottoritehon muuttamisen torjunta sekä yllä kuvatut uusinta- ja ylläpitopolut.
+  JavaScript-virheitä ei ollut. Tässä ajokokeessa palvelinkello on nopeutettu.
+- `npm run build`, `npm run build:verified-worker` ja muutettujen skriptien
+  syntaksitarkistukset läpäisivät. Generoitu Worker vastaa versionhallinnan bundlea.
+- `npm run test:verified-realtime`: **ei läpäissyt** tässä ympäristössä. Kaksi
+  640 × 480:n 3D-selainta käynnistyi, mutta noin 16 sekunnin kohdalla selaimet
+  olivat simuloineet vasta 752 ja 729 fysiikka-askelta (noin kuusi sekuntia).
+  Molemmat olivat jo harjoittelutilassa, ja myöhemmin varmennus keskeytyi
+  `lag`-syyhyn. Käytössä oli ohjelmistopohjainen grafiikkatoteutus ja sama kone
+  ajoi myös paikallispalvelimet. Koe ei erota näiden kuormituksia eikä mittaa
+  Renderin kapasiteettia. Aikarajoja ei väljennetty testin läpäisemiseksi.
 
-Testilokit ovat paikallisesti `artifacts/integration/` ja ajon selainraportti
-`artifacts/verification/browser-report.json`. Ne eivät kuulu julkaistavaan peliin.
-Fysiikkarevisio säilyi arvossa `d8d41e628bb3b62ff574c4a95bcbb410a549ba79432c268ce7dbe9cbf6013875`.
+Tämä ei ole kaikkien 51 irrallisen testitiedoston uusi ajo. Aiemman tarkastuksen
+`sale-exterior.test.cjs`-havainto koski mainissakin olevaa Sale-kaidetta; sitä ei
+ole korjattu tässä julkaisussa eikä fysiikkaa tai ratadataa ole muutettu.
+Fysiikkarevisio säilyy arvossa
+`d8d41e628bb3b62ff574c4a95bcbb410a549ba79432c268ce7dbe9cbf6013875`.
+Paikalliset selainraportit ovat Gitin ohittamassa `artifacts/verification/`-
+kansiossa. Ne eivät sisälly pelin julkaisupakettiin.
 
-## Ennen mainiin vientiä
+## Ennen tuotantoon vientiä
 
-1. Korjaa chatin nimimerkin omistuksen tarkistus tai jätä chat pois julkaisusta.
-   `verification/chat.cjs` tarkistaa tällä hetkellä vain tunnisteen muodon;
-   `verification/server.cjs` hyväksyy asiakkaan lähettämän nimimerkin.
-   Omatekoisella 64-merkkisellä tunnisteella voi esiintyä toisen nimimerkillä.
-   Tuloslistan tilisuojaus ei ulotu chat-palveluun.
-2. **Skeema tehty ja Worker tuotantotestattu.** Valmis uusi Worker-versio aktivoidaan yhdess? uuden Pages-pelin kanssa. Aktivoinnin yhteydess? lis?t??n siivousajastus uudelleen. Tarkat tunnisteet ovat [julkaisuraportissa](verification/DEPLOYMENT-20261025.md).
-3. **Render p?ivitetty:** palvelimella on commit `613df4fe980b9f80c47dcbebd0a56a8f766d5987`. Automaattijulkaisut ovat toistaiseksi pois k?yt?st?; ne palautetaan vasta mainin sis?lt?ess? testatun integraation.
-4. **Tuotantotestit tehty:** kirjautuminen, kaksi reaaliaikaista kierrosta ja uusinnat sek? Chrome-katselin l?p?isiv?t. Pelin julkaisun j?lkeinen tarkistus tehd??n viel? main-viennin j?lkeen.
-
-
+Noudata [RELEASE-CHECKLIST.md](verification/RELEASE-CHECKLIST.md)-ohjetta.
+Julkaise Worker, Render ja Pages samasta tarkistetusta sisällöstä hallitussa
+järjestyksessä. Tuotannon nykyasetuksia ei varmennettu uudelleen tässä
+paikallisessa tarkastuksessa. Varmista julkaistulla pelillä kirjautuminen,
+virallinen kierros, chat ja uusinta. Pelkkä main-push ei julkaise koko palvelua.
+Kahden samanaikaisen pelaajan reaaliaikaisuutta ei saatu tässä vahvistettua;
+se pitää tarkistaa riittävällä selainlaitteistolla ja testipalvelimella ennen
+kuin tätä haaraa kuvataan kaikilta osin julkaisuvalmiiksi.

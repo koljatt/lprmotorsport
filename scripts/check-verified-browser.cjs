@@ -1,21 +1,22 @@
 // Real 3D game in Chromium; synthetic controls and accelerated server clock.
 // This checks browser/server agreement, not human driving or remote capacity.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {chromium}=require('playwright');
+const {launchBrowser}=require('./browser.cjs');
 const {driver}=require('../tests/helpers-driving.cjs');
 (async()=>{
- const secret='browser-test-only-'.repeat(4),{revision}=require('../verification/world.cjs');
+ const secret='browser-test-only-'.repeat(4),adminToken='browser-admin-test-only-'.repeat(3),{revision}=require('../verification/world.cjs');
  let clock=0,browser;
  const game=require('../server.js').createServer();
  await new Promise(r=>game.listen(0,'127.0.0.1',r));
  const origin=`http://127.0.0.1:${game.address().port}`;
  const service=await require('../verification/server.cjs').createServer({secret,origins:[origin],sessionsOptions:{clock:()=>clock}});
- const board=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({secret,revision,origins:origin});
+ const board=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({secret,revision,origins:origin,adminToken});
  await new Promise(r=>service.listen(0,'127.0.0.1',r));await new Promise(r=>board.listen(0,'127.0.0.1',r));
  const serviceURL=`http://127.0.0.1:${service.address().port}`,boardURL=`http://127.0.0.1:${board.address().port}`;
  try{
-  browser=await chromium.launch({headless:true,channel:'chrome',args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
-  const page=await browser.newPage({viewport:{width:1280,height:800}}),errors=[];
+  browser=await launchBrowser({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+  const context=await browser.newContext({viewport:{width:1280,height:800}});
+  const page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.addInitScript(()=>{window.requestAnimationFrame=()=>0;});
   await page.route('**/verification/config.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
@@ -48,6 +49,9 @@ const {driver}=require('../tests/helpers-driving.cjs');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_accounts').get().n,0,'Selecting registration does not create an account before submitting');
   await page.click('#leaderboard-start');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_accounts').get().n,0,'Credentials alone do not create an account before the series is chosen');
+  await page.click('#leaderboard-start');
+  assert.match(await page.locator('#leaderboard-status').textContent(),/Valitse ihmisten tai bottien sarja/);
+  assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_accounts').get().n,0,'An explicit series choice is required');
   await page.click('label:has(#leaderboard-series-human)');
   await page.click('#leaderboard-start');
   await page.waitForFunction(()=>!!window.LPRLeaderboard.identity&&!window.LPRLeaderboard.requiresName,null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),errors});throw error;});
@@ -94,6 +98,51 @@ const {driver}=require('../tests/helpers-driving.cjs');
   await page.evaluate(()=>window.__verifiedGame.render());
   const artifacts=path.resolve(__dirname,'../artifacts/verification');fs.mkdirSync(artifacts,{recursive:true});
   await page.screenshot({path:path.join(artifacts,'verified-3d.png')});
+  // Exercise the real replay DOM/WebGL renderer and moderation UI with a saved lap.
+  await page.evaluate(()=>window.LPRVerifiedDriving.refresh());
+  const link=page.locator('#verified-list .replay-link').first();
+  const replayHref=await link.getAttribute('href');
+  assert(replayHref,'A saved TOP 10 lap has a replay link');
+  const viewer=await page.context().newPage();viewer.on('pageerror',error=>errors.push(error.message));
+  await viewer.route('**/verification/config.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
+  await viewer.goto(origin+'/'+replayHref);
+  await viewer.waitForFunction(()=>!document.querySelector('#viewer').hidden);
+  assert(await viewer.locator('#driver-view').isVisible(),'Replay renders the driver-seat view with real WebGL');
+  assert.equal(await viewer.locator('#view-note').textContent(),'','Current visual recordings need no fallback');
+  await viewer.locator('#seek').fill('0.5');
+  const replayTimes=(await viewer.locator('#clock').textContent()).match(/[\d.]+/g).map(Number);
+  assert(Math.abs(replayTimes[0]-replayTimes[1]/2)<0.002,'The replay timeline seeks into the saved lap');
+  await viewer.locator('#play').click();
+  await viewer.waitForFunction(()=>document.querySelector('#play').textContent.includes('Tauko'));
+  await viewer.locator('#play').click();
+  await viewer.locator('#report-send').click();
+  await viewer.waitForFunction(()=>document.querySelector('#report-status').textContent.includes('Omasta'));
+  const observer=await (await fetch(boardURL+'/api/verified/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'Replay Observer',password:'browser-observer-password',create:true,series:'bot'})})).json();
+  assert.equal(observer.series,'bot');
+  await viewer.evaluate(account=>localStorage.setItem('lpr-account',JSON.stringify(account)),observer);
+  await viewer.reload();await viewer.waitForFunction(()=>!document.querySelector('#viewer').hidden);
+  await viewer.locator('#report-note').fill('Selainkokeen tarkastuspyyntö');await viewer.locator('#report-send').click();
+  await viewer.waitForFunction(()=>document.querySelector('#report-status').textContent.includes('Kiitos'));
+  await viewer.goto(origin+'/replay.html?admin=1');
+  await viewer.locator('#token').fill(adminToken);await viewer.locator('#login button').click();
+  await viewer.waitForFunction(()=>!document.querySelector('#admin-tools').hidden);
+  await viewer.locator('#flagged').check();await viewer.waitForFunction(()=>document.querySelectorAll('#runs > tr').length===1);
+  assert.match(await viewer.locator('#runs').textContent(),/Browser Driver/);
+  await viewer.locator('#runs button').filter({hasText:'kpl'}).click();
+  await viewer.waitForFunction(()=>document.querySelector('#runs').textContent.includes('Selainkokeen tarkastuspyyntö'));
+  assert.match(await viewer.locator('#runs').textContent(),/Replay Observer.*Selainkokeen tarkastuspyyntö/s);
+  const seriesSelect=viewer.locator('select[aria-label="Kuljettajan sarja"]').first();
+  await seriesSelect.selectOption('bot');
+  await viewer.waitForFunction(()=>document.querySelector('select[aria-label="Kuljettajan sarja"]')?.value==='bot'&&!document.querySelector('select[aria-label="Kuljettajan sarja"]').disabled);
+  const humanBoard=await (await fetch(boardURL+'/api/verified/leaderboard?series=human')).json();
+  const botBoard=await (await fetch(boardURL+'/api/verified/leaderboard?series=bot')).json();
+  assert.equal(humanBoard.results.length,0);assert.equal(botBoard.results.length,2,'Admin series changes move both laps');
+  await viewer.locator('select[aria-label="Kuljettajan sarja"]').first().selectOption('human');
+  await viewer.waitForFunction(()=>document.querySelector('select[aria-label="Kuljettajan sarja"]')?.value==='human'&&!document.querySelector('select[aria-label="Kuljettajan sarja"]').disabled);
+  await viewer.locator('#lock').click();assert(await viewer.locator('#admin-tools').isHidden());
+  // Restore the original page's account after the observer used shared storage.
+  await page.evaluate(()=>localStorage.setItem('lpr-account',JSON.stringify({...window.LPRLeaderboard.identity,expiresAt:Date.now()+60000})));
+  await viewer.close();
   // Tamper with local physics; the next server acknowledgment must force practice.
   await page.evaluate(()=>{window.__verifiedGame.world.car.x+=100;});
   clock=(ticks+60)*1000/120;
@@ -116,7 +165,7 @@ const {driver}=require('../tests/helpers-driving.cjs');
   assert(await page.evaluate(()=>!window.LPRLeaderboard.requiresName&&!!window.LPRLeaderboard.identity),'Withdrawing analytics consent keeps leaderboard participation');
   assert.deepEqual(errors,[]);
   const report={generatedAt:new Date().toISOString(),browser:browser.version(),revision,ticks,verifiedLaps:2,
-   scope:'Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim',automaticStart:true,automaticRestart:true,startLights:true,heldDuringPreparation:true,optionalAnalytics:true,tamperedPhysicsRejected:true,tamperedPowerRejected:true,errors};
+   scope:'Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim',automaticStart:true,automaticRestart:true,startLights:true,heldDuringPreparation:true,optionalAnalytics:true,driverSeatReplay:true,replaySeek:true,viewerReports:true,adminSeriesMoves:true,tamperedPhysicsRejected:true,tamperedPowerRejected:true,errors};
   fs.writeFileSync(path.join(artifacts,'browser-report.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
  }finally{if(browser)await browser.close();await service.sessions.close();await Promise.all([game,service,board].map(server=>new Promise(r=>server.close(r))));}
