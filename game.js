@@ -6,7 +6,6 @@
   const ui = {
     lap: document.querySelector('#lap-count'),
     time: document.querySelector('#lap-time'),
-    best: document.querySelector('#best-time'),
     speed: document.querySelector('#speed'),
     lateralG: document.querySelector('#lateral-g'),
     grip: document.querySelector('#grip-state'),
@@ -552,7 +551,6 @@
             localStorage.setItem('lpr-best-time-lut-20261011-v3', String(best));
             timing.best = timing.sectors.slice();
             localStorage.setItem('lpr-best-sectors-lut-20261011-v3', JSON.stringify({ lapTime: best, sectors: timing.best }));
-            ui.best.textContent = formatTime(best);
             showNotice(t("record", { time: formatTime(lapTime) }), 3500);
           } else showNotice(t("lapResult", { time: formatTime(lapTime) }), 2500);
           car.lap++;
@@ -632,7 +630,6 @@
       resetSpectatorPresentation();syncAudio();resize();
       ui.lap.textContent=String(car.lap);ui.time.textContent=formatTime(car.lapElapsedMs||0);
       ui.speed.textContent=String(Math.round(car.speed*3.6));
-      ui.best.textContent=best?formatTime(best):'--:--.---';
     }
   });
   function frame(now) {
@@ -652,7 +649,6 @@
         const observed=remote.car;
         ui.lap.textContent=String(observed.lap);ui.time.textContent=formatTime(observed.lapElapsedMs);
         ui.speed.textContent=String(Math.round(observed.speed*3.6));
-        ui.best.textContent=remote.bestLapMs?formatTime(remote.bestLapMs):'--:--.---';
         ui.lateralG.textContent=`${Math.abs(observed.lateralG).toFixed(1)} G`;
         ui.grip.textContent=observed.damage>0?`${t('VAURIO')} ${Math.round(observed.damage*100)} %`:observed.offroad?t('RADAN ULKOPUOLELLA'):t('PITO OK');
         ui.tc.textContent=observed.tcActive?t('TC RAJOITTAA TEHOA'):t(observed.tcEnabled?'TC PÄÄLLÄ':'TC POIS');
@@ -811,7 +807,6 @@
   });
   window.addEventListener('gamepaddisconnected', () => { activePad = null; });
 
-  ui.best.textContent = best ? formatTime(best) : '--:--.---';
   reset();
   openTestScene(window.location.search);
   resize();

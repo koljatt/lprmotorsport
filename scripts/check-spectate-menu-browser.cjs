@@ -52,7 +52,7 @@ const {launchBrowser}=require('./browser.cjs');
   assert.match(await page.locator('#spectate-label').textContent(),/Second Driver/);
   assert.equal(await page.locator('#active-drivers-list a[aria-current="true"]').textContent(),'Second DriverLIVE');
   await page.waitForFunction(()=>document.querySelector('#lap-count').textContent==='2',null,{polling:100});
-  assert.equal(await page.locator('#best-time').textContent(),'00:00.500');
+  assert.equal(await page.locator('#best-time').textContent(),'--:--.---','Spectating never replaces the official track record with the watched driver’s best lap');
   assert.match(await page.locator('#lap-time').textContent(),/^00:00\./,'Lap time follows the delayed lap boundary');
   await page.keyboard.press('w');
   assert(await page.evaluate(()=>window.LPRSpectator.active),'Driving keys do not leave spectator mode');

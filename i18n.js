@@ -148,6 +148,7 @@
   "KIERROS": "LAP",
   "AIKA": "TIME",
   "PARAS": "BEST",
+  "RATAENNÄTYS": "TRACK RECORD",
   "NOPEUS": "SPEED",
   "3D-n\u00e4kym\u00e4 kuljettajan paikalta": "3D view from the driver's seat",
   "Mene saunaan (E)": "Enter sauna (E)",
@@ -303,7 +304,7 @@
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (node.parentElement.closest('script, style, .language-switcher, #chat-messages, #active-drivers-list')) continue;
+      if (node.parentElement.closest('script, style, .language-switcher, #chat-messages, #active-drivers-list, #record-holder')) continue;
       const translated = t(node.nodeValue);
       if (translated !== node.nodeValue) node.nodeValue = translated;
     }

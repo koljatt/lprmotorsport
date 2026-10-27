@@ -1,5 +1,5 @@
 #track { background: #a7cfcb; }
-.daily-race-hud { position:absolute; z-index:3; top:66px; right:12px; width:min(330px,calc(100% - 24px)); display:grid; grid-template-columns:auto minmax(0,1fr); gap:16px; padding:8px 12px; border:1px solid #325346; border-radius:8px; background:#10241eeb; color:#f7fbf9; pointer-events:none; }
+.daily-race-hud { position:absolute; z-index:3; top:82px; right:12px; width:min(330px,calc(100% - 24px)); display:grid; grid-template-columns:auto minmax(0,1fr); gap:16px; padding:8px 12px; border:1px solid #325346; border-radius:8px; background:#10241eeb; color:#f7fbf9; pointer-events:none; }
 .daily-race-hud > div { min-width:0; display:flex; flex-direction:column; gap:4px; }
 .daily-race-hud > div > span { color:#9ec4b4; font-size:9px; font-weight:800; }
 .daily-race-hud strong { display:flex; gap:8px; font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -10,14 +10,14 @@
 .daily-race-hud[data-stale="true"] { border-color:#92734a; }
 .spectating .daily-race-hud { display:none; }
 @media(max-width:650px) {
- .daily-race-hud { top:54px; left:8px; right:8px; width:auto; padding:7px 9px; gap:10px; }
- body:not(.spectating) .verification-state { top:106px; }
- body:not(.spectating) .game-shell .notice { top:142px; }
- body:not(.spectating) .game-shell .sector-time { top:180px; }
+ .daily-race-hud { top:70px; left:8px; right:8px; width:auto; padding:7px 9px; gap:10px; }
+ body:not(.spectating) .verification-state { top:122px; }
+ body:not(.spectating) .game-shell .notice { top:158px; }
+ body:not(.spectating) .game-shell .sector-time { top:196px; }
 }
 @media (pointer:coarse) and (orientation:landscape), (max-width:900px) and (max-height:500px) and (orientation:landscape) {
- .daily-race-hud { top:calc(60px + env(safe-area-inset-top)); left:auto; right:max(12px,env(safe-area-inset-right)); width:330px; }
- body:not(.spectating) .verification-state { top:110px; }
+ .daily-race-hud { top:calc(76px + env(safe-area-inset-top)); left:auto; right:max(12px,env(safe-area-inset-right)); width:330px; }
+ body:not(.spectating) .verification-state { top:126px; }
 }
 #track.sauna-view { cursor: grab; }
 #track.sauna-view.looking { cursor: grabbing; }

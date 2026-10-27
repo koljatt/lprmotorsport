@@ -11,10 +11,10 @@
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
-    <link rel="stylesheet" href="styles.css?v=chat-presence-20261026" />
-    <link rel="stylesheet" href="3d.css?v=daily-hud-20261027" />
+    <link rel="stylesheet" href="styles.css?v=track-record-20261027" />
+    <link rel="stylesheet" href="3d.css?v=track-record-20261027" />
     <link rel="stylesheet" href="dashboard.css?v=viewport-chat-20261027" />
-    <script src="i18n.js?v=spectate-native-20261027" defer></script>
+    <script src="i18n.js?v=track-record-20261027" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
     <script src="campus.js?v=collision-cache-20261026" defer></script>
@@ -39,12 +39,13 @@
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
     <script src="verified-driving.js?v=next-20261026" defer></script>
+    <script src="track-record.js?v=20261027" defer></script>
     <script src="championship.js?v=daily-hud-20261027" defer></script>
     <script src="dashboard.js?v=viewport-chat-20261027" defer></script>
     <script src="chat.js?v=chat-dock-20261027" defer></script>
     <script src="replay-pose.js" defer></script>
     <script src="spectate-menu.js?v=native-view-20261027" defer></script>
-    <script src="game.js?v=spectate-native-20261027" defer></script>
+    <script src="game.js?v=track-record-20261027" defer></script>
   </head>
   <body>
     <main class="app">
@@ -83,7 +84,7 @@
         <div class="hud">
           <div class="hud-item"><span>KIERROS</span><strong id="lap-count">1</strong></div>
           <div class="hud-item wide"><span>AIKA</span><strong id="lap-time">00:00.000</strong></div>
-          <div class="hud-item wide"><span>PARAS</span><strong id="best-time">--:--.---</strong></div>
+          <div class="hud-item wide track-record"><span>RATAENNÄTYS</span><strong id="best-time">--:--.---</strong><small id="record-holder">—</small></div>
           <div class="hud-item speed"><span>NOPEUS</span><strong><span id="speed">0</span> <small>km/h</small></strong></div>
         </div>
         <section id="daily-race-hud" class="daily-race-hud" aria-label="Päivän kisa">
