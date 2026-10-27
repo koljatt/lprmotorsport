@@ -35,7 +35,7 @@ export function retentionStatements(db,revision){
   // Sticky pin: a top-ten recording stays public while it remains among its series' retained set.
   db.prepare(`UPDATE verified_replays SET pinned=1 WHERE (session_id,lap) IN (${top(10)})`).bind(...values),
   db.prepare(`UPDATE verified_replays SET pinned=0 WHERE pinned=1 AND (session_id,lap) NOT IN (${kept})`).bind(...values),
-  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND (session_id,lap) NOT IN (${kept})`).bind(...values),
+  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND (session_id,lap) NOT IN (${kept}) AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=verified_replays.session_id AND x.lap=verified_replays.lap)`).bind(...values),
   db.prepare('DELETE FROM verified_reports WHERE (session_id,lap) NOT IN (SELECT session_id,lap FROM verified_replays)')
  ];
 }
