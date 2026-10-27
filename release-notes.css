@@ -1,0 +1,11 @@
+/* Release notes: contained in the existing menu modal to avoid stacked dialogs. */
+#release-notes-open { padding: .55rem .85rem; border: 1px solid currentColor; border-radius: .5rem; background: transparent; color: inherit; cursor: pointer; }
+#release-notes-open.release-notes-unread::after { content: ' •'; color: #e7c767; }
+#release-notes-panel[hidden] { display: none !important; }
+#release-notes-panel { position: absolute; inset: 0; z-index: 100; background: rgba(5, 13, 12, .96); color: #fff; padding: clamp(1rem, 4vw, 2rem); overflow: auto; overscroll-behavior: contain; }
+.release-notes-content { width: min(100%, 34rem); margin: 1rem auto; }
+.release-notes-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+#release-notes-meta { color: #b8c9c4; }
+#release-notes-list { padding-left: 1.35rem; display: grid; gap: 1rem; }
+#release-notes-list p { margin: .3rem 0 0; line-height: 1.5; color: #d7e1de; }
+#release-notes-close { padding: .55rem .8rem; border-radius: .5rem; cursor: pointer; }
