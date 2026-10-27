@@ -804,9 +804,9 @@
   document.querySelector('#leaderboard-drive')?.addEventListener('click', () => {
     if(window.LPRLeaderboard?.requiresName || window.LPRSpectator?.active)return;
     ui.dialog.classList.remove('lobby-ready');
+    document.querySelector('#close-settings').hidden=false;
     ui.dialog.close();
     reset();
-    if(window.LPRLeaderboard?.identity)window.LPRVerifiedDriving?.identityReady?.();
   });
   document.querySelector('#close-settings').addEventListener('click', () => {
     if (!window.LPRLeaderboard?.requiresName && !ui.dialog.classList.contains('lobby-ready')) ui.dialog.close();

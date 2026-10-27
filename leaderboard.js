@@ -210,7 +210,7 @@
     nickname.value = activeName;
     showAccount();
     startButton.hidden = true;
-    closeButton.hidden = false;
+    closeButton.hidden = true;
     dialog.classList.remove('session-start');
     dialog.classList.add('lobby-ready');
     flushPending();
@@ -238,13 +238,13 @@
     password.value = ''; authMode = null; status.textContent = '';
     window.LPRVerifiedDriving?.identityCleared?.();
     window.LPRAnalytics?.identify('');
-    showAccount(); closeButton.hidden = false;
+    showAccount(); closeButton.hidden = true;
     dialog.classList.remove('session-start'); dialog.classList.add('lobby-ready');
     document.dispatchEvent(new Event('lpr-lobby-ready'));
 
   });
   guestName?.addEventListener('input',()=>guestName.setCustomValidity(''));
-  dialog.addEventListener('cancel', event => { if (!sessionChosen) event.preventDefault(); });
+  dialog.addEventListener('cancel', event => { if (!sessionChosen || dialog.classList.contains('lobby-ready')) event.preventDefault(); });
   consent.addEventListener('change',()=>window.LPRLeaderboard.consentChanged());
   async function api(path, options) {
     const response = await fetch(endpoint + path, { ...options, signal: AbortSignal.timeout(10000) });

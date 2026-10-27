@@ -15,7 +15,8 @@ export const moderationSchema=[
  `CREATE TABLE IF NOT EXISTS verified_reports (
  session_id TEXT NOT NULL,lap INTEGER NOT NULL,reporter_hash TEXT NOT NULL,reason TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',
  created_ms INTEGER NOT NULL,PRIMARY KEY(session_id,lap,reporter_hash))`,
- 'CREATE INDEX IF NOT EXISTS verified_report_author ON verified_reports(reporter_hash,created_ms)'
+ 'CREATE INDEX IF NOT EXISTS verified_report_author ON verified_reports(reporter_hash,created_ms)',
+ `CREATE TABLE IF NOT EXISTS verified_lap_exclusions (session_id TEXT NOT NULL,lap INTEGER NOT NULL,reason TEXT NOT NULL DEFAULT 'admin',created_ms INTEGER NOT NULL,PRIMARY KEY(session_id,lap))`
 ];
 replaySchema.push(...moderationSchema);
 // Accounts without a row belong to the human series.
@@ -24,7 +25,7 @@ export const seriesOf=player=>`COALESCE((SELECT series FROM verified_account_ser
 // unless it is awaiting review.
 export const REPLAY_LIMIT=20;
 const ranked=`FROM verified_laps l JOIN verified_replays r USING(session_id,lap)
- JOIN verified_accounts a ON a.player_hash=l.player_hash WHERE l.revision=? AND ${seriesOf('l.player_hash')}=?`;
+ JOIN verified_accounts a ON a.player_hash=l.player_hash WHERE l.revision=? AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap)`;
 const order='ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap';
 const top=limit=>SERIES.map(()=>`SELECT session_id,lap FROM (SELECT l.session_id,l.lap ${ranked} ${order} LIMIT ${limit})`).join(' UNION ALL ');
 const topValues=revision=>SERIES.flatMap(series=>[revision,series]);
@@ -34,7 +35,7 @@ export function retentionStatements(db,revision){
   // Sticky pin: a top-ten recording stays public while it remains among its series' retained set.
   db.prepare(`UPDATE verified_replays SET pinned=1 WHERE (session_id,lap) IN (${top(10)})`).bind(...values),
   db.prepare(`UPDATE verified_replays SET pinned=0 WHERE pinned=1 AND (session_id,lap) NOT IN (${kept})`).bind(...values),
-  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND (session_id,lap) NOT IN (${kept})`).bind(...values),
+  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND (session_id,lap) NOT IN (${kept}) AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=verified_replays.session_id AND x.lap=verified_replays.lap)`).bind(...values),
   db.prepare('DELETE FROM verified_reports WHERE (session_id,lap) NOT IN (SELECT session_id,lap FROM verified_replays)')
  ];
 }
@@ -92,6 +93,36 @@ async function admin(request,env){
 export async function replayRoute(request,env,url,reply,headers,readBody,revision){
  const privateRoute=url.pathname.startsWith('/api/verified/admin/');
  if(privateRoute&&!await admin(request,env))return reply({error:'Unauthorized'},401);
+ if(privateRoute&&url.pathname==='/api/verified/admin/laps'){
+  if(request.method==='GET'){
+   const series=url.searchParams.get('series')||'human';
+   if(!SERIES.includes(series))return reply({error:'Invalid series'},400);
+   const rows=await env.DB.prepare(`SELECT l.session_id,l.lap,l.nickname,l.lap_ticks,l.issued_ms,l.sector1,l.sector2,l.sector3,
+    CASE WHEN x.session_id IS NULL THEN 0 ELSE 1 END AS excluded
+    FROM verified_laps l LEFT JOIN verified_lap_exclusions x USING(session_id,lap)
+    WHERE l.revision=? AND ${seriesOf('l.player_hash')}=?
+    ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 100`).bind(revision,series).all();
+   return reply({series,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
+  }
+  if(request.method==='POST'&&url.searchParams.get('reset')==='1'){
+   // Exclude old track times from records without deleting laps or championship entries.
+   await env.DB.prepare(`INSERT OR IGNORE INTO verified_lap_exclusions(session_id,lap,reason,created_ms)
+    SELECT session_id,lap,'track_reset',? FROM verified_laps WHERE revision=?`).bind(Date.now(),revision).run();
+   await env.DB.batch(retentionStatements(env.DB,revision));
+   return reply({reset:true});
+  }
+  if(request.method==='POST'){
+   const id=url.searchParams.get('sessionId'),lap=Number(url.searchParams.get('lap'));
+   if(!/^[a-f0-9]{32}$/.test(id||'')||!Number.isSafeInteger(lap)||lap<1||lap>999999)return reply({error:'Invalid lap identifier'},400);
+   const exists=await env.DB.prepare('SELECT 1 FROM verified_laps WHERE session_id=? AND lap=?').bind(id,lap).first();
+   if(!exists)return reply({error:'Lap not found'},404);
+   if(url.searchParams.get('restore')==='1')await env.DB.prepare('DELETE FROM verified_lap_exclusions WHERE session_id=? AND lap=?').bind(id,lap).run();
+   else await env.DB.prepare(`INSERT OR REPLACE INTO verified_lap_exclusions(session_id,lap,reason,created_ms) VALUES (?,?,'admin',?)`).bind(id,lap,Date.now()).run();
+   await env.DB.batch(retentionStatements(env.DB,revision));
+   return reply({updated:true});
+  }
+  return reply({error:'Method not allowed'},405);
+ }
  const reports=url.pathname.match(/^\/api\/verified\/admin\/replays\/([a-f0-9]{32})\/([1-9][0-9]{0,5})\/reports$/);
  if(reports){
   if(request.method!=='GET')return reply({error:'GET required'},405);
