@@ -8,7 +8,7 @@ const {launchBrowser}=require('./browser.cjs');
  const board=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({secret:'browser-championship-test-'.repeat(3),revision,origins:origin});
  await new Promise(r=>board.listen(0,'127.0.0.1',r));
  const api=`http://127.0.0.1:${board.address().port}`;
- let browser;
+ let browser,updateChampionship=false;
  try{
   const today=competitionDay(Date.now()),yesterday=shiftDay(today,-1);
   for(const [i,name] of ['Panu','Eve','Driver with long name'].entries()){
@@ -19,12 +19,32 @@ const {launchBrowser}=require('./browser.cjs');
   browser=await launchBrowser({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/verification/config.js*',r=>r.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig={leaderboard:${JSON.stringify(api)},service:''};`}));
-  await page.route(api+'/**',async route=>{const response=await route.fetch();await route.fulfill({response,headers:{...response.headers(),'Access-Control-Allow-Origin':origin}});});
+  await page.route(api+'/**',async route=>{
+   const response=await route.fetch(),headers={...response.headers(),'Access-Control-Allow-Origin':origin};
+   if(updateChampionship&&new URL(route.request().url()).pathname==='/api/verified/championship'){
+    const result=await response.json();
+    if(result.fastest?.[0])result.fastest[0].nickname='Panu updated';
+    await route.fulfill({json:result,headers});
+   }else await route.fulfill({response,headers});
+  });
   await page.addInitScript(()=>{window.requestAnimationFrame=()=>0;});
   await page.route('https://lpr-leaderboard.panu-musakka.workers.dev/**',route=>route.fulfill({contentType:'application/json',body:'{}'}));
   await page.addInitScript(()=>localStorage.setItem('lpr-release-notes-seen','2026-10-27-major-update'));
   await page.goto(origin);
   await page.waitForFunction(()=>document.querySelector('#championship-fastest li')?.textContent.includes('Panu'),null,{polling:20});
+  await page.evaluate(()=>{window.__raceRow=document.querySelector('#championship-fastest li');});
+  await page.click('#dashboard-details-open');
+  const unchangedRefresh=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/verified/championship');
+  await page.click('#championship-refresh');
+  await unchangedRefresh;
+  assert(await page.evaluate(()=>document.querySelector('#championship-fastest li')===window.__raceRow),'A refresh preserves existing leaderboard rows');
+  updateChampionship=true;
+  const changedRefresh=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/verified/championship');
+  await page.click('#championship-refresh');
+  await changedRefresh;
+  await page.waitForFunction(()=>document.querySelector('#championship-fastest li')?.textContent.includes('Panu updated'),null,{polling:20});
+  assert(await page.evaluate(()=>document.querySelector('#championship-fastest li')===window.__raceRow),'Changed results update the existing row without replacing it');
+  updateChampionship=false;
   assert.match(await page.textContent('#championship-volume li'),/Driver with long name/);
   await page.click('#championship-series-bot');
   await page.waitForFunction(()=>document.querySelector('#championship-fastest p')?.textContent==='Ei vielä tuloksia.',null,{polling:20});

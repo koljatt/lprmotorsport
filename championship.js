@@ -50,15 +50,35 @@
   finally{liveBusy=false;renderLive();}
  }
  function table(id,rows,kind){
-  const body=$(id);body.replaceChildren();
-  if(!rows.length){const p=document.createElement('p');p.textContent=t('Ei vielä tuloksia.','No results yet.');body.append(p);return;}
-  const list=document.createElement('ol');
-  for(const row of rows){const item=document.createElement('li'),name=document.createElement('span'),value=document.createElement('span');
+  const body=$(id);
+  let list=body.querySelector('ol');
+  if(!rows.length){
+   if(list)list.remove();
+   let empty=body.querySelector('p');
+   if(!empty){empty=document.createElement('p');body.append(empty);}
+   empty.textContent=t('Ei vielä tuloksia.','No results yet.');
+   return;
+  }
+  if(!list){
+   body.querySelector('p')?.remove();
+   list=document.createElement('ol');
+   body.append(list);
+  }
+  const items=[...list.children];
+  for(let i=0;i<rows.length;i++){
+   const row=rows[i];
+   let item=items[i],name,value;
+   if(!item){
+    item=document.createElement('li');name=document.createElement('span');value=document.createElement('span');
+    name.className='standing-name';item.append(name,value);list.append(item);
+   }else{
+    name=item.children[0];value=item.children[1];
+   }
    const rank=kind==='speed'?row.speedRank:kind==='volume'?row.volumeRank:row.rank;
-   name.textContent=rank+'. '+row.nickname;name.className='standing-name';name.title=row.nickname;
+   name.textContent=rank+'. '+row.nickname;name.title=row.nickname;
    value.textContent=kind==='speed'?seconds(row.bestMs):kind==='volume'?row.laps+' '+t('kierrosta','laps'):row.points+' p';
-   item.append(name,value);list.append(item);
-  }body.append(list);
+  }
+  for(let i=rows.length;i<items.length;i++)items[i].remove();
  }
  function countdown(){
   if(!data)return;
@@ -84,7 +104,7 @@
  async function refresh(){
   const endpoint=window.LPRVerificationConfig?.leaderboard;if(!endpoint)return;
   const attempt=++requestId,identity=window.LPRLeaderboard?.identity;busy=true;
-  try{notice.textContent=t('Ladataan päivän kisaa…','Loading daily race…');
+  try{if(!data)notice.textContent=t('Ladataan päivän kisaa…','Loading daily race…');
    const response=await fetch(endpoint+'/api/verified/championship?series='+series+(selected?'&day='+encodeURIComponent(selected):''),{
     headers:identity?{Authorization:'Bearer '+identity.token}:{},signal:AbortSignal.timeout(10000)});
    if(!response.ok)throw Error();const result=await response.json();
