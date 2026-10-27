@@ -6,6 +6,14 @@ const chat=createChat({now:()=>time});
 const ticket=(changes={})=>({kind:'chat',protocol:'driving-v1',playerHash:player,nickname:'Kuljettaja',issuedAt:time,expiresAt:time+600000,...changes});
 const post=(text='Moi',identity=ticket())=>chat.post(identity,'local',{text});
 assert.deepEqual(chat.list(),{messages:[]});
+const visitorA='a'.repeat(36),visitorB='b'.repeat(36);
+assert.deepEqual(chat.presence(visitorA),{onlineCount:1});
+assert.deepEqual(chat.presence(visitorA),{onlineCount:1},'Multiple tabs in one browser count once');
+assert.deepEqual(chat.presence(visitorB),{onlineCount:2});
+time=30000;chat.presence(visitorA);
+time=45000;assert.deepEqual(chat.presence(visitorA),{onlineCount:1},'Inactive visitors expire');
+assert.throws(()=>chat.presence('invalid'),{status:400});
+time=0;
 for(const identity of [null,'a'.repeat(64),ticket({kind:'start'}),ticket({protocol:'other'}),ticket({playerHash:'bad'}),
  ticket({nickname:'<script>'}),ticket({expiresAt:time}),ticket({issuedAt:time+60000,expiresAt:time+120000}),ticket({expiresAt:time+3600000})])
  assert.throws(()=>post('Moi',identity),{status:401},'Only a valid, short-lived chat ticket can post');
@@ -39,6 +47,10 @@ assert.throws(()=>shared.post(fresh(99),'shared',{text:'Hi'}),{status:429},'IP l
   assert.equal(response.status,201);assert.equal(response.headers.get('Access-Control-Allow-Origin'),'https://game.test');
   assert.equal((await response.json()).message.nickname,'Pelaaja','The server uses the signed nickname, not the requested one');
   const other=await fetch(url);const data=await other.json();
+  const presenceURL=url+'/presence?visitor=';
+  assert.deepEqual(await (await fetch(presenceURL+visitorA)).json(),{onlineCount:1});
+  assert.deepEqual(await (await fetch(presenceURL+visitorB)).json(),{onlineCount:2});
+  assert.equal((await fetch(presenceURL+'invalid')).status,400);
   assert.equal(data.messages.length,1);assert.equal(data.messages[0].text,'Terve varikko!','Another client sees shared messages');
   assert.equal((await send({text:'No'},valid,'https://evil.test')).status,403);
   assert.equal((await send({text:'No'},'bad')).status,401);

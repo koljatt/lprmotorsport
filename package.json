@@ -2,6 +2,9 @@
   "name": "lpr-lap-challenge",
   "private": true,
   "scripts": {
+    "test:dashboard-browser": "node scripts/check-dashboard-browser.cjs",
+    "test:spectate": "node tests/spectate.test.cjs && node tests/replay-viewer.test.cjs",
+    "test:spectate-browser": "node scripts/check-spectate-browser.cjs && node scripts/check-spectate-menu-browser.cjs",
     "test:chat": "node tests/chat.test.cjs",
     "test:chat-browser": "node scripts/check-chat-browser.cjs",
     "dev": "node server.js",
@@ -16,6 +19,7 @@
     "test:performance": "node tests/performance.test.cjs && node tests/vehicle-mesh-cache.test.cjs && node tests/view-culling.test.cjs",
     "test:leaderboard": "node tests/leaderboard-client.test.cjs && node tests/leaderboard-start.test.cjs && node tests/leaderboard.test.cjs",
     "test:analytics": "node tests/analytics.test.cjs",
+    "test:admin-language": "node tests/admin-language.test.cjs",
     "build:worker": "node scripts/embed-admin.cjs",
     "build:verified-worker": "node scripts/bundle-verified-worker.cjs",
     "dev:replay": "node experiment/server.cjs",

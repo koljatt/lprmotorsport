@@ -1,16 +1,58 @@
 (() => {
  'use strict';
- const panel=document.querySelector('#chat-panel'),button=document.querySelector('#chat-button');
+ const panel=document.querySelector('#chat-panel'),button=document.querySelector('#chat-restore');
+ const activeButton=()=>button;
  const form=document.querySelector('#chat-form'),input=document.querySelector('#chat-input');
  const list=document.querySelector('#chat-messages'),status=document.querySelector('#chat-status');
  const send=form.querySelector('button');
  const visibility=document.querySelector('#chat-visible');
  const visibilityKey='lpr-chat-visible';
+ const dialog=document.querySelector('#settings-dialog');
+ // A modal makes its siblings inert. Keep chat inside the active modal so it
+ // remains readable and interactive, then return it to the page for driving.
+ function placePanel(){
+  const parent=dialog.open?dialog:document.body;
+  if(panel.parentElement!==parent)parent.append(panel);
+  if(button.parentElement!==parent)parent.append(button);
+ }
+ new MutationObserver(placePanel).observe(dialog,{attributes:true,attributeFilter:['open']});
+ placePanel();
  const t=text=>window.LPRI18n?.t(text)??text;
  const endpoint=window.LPRVerificationConfig.service+'/api/chat';
+ const onlineCount=document.querySelector('#chat-online-count');
+ let visitor=crypto.randomUUID(),presenceTimer=null,presenceLoading=false;
+ try{
+  const saved=localStorage.getItem('lpr-chat-visitor');
+  if(/^[a-f0-9-]{36}$/.test(saved))visitor=saved;
+  else localStorage.setItem('lpr-chat-visitor',visitor);
+ }catch{}
+ // Count active browsers, including guests and drivers who have closed chat.
+ // A shared browser ID avoids counting multiple tabs as multiple people.
+ async function heartbeat(){
+  clearTimeout(presenceTimer);
+  if(document.hidden||presenceLoading)return;
+  presenceLoading=true;
+  try{
+   const response=await fetch(endpoint+'/presence?visitor='+encodeURIComponent(visitor),{signal:AbortSignal.timeout(10000)});
+   if(!response.ok)throw Error('Presence unavailable');
+   const data=await response.json();
+   if(!Number.isSafeInteger(data.onlineCount)||data.onlineCount<0)throw Error('Invalid presence');
+   onlineCount.textContent=String(data.onlineCount);
+  }catch{onlineCount.textContent='—';}
+  finally{presenceLoading=false;if(!document.hidden)presenceTimer=setTimeout(heartbeat,15000);}
+ }
+ document.addEventListener('visibilitychange',()=>{clearTimeout(presenceTimer);if(!document.hidden)void heartbeat();});
+ window.addEventListener('online',()=>void heartbeat());
+ void heartbeat();
  let timer=null,loading=false,sending=false,ticket=null;
  function typing(){return panel.contains(document.activeElement)&&!panel.hidden;}
- window.LPRChat={get typing(){return typing();}};
+ const identity=()=>window.LPRLeaderboard?.chatIdentity;
+ const signedOut='Kirjaudu sisään lähettääksesi viestejä.';
+ function identityChanged(){
+  ticket=null;
+  if(!sending)status.textContent=t(identity()?'Yhteys kunnossa':signedOut);
+ }
+ window.LPRChat={get typing(){return typing();},identityChanged};
  function controls(){window.dispatchEvent(new Event('lpr-chat-focus'));}
  panel.addEventListener('focusin',controls);
  // Keep typing, cursor movement and spaces away from every game keyboard handler.
@@ -21,16 +63,18 @@
  function setVisible(visible,{save=true}={}){
   const hadFocus=panel.contains(document.activeElement);
   panel.hidden=!visible;visibility.checked=visible;
+  document.body.classList.toggle('chat-open',visible);
+  button.hidden=visible;
   button.setAttribute('aria-expanded',String(visible));
   if(save)try{localStorage.setItem(visibilityKey,String(visible));}catch{}
   clearTimeout(timer);
-  if(hadFocus){controls();button.focus();}
+  if(hadFocus){controls();if(!visible)activeButton().focus();}
   // Reading the chat leaves the driving controls available; focus only when composing.
   if(visible)void refresh();
  }
- function close(){setVisible(false);button.focus();}
+ function close(){setVisible(false);activeButton().focus();}
  document.querySelector('#chat-close').addEventListener('click',close);
- button.addEventListener('click',()=>setVisible(panel.hidden));
+ button.addEventListener('click',()=>{button.blur();setVisible(true);});
  visibility.addEventListener('change',()=>setVisible(visibility.checked));
  async function request(options){
   const response=await fetch(endpoint,{...options,signal:AbortSignal.timeout(10000)});
@@ -76,18 +120,18 @@
   try{
    const data=await request();if(!Array.isArray(data.messages))throw Error('Invalid chat');
    render(data.messages);
-   if(!sending)status.textContent=t(window.LPRLeaderboard?.identity?'Yhteys kunnossa':'Vahvista nimimerkki ennen lähettämistä.');
+   if(!sending)status.textContent=t(identity()?'Yhteys kunnossa':signedOut);
   }catch{if(!sending)status.textContent=t('Chat ei saa yhteyttä. Yritetään uudelleen…');}
   finally{loading=false;schedule();}
  }
  form.addEventListener('submit',async event=>{
   event.preventDefault();if(sending)return;
-  const identity=window.LPRLeaderboard?.identity,text=input.value.trim();
-  if(!identity){status.textContent=t('Vahvista nimimerkki ennen lähettämistä.');return;}
+  const login=identity(),text=input.value.trim();
+  if(!login){status.textContent=t(signedOut);return;}
   if(!text)return;
   sending=true;send.disabled=true;status.textContent=t('Lähetetään…');
   try{
-   await post(identity,text);
+   await post(login,text);
    if(input.value.trim()===text)input.value='';
    status.textContent=t('Viesti lähetetty');void refresh();
   }catch(error){status.textContent=t(error.signIn?'Kirjaudu uudelleen ennen lähettämistä.':error.status===429?'Liikaa viestejä. Odota minuutti.':'Viestiä ei lähetetty. Yritä uudelleen.');}
@@ -95,7 +139,7 @@
  });
  document.addEventListener('visibilitychange',()=>{clearTimeout(timer);if(!document.hidden)void refresh();});
  window.addEventListener('online',()=>void refresh());
- let savedVisibility=false;
- try{savedVisibility=localStorage.getItem(visibilityKey)==='true';}catch{}
+ let savedVisibility=true;
+ try{savedVisibility=localStorage.getItem(visibilityKey)!=='false';}catch{}
  setVisible(savedVisibility,{save:false});
 })();

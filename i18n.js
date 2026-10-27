@@ -2,7 +2,27 @@
 (() => {
   'use strict';
   const english = {
+  "Kisapäivä ja pisteet": "Race date and points",
+  "Edelliset tulokset": "Previous results",
+  "Seuraavat tulokset": "Next results",
+  "Seurataan pelaajaa": "Watching driver",
+  "Yhdistetään kuljettajan ajoon…": "Connecting to the driver…",
+  "Odotetaan kuljettajan liikkeellelähtöä…": "Waiting for the driver to move…",
+  "Kuljettajan ajo päättyi. Valitse toinen kuljettaja.": "This drive has ended. Choose another driver.",
+  "Kuljettajan peliversio poikkeaa katselimesta. Päivitä sivu.": "The driver's game version differs. Refresh the page.",
+  "Seurantayhteys katkesi. Yhdistetään uudelleen…": "Live connection interrupted. Reconnecting…",
+  "Vaihda seurattavaa kuljettajaa": "Switch watched driver",
+  "Aktiiviset kuljettajat": "Active drivers",
+  "Katso ajoa painamalla kuljettajan nimeä. Chat toimii myös katselun aikana.": "Click a driver's name to watch. Chat stays available while watching.",
+  "Haetaan kuljettajia…": "Loading drivers…",
+  "Valitse kuljettaja ja seuraa ajoa suorana.": "Choose a driver to watch live.",
+  "Ei aktiivisia kuljettajia juuri nyt.": "No active drivers right now.",
+  "Kuljettajalistaa ei saatu. Yritetään uudelleen…": "Could not load drivers. Retrying…",
+  "← Takaisin kuljettajalistaan": "← Back to drivers",
+  "Seuraa aktiivisten pelaajien ajoa →": "Watch active drivers →",
+  "Leaderboard-ajoasi voi seurata suorana nimimerkilläsi.": "Your leaderboard driving can be watched live under your nickname.",
   "Varikkochat": "Paddock chat",
+  "Paikalla": "Online",
   "Näytä chat ajon aikana": "Show chat while driving",
   "Sulje chat": "Close chat",
   "Chat-viestit": "Chat messages",
@@ -12,6 +32,7 @@
   "Lähetä": "Send",
   "Yhteys kunnossa": "Connected",
   "Vahvista nimimerkki ennen lähettämistä.": "Confirm your nickname before sending.",
+  "Kirjaudu sisään lähettääksesi viestejä.": "Sign in to send messages.",
   "Kirjaudu uudelleen ennen lähettämistä.": "Sign in again before sending.",
   "Chat ei saa yhteyttä. Yritetään uudelleen…": "Chat cannot connect. Retrying…",
   "Lähetetään…": "Sending…",
@@ -230,6 +251,7 @@
   "LPR Motorsport Lap Challenge \u2013 aja kierros Formula Student -radalla.": "LPR Motorsport Lap Challenge \u2013 drive a lap on a Formula Student track."
 };
   const templates = {
+    watchingDriver: ['Seurataan pelaajaa {name}', 'Watching driver {name}'],
     lapRank: ['KIERROS {time} · SIJOITUS {rank}', 'LAP {time} · POSITION {rank}'],
     nameFree: ['Nimimerkki {name} on vapaa. Varaa se itsellesi painamalla Varaa nimimerkki.', 'The nickname {name} is available. Press Claim nickname to reserve it.'],
     deviceDetails: ['Yhdistetty: {device} \u00b7 {axes} akselia, {buttons} painiketta', 'Connected: {device} \u00b7 {axes} axes, {buttons} buttons'],
@@ -281,7 +303,7 @@
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (node.parentElement.closest('script, style, .language-switcher, #chat-messages')) continue;
+      if (node.parentElement.closest('script, style, .language-switcher, #chat-messages, #active-drivers-list')) continue;
       const translated = t(node.nodeValue);
       if (translated !== node.nodeValue) node.nodeValue = translated;
     }

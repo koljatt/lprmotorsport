@@ -6,7 +6,7 @@ const hz=120;
 const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,code,...extra});
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
- constructor({clock=()=>performance.now(),workerCount=1,workerHeapMb=256,executorFactory=options=>new VerificationPool(options),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=1500,idleMs=24000,ttlMs=620000,onMetric=()=>{},signLap=async()=>{throw Error('Missing signer')}}={}){
+ constructor({clock=()=>performance.now(),workerCount=1,workerHeapMb=256,executorFactory=options=>new VerificationPool(options),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=2000,idleMs=24000,ttlMs=620000,onMetric=()=>{},signLap=async()=>{throw Error('Missing signer')}}={}){
   Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap,onMetric});this.sessions=new Map();this.creations=[];this.closed=false;
   for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
   this.pool=executorFactory({workerCount,workerHeapMb,onLost:id=>{const s=this.sessions.get(id);if(s?.slot)this.invalidate(s,'worker_lost');}});
@@ -41,6 +41,8 @@ class Sessions {
   try{
    const initStart=performance.now(),initial=await this.spawn(s);
    if(!s.slot)throw fail(410,'session_closed','Session was interrupted during initialization');
+   s.live=initial.live;
+   if(s.live){s.live.lapStates=[{lap:1,startTick:0,bestLapMs:0}];s.live.bestLapMs=0;}
    this.observe('initializationMs',performance.now()-initStart);this.countMetric('starts');
    s.started=this.clock();s.lastAccepted=s.started;s.phase=armed?'armed':'running';
    return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs,lapLagMs:this.lapLagMs};
@@ -97,6 +99,16 @@ class Sessions {
    if(message.result.crashed)throw fail(422,'crashed','Car crashed; session is not a verified lap');
    if(message.result.ticks!==endTick)throw fail(422,'ticks','Simulation tick mismatch');
    s.ticks=endTick;s.nextSeq++;s.lastAccepted=this.clock();
+   if(s.live&&message.live){
+    s.live.frames.push(...message.live.frames);s.live.inputs.push(...message.live.inputs);
+    s.live.frames=s.live.frames.filter(f=>f[0]>=endTick-600);
+    s.live.inputs=s.live.inputs.filter(f=>f[0]>=s.live.frames[0][0]);
+    for(const lap of message.laps||[]){
+     const ms=lap.lapTicks*1000/hz;s.live.bestLapMs=s.live.bestLapMs?Math.min(s.live.bestLapMs,ms):ms;
+     s.live.lapStates.push({lap:lap.lap+1,startTick:lap.endTick,bestLapMs:s.live.bestLapMs});
+    }
+    while(s.live.lapStates.length>1&&s.live.lapStates[1].startTick<=s.live.frames[0][0])s.live.lapStates.shift();
+   }
    const laps=[],practiceLaps=[];
    for(const value of message.laps||[]){
     const {replay,...lap}=value;
@@ -121,6 +133,16 @@ class Sessions {
    s.receipts.set(data.seq,{digest,reply});
    return reply;
   }catch(error){this.invalidate(s,error.code||'physics');throw error;}
+ }
+ spectators(id){
+  this.sweep();
+  const active=[...this.sessions.values()].filter(s=>s.slot&&s.phase==='running'&&s.live);
+  if(!id)return {results:active.map(s=>({id:s.id,nickname:s.identity.nickname,tick:s.ticks})),revision};
+  const s=active.find(s=>s.id===id);
+  if(!s)throw fail(410,'session_closed','Driving session has ended');
+  return {format:'lpr-live-v1',sceneRevision:revision,hz,lap:s.receipts.get(s.nextSeq-1)?.reply.result.lap||1,
+   nickname:s.identity.nickname,track:s.live.track,frames:s.live.frames,inputs:s.live.inputs,
+   lapStates:s.live.lapStates,bestLapMs:s.live.bestLapMs};
  }
  release(s){s.slot=false;void this.pool.release(s.id);}
  invalidate(s,reason){if(s.slot){if(reason==='budget')this.countMetric('processingTimeouts');if(reason==='lag')this.countMetric('lagTerminations');}s.phase='invalid';s.reason=reason;this.release(s);}

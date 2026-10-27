@@ -49,6 +49,7 @@
     nickname.value = account?.nickname ?? localStorage.getItem('lpr-nickname') ?? '';
   } catch {}
   function showAccount() {
+    window.LPRChat?.identityChanged?.();
     // A remembered sign-in skips the password, but every page load still needs Aloita ajo.
     const remembered = !!account;
     const showFields = remembered || !!activeName || !!authMode;
@@ -311,6 +312,11 @@
     window.addEventListener('online', flushPending);
     window.LPRLeaderboard = {
       get identity() { return activeName && token ? {nickname:activeName,token,series:activeSeries} : null; },
+      // Chat authentication is independent of choosing a verified driving session.
+      get chatIdentity() {
+        if (account?.expiresAt > Date.now()) return {nickname:account.nickname,token:account.token,series:account.series};
+        return null;
+      },
       consentChanged() { consent.setCustomValidity(''); },
       refresh,
       cancelLap() { activeLap = null; },

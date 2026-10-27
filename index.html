@@ -11,9 +11,10 @@
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
-    <link rel="stylesheet" href="styles.css?v=integration-20261025" />
-    <link rel="stylesheet" href="3d.css?v=next-20261026" />
-    <script src="i18n.js?v=next-20261026" defer></script>
+    <link rel="stylesheet" href="styles.css?v=chat-presence-20261026" />
+    <link rel="stylesheet" href="3d.css?v=daily-hud-20261027" />
+    <link rel="stylesheet" href="dashboard.css?v=viewport-chat-20261027" />
+    <script src="i18n.js?v=spectate-native-20261027" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
     <script src="campus.js?v=collision-cache-20261026" defer></script>
@@ -34,13 +35,16 @@
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
     <script src="analytics.js?v=expiring-sessions-20261025" defer></script>
-    <script src="leaderboard.js?v=expiring-sessions-20261025" defer></script>
+    <script src="leaderboard.js?v=chat-presence-20261026" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
     <script src="verified-driving.js?v=next-20261026" defer></script>
-    <script src="championship.js?v=daily-20261026" defer></script>
-    <script src="chat.js?v=chat-visibility-20261025" defer></script>
-    <script src="game.js?v=chat-20261025" defer></script>
+    <script src="championship.js?v=daily-hud-20261027" defer></script>
+    <script src="dashboard.js?v=viewport-chat-20261027" defer></script>
+    <script src="chat.js?v=chat-dock-20261027" defer></script>
+    <script src="replay-pose.js" defer></script>
+    <script src="spectate-menu.js?v=native-view-20261027" defer></script>
+    <script src="game.js?v=spectate-native-20261027" defer></script>
   </head>
   <body>
     <main class="app">
@@ -49,7 +53,6 @@
         <div class="topbar-title"><span>FORMULA STUDENT</span><strong>SKINNARILA GRAND PRIX</strong></div>
         <button id="sound-button" class="icon-button" type="button" aria-label="Äänet: päällä" aria-pressed="true">♫<span>Äänet: päällä</span></button>
         <button id="leaderboard-button" class="icon-button" type="button" aria-label="Tuloslista">🏆</button>
-        <button id="chat-button" class="icon-button" type="button" aria-label="Varikkochat" aria-expanded="false" aria-controls="chat-panel">💬</button>
         <button id="restart-button" class="icon-button" type="button" aria-label="Aloita uudelleen">↺ <span>Aloita uudelleen</span></button>
         <div class="language-switcher" role="group" aria-label="Kieli / Language">
           <button type="button" data-language="fi" aria-label="Suomi" aria-pressed="true" title="Suomi" lang="fi"><svg viewBox="0 0 36 22" aria-hidden="true"><path fill="#fff" d="M0 0h36v22H0z"/><path fill="#003580" d="M10 0h6v22h-6zM0 8h36v6H0z"/></svg></button>
@@ -60,6 +63,7 @@
       <aside id="chat-panel" class="chat-panel" aria-labelledby="chat-title" hidden>
         <div class="chat-heading"><h2 id="chat-title">Varikkochat</h2><button id="chat-close" class="icon-button" type="button" aria-label="Sulje chat">×</button></div>
         <p class="hint">Yhteinen chat · viestit ovat julkisia. Älä jaa henkilötietoja.</p>
+        <p class="chat-presence"><span class="chat-online-dot" aria-hidden="true"></span><span>Paikalla</span> <strong id="chat-online-count" role="status">—</strong></p>
         <ol id="chat-messages" aria-label="Chat-viestit" aria-live="polite" aria-relevant="additions"></ol>
         <form id="chat-form">
           <label for="chat-input">Viesti</label>
@@ -67,7 +71,10 @@
         </form>
         <p id="chat-status" class="hint" role="status"></p>
       </aside>
+      <button id="chat-restore" class="chat-restore" type="button" aria-expanded="false" aria-controls="chat-panel" hidden>Varikkochat <span aria-hidden="true">💬</span></button>
       <section class="game-shell" aria-label="Ajopeli">
+        <p id="spectate-label" role="status" hidden></p>
+        <p id="spectate-connection" role="status" hidden></p>
         <p id="verification-state" role="status" class="verification-state"></p>
         <div id="start-lights" class="start-lights" data-phase="" role="status" hidden>
           <div class="start-lights-row" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -79,6 +86,10 @@
           <div class="hud-item wide"><span>PARAS</span><strong id="best-time">--:--.---</strong></div>
           <div class="hud-item speed"><span>NOPEUS</span><strong><span id="speed">0</span> <small>km/h</small></strong></div>
         </div>
+        <section id="daily-race-hud" class="daily-race-hud" aria-label="Päivän kisa">
+          <div><span id="daily-race-label">Päivän kisa · Ihmiset</span><strong id="daily-race-countdown">Ladataan…</strong></div>
+          <div class="daily-race-leader"><span id="daily-race-leader-label">Johdossa</span><strong><span id="daily-race-name">—</span><span id="daily-race-time"></span></strong></div>
+        </section>
         <canvas id="track" aria-label="3D-näkymä kuljettajan paikalta"></canvas>
         <div id="sector-time" class="sector-time" role="status" hidden></div>
         <canvas id="cockpit" aria-hidden="true"></canvas>
@@ -113,18 +124,8 @@
         </div>
       </div>
       <div class="leaderboard-entry-grid">
-      <section class="leaderboard-panel verified-standings" aria-label="Varmennettujen kierrosaikojen TOP 10">
-        <h3>TOP 10</h3>
-        <div class="series-tabs" role="group" aria-label="Sarja">
-          <button id="verified-series-human" type="button" aria-pressed="true">Ihmiset</button>
-          <button id="verified-series-bot" type="button" aria-pressed="false">Botit</button>
-        </div>
-        <p id="verification-status" role="status" hidden></p>
-        <p><small>TOP 10 edellyttää julkisesti katsottavaa, varmennettua uusintaa.</small></p>
-        <ol id="verified-list" aria-live="polite"></ol>
-      </section>
           <form id="leaderboard-start-form" class="leaderboard-panel leaderboard-start-form">
-            <h3>Kuljettaja</h3>
+            <h3>Kuljettaja <span id="dashboard-account-name"></span></h3>
             <button id="leaderboard-practice" class="leaderboard-start" type="button">Harjoittele ilman kirjautumista</button>
             <div id="leaderboard-choices" class="leaderboard-choices">
               <button id="leaderboard-login" class="leaderboard-choice" type="button">Kirjaudu sisään</button>
@@ -142,6 +143,7 @@
             <label id="leaderboard-password-label" for="leaderboard-password">Salasana</label>
             <input id="leaderboard-password" type="password" minlength="8" maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Vähintään 8 merkkiä" />
             <p id="leaderboard-password-hint" class="leaderboard-password-hint">Salasana varaa nimimerkin sinulle. Salasanaa ei voi palauttaa.</p>
+            <p class="leaderboard-password-hint">Leaderboard-ajoasi voi seurata suorana nimimerkilläsi.</p>
             </div>
             <fieldset id="leaderboard-series-step" class="leaderboard-series" hidden>
               <legend>Kummassa sarjassa ajat?</legend>
@@ -168,9 +170,31 @@
             <button id="leaderboard-start" class="leaderboard-start" type="submit" hidden><span id="leaderboard-start-label">Kirjaudu sisään</span> <span aria-hidden="true">→</span></button>
             <p id="leaderboard-status" role="status"></p>
           </form>
+      <section class="leaderboard-panel active-drivers" aria-labelledby="active-drivers-title">
+        <h3 id="active-drivers-title">Aktiiviset kuljettajat</h3>
+        <p class="active-drivers-note">Katso ajoa painamalla kuljettajan nimeä. Chat toimii myös katselun aikana.</p>
+        <p id="active-drivers-status" role="status">Haetaan kuljettajia…</p>
+        <ul id="active-drivers-list"></ul>
+      </section>
+      <section class="leaderboard-panel verified-standings" aria-label="Varmennettujen kierrosaikojen TOP 10">
+        <h3>TOP 10</h3>
+        <div class="series-tabs" role="group" aria-label="Sarja">
+          <button id="verified-series-human" type="button" aria-pressed="true">Ihmiset</button>
+          <button id="verified-series-bot" type="button" aria-pressed="false">Botit</button>
+        </div>
+        <p id="verification-status" role="status" hidden></p>
+        <p><small>TOP 10 edellyttää julkisesti katsottavaa, varmennettua uusintaa.</small></p>
+        <ol id="verified-list" aria-live="polite"></ol>
+      </section>
       </div>
+      <section id="spectate-view" hidden aria-label="Suora ajonseuranta">
+        <div id="spectate-game"></div>
+        <aside id="spectate-sidebar" aria-label="Vaihda seurattavaa kuljettajaa">
+          <button id="spectate-back" type="button">← Takaisin kuljettajalistaan</button>
+        </aside>
+      </section>
       <section id="championship" class="leaderboard-panel championship" aria-labelledby="championship-title">
-        <h3 id="championship-title">Päivän kisa</h3>
+        <div class="championship-heading"><h3 id="championship-title">Päivän kisa</h3><button id="dashboard-details-open" type="button">Kisapäivä ja pisteet</button></div>
         <p>Uusi kisa joka päivä Suomen aikaa. Vain varmennetut kierrokset.</p>
         <div class="series-tabs" role="group" aria-label="Päiväkisan sarja">
           <button id="championship-series-human" type="button" aria-pressed="true">Ihmiset</button>
@@ -196,6 +220,10 @@
           <p>Ajoputki: yksi varmennettu kierros päivässä. Bonus 1 piste per peräkkäinen päivä, enintään 7 pistettä päivässä. Väliin jäänyt päivä aloittaa putken alusta.</p>
           <p>Tasatulokset jakavat sijan ja pisteet. Päivän pisteet vahvistuvat heti keskiyöllä Suomen aikaa. Kuukausikisaan lasketaan vain vahvistetut päivät. Myöhäisemmät tallennukset pääsevät edelleen kaikkien aikojen listalle.</p>
         </details>
+      </section>
+      <section id="dashboard-details" class="dashboard-popover" hidden aria-label="Kisapäivä ja pisteet">
+        <button id="dashboard-details-close" type="button">Sulje</button>
+        <div id="dashboard-details-content"></div>
       </section>
     </dialog>
   </body>

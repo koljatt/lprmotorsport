@@ -5,12 +5,13 @@ const validName=value=>typeof value==='string'&&/^[\p{L}\p{N} _.-]{1,24}$/u.test
 // One shared room per server process. No database or driving-session capacity required.
 // post() receives the payload of a chat ticket whose signature the caller has already verified.
 function createChat({now=Date.now,protocol='driving-v1'}={}) {
- const messages=[],limits=new Map();
+ const messages=[],limits=new Map(),visitors=new Map();
  const retention=24*60*60*1000;
  function clean() {
   const time=now();
   while(messages.length && messages[0].at<=time-retention)messages.shift();
   for(const [key,item]of limits)if(item.expires<=time)limits.delete(key);
+  for(const [key,expires]of visitors)if(expires<=time)visitors.delete(key);
  }
  function consume(key,max) {
   let item=limits.get(key);
@@ -18,6 +19,13 @@ function createChat({now=Date.now,protocol='driving-v1'}={}) {
   if(++item.count>max)throw fail(429,'Too many messages');
  }
  return {
+  presence(visitor){
+   clean();
+   if(typeof visitor!=='string'||!/^[a-f0-9-]{36}$/.test(visitor))throw fail(400,'Invalid visitor');
+   if(!visitors.has(visitor)&&visitors.size>=10000)throw fail(429,'Presence busy');
+   visitors.set(visitor,now()+45000);
+   return {onlineCount:visitors.size};
+  },
   list(){clean();return {messages:messages.map(({owner,...message})=>message)};},
   post(identity,ip,data){
    clean();

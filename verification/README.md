@@ -1,10 +1,55 @@
 # 3D-pelin palvelinvarmennus
 
+## Suora ajonseuranta
+
+Pelin aloitusnäkymän **Aktiiviset kuljettajat** näyttää käynnissä olevat ajot.
+Paina kuljettajan nimeä: katselin aukeaa saman valikon sisään ja varikkochat
+säilyy käytettävissä samalla kirjautumisella. **Takaisin kuljettajalistaan**
+sulkee katselimen. Lista päivittyy kolmen sekunnin välein valikon ollessa auki.
+Seuranta käyttää pelin omaa WebGL-piirtäjää, ajokameraa, autoa, rattia,
+jousitusta ja mittaristoa samoilla piirtoasetuksilla kuin oma ajo. Näkymässä
+lukee **Seurataan pelaajaa [nimi]**. Oikean sivuvalikon kuljettajista voi
+vaihtaa seurattavaa suoraan; valittu kuljettaja on korostettu. Puhelimessa
+lista sijoittuu ajonäkymän alle. Chat säilyy käytettävissä koko ajan.
+Kierros ja kierrosaika seuraavat palvelimen kierrosrajoja; paras aika
+tarkoittaa seurattavan ajosession parasta kierrosta.
+Seuranta kattaa käynnissä olevat leaderboard-ajot;
+harjoittelutilaa ei lähetetä. Kuljettajalle kerrotaan julkisesta seurannasta
+kirjautumisen yhteydessä. Katselija ei tarvitse tiliä.
+
+Varmennuspalvelimen `GET /spectate` palauttaa aktiivisten ajojen nimimerkit
+ja julkiset sessiotunnisteet. `GET /spectate/:id` palauttaa viimeisten viiden
+sekunnin palvelimella lasketut liikkeet ja ohjaussyötteet. Tunnuksia,
+pelaajan profiilitunnisteita ja kierroskuitteja ei palauteta. Katselu ei varaa
+fysiikkasessiota. Pelin katselin hakee ajotiedot puolen sekunnin välein ja listan
+kolmen sekunnin välein; haut pysähtyvät sivun ollessa piilossa. Puskurointi
+lisää noin sekunnin viiveen verkon ja varmennuksen viiveen lisäksi.
+Ajon päättyminen tai yhteyskatko näytetään katselijalle.
+
+Julkaise peli ja varmennuspalvelin yhdessä. Tarkistukset:
+`npm run test:spectate` ja `npm run test:spectate-browser`.
+
+## Tilannekatsaus yhdellä näytöllä
+
+Päävalikon aktiiviset kuljettajat, TOP 10, päivän nopeimmat, eniten kierroksia
+ajaneet ja kuukauden pistekisa näkyvät ilman näkymän vierittämistä.
+Näyttökoko määrää kerralla näkyvien rivien määrän. Listojen nuolipainikkeilla
+nähdään muut tulokset; sijoitukset ja kokonaismäärä säilyvät näkyvissä.
+Seurannassa samat tilastot ovat kuljettajalistan yhteydessä. Kisapäivän valinta
+ja pisteytyksen säännöt avautuvat **Kisapäivä ja pisteet** -painikkeesta.
+Kirjautuminen ja lisäasetukset ovat erillisiä toimintoja, eivätkä kasvata
+tavallisen tilannekatsauksen korkeutta.
+
+Täysien listojen asettelu tarkistetaan työpöytä-, kannettava- ja puhelinkoossa:
+`npm run test:dashboard-browser`.
+
 ## Varikkochat
 
 Kuljettaja voi valita aloitus- ja tuloslistanäkymässä **Näytä chat ajon aikana**.
-Saman valinnan voi vaihtaa ajossa 💬-painikkeesta ja chatin sulkupainikkeesta.
-Valinta muistetaan selaimessa seuraaville pelikerroille; oletuksena chat on piilossa.
+Chatin voi sulkea sen omasta sulkupainikkeesta. Suljettuna siitä jää vasempaan
+reunaan **Varikkochat**-avauspainike. Avattuna erillistä avauspainiketta ei näytetä.
+Valinta muistetaan selaimessa seuraaville pelikerroille; ensimmäisellä käynnillä
+chat näkyy. Puhelimessa chat ja sen suljettu painike kiinnittyvät alareunaan.
 Chatin näyttäminen ei kohdista kirjoituskenttää, joten viestejä voi lukea ajaessa.
 
 Pelin 💬-painike avaa kaikille yhteisen chatin. Chat käyttää samaa Render-palvelua

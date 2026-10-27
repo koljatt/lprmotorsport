@@ -2,7 +2,7 @@
  'use strict';
  const $=s=>document.querySelector(s),config=window.LPRVerificationConfig,params=new URLSearchParams(location.search);
  $('#view').value='driver';
- const admin=params.get('admin')==='1';let secret='',offset=0,generation=0,recording=null,elapsed=0,playing=false,lastFrame=0;
+ const live=params.get('live')==='1',admin=!live&&params.get('admin')==='1';let secret='',offset=0,generation=0,recording=null,elapsed=0,playing=false,lastFrame=0;
  const canvas=$('#track'),ctx=canvas.getContext('2d');
  let renderer=null,driverUnavailable=false;const replayCar={};
  const resetCamera=()=>{if(renderer){renderer.visualSteering=null;renderer.lastWheelFrame=0;}};
@@ -39,13 +39,13 @@
     for(const key of Object.keys(replayCar))delete replayCar[key];
     Object.assign(replayCar,pose,{x:lerp(1),y:lerp(2),angle:a[3]+delta*t,vx:lerp(4),vy:lerp(5),speed:Math.hypot(lerp(4),lerp(5)),throttleInput:input[1],brakeInput:input[2],tcEnabled:input[6],lapElapsedMs:elapsed*1000,lap:r.lap||1});
     canvas.hidden=true;$('#driver-view').hidden=false;renderer.resize();renderer.updatePeople(tick*1000/r.hz);renderer.render(replayCar,tick*1000/r.hz);
-    $('#view-badge').textContent='KULJETTAJAN NÄKYMÄ · 3D-UUSINTA';
+    $('#view-badge').textContent=live?'SUORA SEURANTA · 3D':'KULJETTAJAN NÄKYMÄ · 3D-UUSINTA';
     $('#view-note').textContent=a[6]?'':'Vanha tallenne: auton liike näkyy kuljettajan paikalta, mutta jousituksen ja ohjauskulman tarkat tilat puuttuvat. Ratin liike on arvio ohjauskomennoista.';
    }catch(error){driverUnavailable=true;$('#view').value='map';$('#view-note').textContent=error.message+' Näytetään 2D-ratakuva.';}
   }
   const mapView=$('#view').value==='map'||driverUnavailable;
   canvas.hidden=!mapView;$('#driver-view').hidden=mapView;
-  if(mapView){$('#view-badge').textContent='RATAKUVA · 2D-UUSINTA';
+  if(mapView){$('#view-badge').textContent=live?'SUORA SEURANTA · RATAKUVA':'RATAKUVA · 2D-UUSINTA';
   const points=r.track,xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);
   const minX=Math.min(...xs)-100,maxX=Math.max(...xs)+100,minY=Math.min(...ys)-100,maxY=Math.max(...ys)+100;
   const scale=Math.min(canvas.width/(maxX-minX),canvas.height/(maxY-minY)),ox=(canvas.width-(maxX-minX)*scale)/2,oy=(canvas.height-(maxY-minY)*scale)/2;
@@ -62,7 +62,7 @@
   $('#gas').value=input[1];$('#brake').value=input[2];$('#steer').textContent=(input[3]*100).toFixed(0)+' %';
   // Physics velocities are already SI metres/second, matching the live speedometer.
   $('#velocity').textContent=(Math.hypot(lerp(4),lerp(5))*3.6).toFixed(0)+' km/h';
-  $('#clock').textContent=elapsed.toFixed(3)+' / '+seconds().toFixed(3)+' s';$('#seek').value=seconds()?elapsed/seconds():0;
+  $('#clock').textContent=live?'Ajo '+(tick/r.hz).toFixed(1)+' s · kierros '+r.lap:elapsed.toFixed(3)+' / '+seconds().toFixed(3)+' s';$('#seek').value=seconds()?elapsed/seconds():0;
  }
  // The game page stores the signed-in account; reports reuse that login session.
  function signedIn(){
@@ -133,11 +133,53 @@
  $('#restart').onclick=()=>{elapsed=0;resetCamera();draw();};$('#seek').oninput=()=>{elapsed=Number($('#seek').value)*seconds();resetCamera();draw();};
  $('#view').onchange=()=>{resetCamera();draw();};
  window.addEventListener?.('resize',()=>draw());
- function animate(now){if(playing&&recording){elapsed=Math.min(seconds(),elapsed+Math.min((now-lastFrame)/1000,.25)*Number($('#speed').value));if(elapsed>=seconds())pause();draw();}lastFrame=now;requestAnimationFrame(animate);}requestAnimationFrame(animate);
+ function animate(now){if(playing&&recording){elapsed=Math.min(seconds(),elapsed+Math.min((now-lastFrame)/1000,.25)*Number($('#speed').value));if(elapsed>=seconds()&&!live)pause();draw();}lastFrame=now;requestAnimationFrame(animate);}requestAnimationFrame(animate);
  document.addEventListener('visibilitychange',()=>{if(document.hidden)pause();});
  $('#login').onsubmit=e=>{e.preventDefault();secret=$('#token').value;offset=0;void list();};
  $('#lock').onclick=()=>{++generation;secret='';pause();recording=null;$('#viewer').hidden=true;$('#admin-tools').hidden=true;$('#login').hidden=false;$('#runs').replaceChildren();message('Ylläpito lukittu.');};
  $('#flagged').onchange=()=>{offset=0;void list();};$('#previous').onclick=()=>{offset=Math.max(0,offset-50);void list();};$('#next').onclick=()=>{offset+=50;void list();};
- if(admin){$('#admin').hidden=false;message('Kirjaudu tarkastellaksesi kaikkia tallennettuja suorituksia.');}
+ let liveRequest=0,liveBusy=false,listBusy=false;
+ async function liveList(){
+  if(listBusy||document.hidden)return;listBusy=true;
+  try{const response=await fetch(config.service+'/spectate',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!response.ok)throw Error();const data=await response.json();
+   const select=$('#live-driver'),selected=select.value;select.replaceChildren(new Option('Valitse kuljettaja',''));
+   for(const r of data.results)select.append(new Option(r.nickname,r.id));
+   if(data.results.some(r=>r.id===selected))select.value=selected;
+   else if(selected){++liveRequest;recording=null;playing=false;$('#viewer').hidden=true;message('Kuljettajan ajo päättyi. Valitse toinen kuljettaja.');}
+   $('#live-status').textContent=data.results.length+' aktiivista kuljettajaa';
+  }catch{$('#live-status').textContent='Kuljettajalistaa ei saatu. Yritetään uudelleen.';}finally{listBusy=false;}
+ }
+ async function livePoll(){
+  const id=$('#live-driver').value;if(!id||liveBusy||document.hidden)return;
+  const gen=liveRequest;liveBusy=true;
+  try{const response=await fetch(config.service+'/spectate/'+id,{cache:'no-store',signal:AbortSignal.timeout(10000)});
+   if(gen!==liveRequest)return;
+   if(response.status===410){recording=null;playing=false;$('#viewer').hidden=true;message('Kuljettajan ajo päättyi.');return;}
+   if(!response.ok)throw Error();const r=await response.json();if(gen!==liveRequest)return;
+   if(r.sceneRevision!==window.LPRDrivingRevision)throw Error('Kuljettajan peliversio poikkeaa katselimesta. Päivitä sivu.');
+   if(r.frames.length<2||!r.inputs.length){message('Odotetaan kuljettajan liikkeellelähtöä…');return;}
+   const previousTick=recording?recording.startTick+elapsed*120:null;
+   r.startTick=r.frames[0][0];r.endTick=r.frames.at(-1)[0];
+   recording=r;elapsed=Math.max(0,Math.min((r.endTick-r.startTick)/120,((previousTick??r.endTick-90)-r.startTick)/120));
+   playing=true;$('#viewer').hidden=false;draw();message(r.nickname+' · suora seuranta');
+  }catch(error){if(gen===liveRequest){playing=false;message(error.message.includes('peliversio')?error.message:'Seurantayhteys katkesi. Yhdistetään uudelleen…');}}finally{liveBusy=false;}
+ }
+ if(live){
+  $('#live-tools').hidden=false;document.title='LPR Motorsport · Suora seuranta';
+  $('h1 span').textContent='SUORA SEURANTA';
+  $('#viewer').setAttribute('aria-label','Kuljettajan suora seuranta');
+  $('#viewer > p.muted').textContent='Palvelimella laskettu auton liike ja ohjaus näytetään pienellä puskurointiviiveellä. Voit vaihtaa kuljettajanäkymän ja ratakuvan välillä. Harjoittelutilassa ajavat eivät näy seurannassa.';
+  for(const id of ['#play','#restart','#speed','#seek'])$(id).disabled=true;
+  $('#play').hidden=true;$('#restart').hidden=true;$('#speed').parentElement.hidden=true;$('#seek').parentElement.hidden=true;
+  $('#live-driver').onchange=()=>{++liveRequest;recording=null;playing=false;driverUnavailable=false;resetCamera();$('#viewer').hidden=true;message('Yhdistetään kuljettajan ajoon…');void livePoll();};
+  if(params.get('embedded')==='1')document.body.classList.add('embedded-viewer');
+  const requested=params.get('driver');
+  if(/^[a-f0-9]{32}$/.test(requested||'')){
+   $('#live-driver').append(new Option('Yhdistetään kuljettajaan…',requested));
+   $('#live-driver').value=requested;$('#live-driver').onchange();
+  }
+  void liveList();setInterval(()=>void liveList(),5000);setInterval(()=>void livePoll(),500);
+ }
+ else if(admin){$('#admin').hidden=false;message('Kirjaudu tarkastellaksesi kaikkia tallennettuja suorituksia.');}
  else void load(params.get('session')||'',params.get('lap'));
 })();

@@ -35,12 +35,37 @@ const {launchBrowser}=require('./browser.cjs');
   await page.setViewportSize({width:390,height:844});await page.locator('#championship').scrollIntoViewIfNeeded();
   assert(await page.evaluate(()=>{const panel=document.querySelector('#championship');return panel.scrollWidth<=panel.clientWidth+1;}),'Mobile championship does not overflow');
   await page.screenshot({path:path.join(dir,'championship-mobile.png')});
+  await page.locator('#dashboard-details-open').click();
   await page.locator('#championship-day').fill(yesterday);await page.locator('#championship-day').dispatchEvent('change');
   await page.waitForFunction(()=>document.querySelector('#championship-clock').textContent==='Tulokset vahvistettu',null,{polling:20});
+  assert.equal(await page.textContent('#daily-race-name'),'Panu','Driving HUD stays on today while browsing history');
   await page.click('#championship-today');await page.waitForFunction(day=>document.querySelector('#championship-day').value===day,today,{polling:20});
   await page.evaluate(()=>window.LPRI18n.setLanguage('en'));
   assert.equal(await page.textContent('#championship-title'),'Daily race');
   await page.waitForFunction(()=>document.querySelector('#championship-personal').textContent.includes('Sign in'),null,{polling:20});
+  assert.match(await page.textContent('#daily-race-countdown'),/^Time left \d{2}:\d{2}:\d{2}$/);
+  assert.equal(await page.textContent('#daily-race-time'),'41.667 s');
+  await page.evaluate(()=>{document.querySelector('#settings-dialog').close();document.querySelector('#dashboard-details').hidden=true;});
+  const before=await page.textContent('#daily-race-countdown');
+  await page.waitForTimeout(2000);
+  assert.notEqual(await page.textContent('#daily-race-countdown'),before,'Countdown ticks with menu closed');
+  board.db.prepare('INSERT INTO championship_laps VALUES (?,?,?,?,?,?)').run('new-leader',1,today,'1',revision,4800);
+  await page.waitForTimeout(30000);
+  await page.waitForFunction(()=>document.querySelector('#daily-race-name').textContent==='Eve',null,{polling:20});
+  assert.equal(await page.textContent('#daily-race-time'),'40.000 s','Leader refreshes during driving');
+  for(const [label,width,height] of [['desktop',1280,900],['mobile',390,844],['landscape',844,390]]){
+   await page.setViewportSize({width,height});
+   assert(await page.locator('#daily-race-hud').isVisible());
+   assert(await page.evaluate(()=>{const hud=document.querySelector('#daily-race-hud'),bounds=hud.getBoundingClientRect(),shell=document.querySelector('.game-shell').getBoundingClientRect();return hud.scrollWidth<=hud.clientWidth+1&&bounds.left>=shell.left&&bounds.right<=shell.right&&bounds.bottom<=shell.bottom;}),'HUD fits '+label);
+   await page.screenshot({path:path.join(dir,'daily-race-driving-'+label+'.png')});
+  }
+  await page.route(api+'/api/verified/championship?series=human',route=>route.fulfill({status:503,body:'unavailable'}));
+  await page.evaluate(()=>document.dispatchEvent(new Event('lpr-lap-saved')));
+  await page.waitForFunction(()=>document.querySelector('#daily-race-hud').dataset.stale==='true',null,{polling:20});
+  assert.equal(await page.textContent('#daily-race-leader-label'),'Last known · offline');
+  await page.unroute(api+'/api/verified/championship?series=human');
+  await page.evaluate(()=>document.dispatchEvent(new Event('lpr-lap-saved')));
+  await page.waitForFunction(()=>document.querySelector('#daily-race-hud').dataset.stale==='false',null,{polling:20});
   assert.deepEqual(errors,[]);
   console.log('PASS: real daily API in desktop/mobile Chromium, rankings, date selection, today shortcut, localization and no script errors');
  }finally{await browser?.close();await new Promise(r=>{board.close(r);board.closeAllConnections();});await new Promise(r=>{game.close(r);game.closeAllConnections();});}

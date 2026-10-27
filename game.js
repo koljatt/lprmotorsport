@@ -34,7 +34,7 @@
     soundButton.setAttribute('aria-pressed', String(audio.enabled));
   }
   function syncAudio() {
-    const paused = document.hidden || !audioFocused || ui.dialog.open;
+    const paused = document.hidden || !audioFocused || (ui.dialog.open && !window.LPRSpectator?.active);
     if (audio.paused !== paused) audio.setPaused(paused);
     const muted = paused || !audio.enabled;
     if (muted && !saunaLife.muted) saunaLife.stopSound();
@@ -614,6 +614,27 @@
   // Fixed physics step; existing timed-v1 scoring remains on the wall clock.
   const STEP = 1 / 120, STEP_MS = 1000 / 120;
   let simTick = 0, accumulator = 0;
+  function resetSpectatorPresentation(){
+    clearInput();accumulator=0;lastFrame=performance.now();lastPresentation=null;
+    renderer.visualSteering=null;renderer.lastWheelFrame=0;
+    audio.stopEffects();
+  }
+  window.LPRSpectator?.attach({
+    begin(){
+      window.LPRVerifiedDriving?.cancel(null);resetSpectatorPresentation();
+      ui.notice.classList.add('hidden');sectorUI.hidden=true;
+      window.LPRRaceEffects?.clear();
+      document.querySelector('#verification-state').textContent='';
+      saunaLife.stopSound();syncAudio();audio.unlock();resize();
+    },
+    switchDriver:resetSpectatorPresentation,
+    end(){
+      resetSpectatorPresentation();syncAudio();resize();
+      ui.lap.textContent=String(car.lap);ui.time.textContent=formatTime(car.lapElapsedMs||0);
+      ui.speed.textContent=String(Math.round(car.speed*3.6));
+      ui.best.textContent=best?formatTime(best):'--:--.---';
+    }
+  });
   function frame(now) {
     requestAnimationFrame(frame);
     if (document.hidden) { lastPresentation = null; return; }
@@ -622,6 +643,25 @@
     const elapsed = lastPresentation === null ? interval : now - lastPresentation;
     if (elapsed < interval - .01) return;
     lastPresentation = now - (elapsed >= interval ? elapsed % interval : 0);
+    if(window.LPRSpectator?.active){
+      // Spectating uses this exact renderer, camera, resolution and game HUD.
+      // Never simulate local inputs or submit laps while watching another driver.
+      lastFrame=now;accumulator=0;
+      const remote=window.LPRSpectator.presentation(now);
+      if(remote){
+        const observed=remote.car;
+        ui.lap.textContent=String(observed.lap);ui.time.textContent=formatTime(observed.lapElapsedMs);
+        ui.speed.textContent=String(Math.round(observed.speed*3.6));
+        ui.best.textContent=remote.bestLapMs?formatTime(remote.bestLapMs):'--:--.---';
+        ui.lateralG.textContent=`${Math.abs(observed.lateralG).toFixed(1)} G`;
+        ui.grip.textContent=observed.damage>0?`${t('VAURIO')} ${Math.round(observed.damage*100)} %`:observed.offroad?t('RADAN ULKOPUOLELLA'):t('PITO OK');
+        ui.tc.textContent=observed.tcActive?t('TC RAJOITTAA TEHOA'):t(observed.tcEnabled?'TC PÄÄLLÄ':'TC POIS');
+        renderer.updatePeople(remote.time);renderer.render(observed,remote.time);
+        syncAudio();audio.update(observed);
+      }else audio.setPaused(true);
+      window.LPRAnalytics?.sample('menu',false,false);
+      return;
+    }
     accumulator += Math.min((now - lastFrame) / 1000, .1);
     lastFrame = now;
     while (accumulator >= STEP) {
@@ -763,7 +803,7 @@
   window.addEventListener('resize', resize);
   const landscapeDriving = window.matchMedia('(pointer:coarse) and (orientation:landscape), (max-width:900px) and (max-height:500px) and (orientation:landscape)');
   landscapeDriving.addEventListener('change', event => {
-    if (event.matches && ui.dialog.open && !window.LPRLeaderboard?.requiresName) ui.dialog.close();
+    if (event.matches && ui.dialog.open && !window.LPRLeaderboard?.requiresName && !window.LPRSpectator?.active) ui.dialog.close();
   });
   new ResizeObserver(resize).observe(document.querySelector('.game-shell'));
   window.addEventListener('gamepadconnected', event => {

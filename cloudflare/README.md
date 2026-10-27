@@ -22,6 +22,15 @@ Kun rata tai ajomalli muuttuu, vaihda sama versionumero sekä `leaderboard.js`- 
 
 ## Tuloslistan siivous
 
+Admin-työkalun kieli valitaan sivun yläreunan **Suomi / English** -linkeistä.
+Suomenkielinen versio on osoitteessa `/admin` (tai `/admin?lang=fi`) ja
+englanninkielinen osoitteessa `/admin?lang=en`. Kielilinkki avaa sivun uudelleen,
+joten ylläpitoavain syötetään uudelleen. Päivämäärät näytetään molemmissa
+kielissä Suomen aikavyöhykkeessä; päivittäiset koosteet ovat UTC-ajassa.
+Englanninkieliset tekstit ovat tiedostossa `scripts/admin-english.json`.
+Komento `npm run build:worker` upottaa molemmat kielet Worker-tiedostoon.
+Kieliversioiden selaintesti: `npm run test:admin-language`.
+
 Kolme tapaa, nopeimmasta perusteellisimpaan:
 
 1. **Yksittäinen kierros tai pelaaja** – avaa https://lpr-leaderboard.panu-musakka.workers.dev/admin ja kirjaudu `ANALYTICS_ADMIN_TOKEN`-avaimella (asetus alla kohdassa *Käyttöönotto*). Kierroslista näyttää nykyisen version 50 nopeinta pelaajatiivisteineen. Rivin *Kierros*-painike poistaa yhden kierroksen; *Kaikki pelaajan* poistaa saman tiivisteen kaikki ajat. Poistot ovat lopullisia, eikä poistettua kierrosta voi palauttaa.

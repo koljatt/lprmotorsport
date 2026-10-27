@@ -1,0 +1,183 @@
+/* The overview uses the viewport. Longer lists have explicit pages. */
+.chat-restore {position:fixed;z-index:25;left:8px;top:8px;bottom:auto;width:152px;min-height:46px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid #416b56;border-radius:9px;background:#102b20;color:#f4fff8;font:700 14px Inter,Arial,sans-serif;cursor:pointer;}
+.chat-restore[hidden] {display:none!important;}
+body:not(.chat-open) > .app {width:calc(100% - 176px);margin-left:176px;}
+body:not(.chat-open) #settings-dialog:not(.spectating),body:not(.chat-open) #settings-dialog.spectating {width:calc(100% - 188px);max-width:calc(100% - 188px);margin-left:176px;}
+body.spectate-menu-open:not(.spectating) > .app {position:fixed;inset:0;width:100%;height:100dvh;margin:0;overflow:hidden;visibility:hidden;}
+body #settings-dialog:not(.spectating) {
+ width:calc(100% - 24px);max-width:calc(100% - 24px);height:calc(100dvh - 24px);max-height:calc(100dvh - 24px);
+ margin:12px;padding:14px;overflow:hidden;display:grid;
+ grid-template-columns:minmax(190px,.8fr) minmax(180px,1fr) minmax(180px,1fr);
+ grid-template-rows:52px minmax(0,1.05fr) minmax(0,1fr);gap:12px;
+ grid-template-areas:'head head head' 'entry drivers records' 'entry daily daily';
+}
+body.chat-open #settings-dialog:not(.spectating) {width:calc(100% - 316px);max-width:calc(100% - 316px);margin-left:304px;}
+#settings-dialog:not([open]){display:none!important}
+#settings-dialog li[hidden]{display:none!important}
+#settings-dialog:not(.spectating) > .dialog-head {grid-area:head;position:static;margin:0;padding:0 0 8px;min-width:0;}
+#settings-dialog:not(.spectating) .dialog-head h2 {font-size:27px;line-height:.95;margin:0;}
+#settings-dialog:not(.spectating) .race-eyebrow {display:none;}
+#settings-dialog:not(.spectating) .dialog-actions {gap:6px;}
+#settings-dialog:not(.spectating) .language-switcher button {min-height:34px;min-width:36px;padding:3px;}
+#settings-dialog:not(.spectating) #menu-chat-button {padding:8px;font-size:11px;}
+#settings-dialog:not(.spectating) .leaderboard-entry-grid {display:contents;}
+#settings-dialog:not(.spectating) .leaderboard-start-form {grid-area:entry;overflow:auto;min-height:0;padding:14px;}
+#settings-dialog:not(.spectating) .active-drivers {grid-area:drivers;padding:12px;margin:0;min-height:0;border:1px solid #304c40;border-radius:10px;}
+#settings-dialog:not(.spectating) .verified-standings {grid-area:records;padding:12px;min-height:0;}
+#settings-dialog .leaderboard-entry-grid h3,#settings-dialog .active-drivers h3 {font-size:13px;margin:0 0 8px;letter-spacing:.04em;}
+#settings-dialog .active-drivers-note {display:none;}
+#settings-dialog #active-drivers-status {font-size:11px;line-height:1.3;margin:4px 0;}
+#active-drivers-list {--page-size:4;margin:8px 0 0;}
+#active-drivers-list a {min-height:32px;margin-top:4px;padding:8px;font-size:12px;}
+#settings-dialog #active-drivers-list li {padding:0;}
+#settings-dialog #verified-list {--page-size:5;margin:4px 0;padding:0;font-size:12px;}
+#settings-dialog #verified-list li {padding:5px 0;grid-template-columns:20px minmax(0,1fr) auto auto;flex-wrap:nowrap;gap:3px;min-width:0;}
+#verified-list .standing-name {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;}
+#verified-list .standing-time {flex-shrink:0;white-space:nowrap;}
+#verified-list .replay-link {font-size:0;padding:4px;}
+#verified-list .replay-link::after {content:'▶';font-size:12px;}
+#settings-dialog .verified-standings > p:has(small) {display:none;}
+#settings-dialog .series-tabs {margin:0 0 6px;gap:2px;padding:2px;}
+#settings-dialog .series-tabs button {min-height:26px;font-size:11px;padding:3px 6px;}
+.dashboard-pager {display:flex;align-items:center;justify-content:space-between;gap:4px;margin-top:5px;font-size:10px;color:#aac3b6;}
+#settings-dialog .dashboard-pager[hidden] {display:none;}
+#settings-dialog .dashboard-pager button {padding:0 8px;min-height:24px;min-width:28px;border:1px solid #416b56;border-radius:5px;background:#183b2c;color:#fff;font-size:18px;}
+.dashboard-pager button:disabled {opacity:.35;}
+#settings-dialog:not(.spectating) #championship {grid-area:daily;min-height:0;margin:0;padding:10px;border:1px solid #304c40;border-radius:10px;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto auto minmax(0,1fr);gap:5px;}
+.championship-heading {display:flex;align-items:center;justify-content:space-between;gap:6px;grid-column:1 / -1;min-width:0;}
+#settings-dialog .championship-heading h3 {font-size:15px;margin:0;}
+#dashboard-details-open {font-size:10px;padding:4px 6px;min-height:24px;border:1px solid #416b56;border-radius:5px;background:#183b2c;color:#deeee4;}
+#settings-dialog #championship > p:first-of-type {display:none;}
+#settings-dialog #championship > .series-tabs {width:auto;margin:0;min-width:130px;}
+#settings-dialog #championship-clock {font-size:10px;margin:0;text-align:right;align-self:center;}
+#settings-dialog #championship-notice:empty {display:none;}
+#settings-dialog #championship-personal {grid-column:1 / -1;white-space:normal;margin:0;font-size:10px;line-height:1.3;}
+#settings-dialog #championship-notice {grid-column:1 / -1;margin:0;font-size:11px;}
+#settings-dialog #championship .championship-grid {grid-column:1 / -1;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0;min-height:0;}
+#settings-dialog .championship-grid > section {padding:8px;min-width:0;}
+#settings-dialog .championship-grid h4 {font-size:12px;line-height:1.2;margin:0 0 6px;}
+#settings-dialog .championship-grid p {font-size:10px;margin:3px 0;line-height:1.2;}
+#championship-month {display:none;}
+#championship-fastest,#championship-volume,#championship-monthly {--page-size:3;}
+.championship-grid ol {margin:0;}
+#settings-dialog .championship-grid li {padding:4px 0;font-size:11px;gap:5px;line-height:1.3;}
+.championship-grid .standing-name {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+#dashboard-account-name {display:block;color:#78e4ac;margin-top:6px;overflow-wrap:anywhere;font-size:14px;}
+#settings-dialog.dashboard-remembered #leaderboard-account-title,#settings-dialog.dashboard-remembered #leaderboard-name,#settings-dialog.dashboard-remembered label[for=leaderboard-name],#settings-dialog.dashboard-remembered #leaderboard-account-fields > p {display:none;}
+#settings-dialog.dashboard-remembered #leaderboard-logout {margin:4px 0;font-size:11px;}
+#settings-dialog .leaderboard-start {min-height:36px;padding:8px;font-size:11px;}
+#settings-dialog .leaderboard-choice {min-height:32px;font-size:11px;padding:6px;}
+#settings-dialog .leaderboard-options {margin:8px 0;font-size:11px;}
+#settings-dialog .leaderboard-password-hint {font-size:10px;line-height:1.3;}
+.dashboard-popover {position:fixed;z-index:30;top:70px;right:24px;width:min(600px,calc(100% - 48px));max-height:calc(100dvh - 110px);overflow:auto;padding:20px;border:1px solid #78e4ac;border-radius:12px;background:#10221c;box-shadow:0 20px 100px #000c;}
+#dashboard-details-close {float:right;min-height:32px;margin-bottom:12px;}
+#dashboard-details-content {clear:both;}
+#dashboard-details-content .championship-controls {display:flex;flex-wrap:wrap;gap:8px;}
+/* The same standings stay visible beside the native driving view. */
+#spectate-sidebar {overflow:hidden;display:flex;flex-direction:column;gap:6px;padding:10px;min-height:0;}
+#spectate-back {padding:6px;font-size:11px;min-height:28px;flex-shrink:0;}
+#settings-dialog #spectate-sidebar .active-drivers {margin:0;padding:0;}
+#spectate-sidebar #active-drivers-list {--page-size:2;}
+#spectate-sidebar #active-drivers-list a {min-height:28px;padding:5px 8px;font-size:11px;}
+#settings-dialog #spectate-sidebar .verified-standings {padding:8px;margin:0;border:1px solid #304c40;}
+#settings-dialog #spectate-sidebar .verified-standings > h3 {font-size:13px;margin:0 0 5px;}
+#spectate-sidebar #verified-list {--page-size:1;}
+#settings-dialog #spectate-sidebar #championship {margin:0;padding:8px;border:1px solid #304c40;border-radius:8px;display:grid;grid-template-columns:1fr auto;gap:4px;min-height:0;}
+#spectate-sidebar .championship-heading {flex-wrap:wrap;}
+#spectate-sidebar #dashboard-details-open {font-size:0;min-width:26px;}
+#spectate-sidebar #dashboard-details-open::after {content:'⋯';font-size:16px;}
+#settings-dialog #spectate-sidebar #championship > .series-tabs {grid-column:1 / -1;width:100%;}
+#settings-dialog #spectate-sidebar #championship-clock {grid-column:1 / -1;font-size:10px;text-align:left;}
+#settings-dialog #spectate-sidebar .championship-grid {grid-template-columns:1fr;gap:5px;}
+#spectate-sidebar #championship-fastest,#spectate-sidebar #championship-volume,#spectate-sidebar #championship-monthly {--page-size:1;}
+#settings-dialog #spectate-sidebar #championship-personal {display:none;}
+#settings-dialog #spectate-sidebar .championship-grid > section {padding:6px;}
+#settings-dialog #spectate-sidebar .championship-grid h4 {margin-bottom:2px;font-size:11px;}
+#settings-dialog #spectate-sidebar .championship-grid li {padding:1px 0;}
+#spectate-sidebar #active-drivers-list strong {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media(max-width:1050px) and (min-width:651px) {
+ body #settings-dialog:not(.spectating) {grid-template-columns:minmax(160px,.8fr) minmax(150px,1fr) minmax(150px,1fr);gap:8px;padding:10px;}
+ #settings-dialog .championship-grid li {flex-direction:column;gap:0;}
+}
+@media(max-width:900px) {
+ .chat-restore {left:8px;top:auto;bottom:8px;width:160px;min-height:36px;padding:6px 10px;font-size:13px;}
+ body:not(.chat-open) > .app {width:100%;margin-left:0;padding-bottom:52px;}
+ body.spectate-menu-open:not(.chat-open) #settings-dialog:not(.spectating),body.spectate-menu-open:not(.chat-open) #settings-dialog.spectating {width:calc(100% - 16px);max-width:calc(100% - 16px);margin:8px;height:calc(100dvh - 60px);max-height:calc(100dvh - 60px);}
+ body.spectate-menu-open.chat-open #settings-dialog {height:calc(100dvh - 196px);max-height:calc(100dvh - 196px);width:calc(100% - 16px);max-width:calc(100% - 16px);margin:8px;}
+ body.spectate-menu-open .chat-panel {height:180px;max-height:180px;padding:8px;gap:4px;}
+ body.spectate-menu-open .chat-panel .chat-heading h2 {font-size:17px;}
+ body.spectate-menu-open .chat-panel .chat-heading button {min-height:24px;padding:0 8px;}
+ body.spectate-menu-open .chat-panel .chat-compose input {padding:7px;}
+ body.spectate-menu-open .chat-panel #chat-status {font-size:10px;}
+ .dashboard-popover {top:40px;right:16px;width:calc(100% - 32px);max-height:calc(100dvh - 244px);}
+}
+@media(max-width:650px) {
+ body #settings-dialog:not(.spectating) {height:calc(100dvh - 16px);max-height:calc(100dvh - 16px);width:calc(100% - 16px);max-width:calc(100% - 16px);margin:8px;padding:8px;gap:6px;grid-template-columns:1fr 1fr;grid-template-rows:42px auto minmax(86px,.8fr) minmax(150px,1fr);grid-template-areas:'head head' 'entry entry' 'drivers records' 'daily daily';}
+ #settings-dialog:not(.spectating) .dialog-head h2 {font-size:20px;}
+ #settings-dialog:not(.spectating) .dialog-actions {display:flex;flex-direction:row;align-items:center;gap:3px;}
+ #settings-dialog:not(.spectating) .language-switcher button {min-height:28px;min-width:28px;padding:2px;}
+ #settings-dialog:not(.spectating) .language-switcher svg {width:21px;}
+ #settings-dialog:not(.spectating) #menu-chat-button {font-size:9px;padding:5px;}
+ #settings-dialog:not(.spectating) .leaderboard-start-form {display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px;overflow:visible;}
+ #settings-dialog:not(.spectating) .leaderboard-start-form > h3 {display:none;}
+ #settings-dialog:not(.spectating) .leaderboard-choices {margin:0;gap:4px;}
+ #settings-dialog:not(.spectating) .leaderboard-start {margin:0;min-height:32px;font-size:10px;padding:6px;}
+ #settings-dialog:not(.spectating) .leaderboard-choice {font-size:9px;min-height:32px;padding:4px;}
+ #settings-dialog.dashboard-remembered:not(.spectating) #leaderboard-account-fields {grid-column:1 / -1;grid-row:2;display:flex;justify-content:space-between;align-items:center;gap:6px;}
+ #settings-dialog.dashboard-remembered #leaderboard-account-fields::before {content:attr(data-nickname);color:#78e4ac;font-size:11px;font-weight:700;}
+ #settings-dialog:not(.spectating) #leaderboard-start {grid-column:2;grid-row:1;}
+ #settings-dialog.dashboard-remembered #leaderboard-credentials > p {display:none;}
+ #settings-dialog.dashboard-remembered #leaderboard-logout {margin:0;}
+ #settings-dialog:not(.spectating) .leaderboard-options {grid-column:1 / -1;margin:0;font-size:10px;}
+ #settings-dialog:not(.spectating) .leaderboard-options[open] {position:fixed;z-index:25;top:60px;right:16px;width:calc(100% - 32px);max-height:calc(100dvh - 270px);overflow:auto;background:#10221c;border:1px solid #78e4ac;padding:12px;border-radius:10px;}
+ #settings-dialog.dashboard-account-editing .leaderboard-start-form {position:fixed;z-index:25;top:55px;right:16px;width:calc(100% - 32px);max-height:calc(100dvh - 250px);overflow:auto;display:block;padding:12px;background:#10221c;border:1px solid #78e4ac;}
+ #settings-dialog:not(.spectating) .active-drivers,#settings-dialog:not(.spectating) .verified-standings {padding:7px;}
+ #settings-dialog .active-drivers h3,#settings-dialog .verified-standings h3 {font-size:11px;margin:0 0 4px;}
+ #settings-dialog #active-drivers-status {font-size:9px;margin:2px 0;}
+ #active-drivers-list {--page-size:2;margin-top:3px;}
+ #active-drivers-list a {padding:4px;min-height:26px;font-size:10px;margin-top:3px;}
+ .active-driver-badge {font-size:8px;}
+ #settings-dialog #verified-list {--page-size:2;font-size:10px;}
+ #settings-dialog #verified-list li {padding:3px 0;}
+ #settings-dialog .series-tabs button {font-size:9px;min-height:24px;padding:2px 4px;}
+ #settings-dialog:not(.spectating) #championship {padding:6px;gap:3px;}
+ #settings-dialog .championship-heading h3 {font-size:12px;}
+ #dashboard-details-open {font-size:9px;min-height:24px;}
+ #settings-dialog #championship-personal {font-size:9px;line-height:1.2;}
+ #settings-dialog .championship-grid > section {padding:5px;}
+ #settings-dialog .championship-grid h4 {font-size:10px;min-height:24px;margin-bottom:2px;}
+ #settings-dialog .championship-grid li {display:block;font-size:10px;padding:3px 0;}
+ .championship-grid .standing-name {display:block;}
+ #championship-fastest,#championship-volume,#championship-monthly {--page-size:2;}
+ .dashboard-pager {font-size:9px;margin-top:3px;}
+ #settings-dialog .dashboard-pager button {min-height:24px;min-width:24px;padding:0 5px;}
+ body #settings-dialog.spectating {height:calc(100dvh - 16px);max-height:calc(100dvh - 16px);margin:8px;overflow:hidden;}
+ body.spectate-menu-open.chat-open #settings-dialog.spectating {height:calc(100dvh - 196px);max-height:calc(100dvh - 196px);}
+ #spectate-view {height:100%;min-height:0;grid-template-columns:1fr;grid-template-rows:minmax(130px,1fr) auto;}
+ #spectate-game {min-height:0;}
+ .spectating #spectate-game .app {height:100%;padding:5px;display:flex;flex-direction:column;gap:0;}
+ .spectating .app .topbar {height:35px;flex:0 0 35px;}
+ .spectating .app .logo {height:30px;width:78px;}
+ .spectating .game-shell {flex:1;min-height:0;height:auto;border-radius:8px;}
+ .spectating .hud-item {padding:5px;}
+ .spectating .hud-item strong {font-size:16px;}
+ #spectate-label {top:47px;left:6px;padding:5px;font-size:10px;}
+ #spectate-connection {top:77px;font-size:10px;}
+ #spectate-sidebar {display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px;}
+ #spectate-back {grid-column:1 / -1;grid-row:1;font-size:10px;min-height:24px;padding:3px;}
+ #settings-dialog #spectate-sidebar .active-drivers {grid-column:1;grid-row:2;order:0;padding:4px;}
+ #settings-dialog #spectate-sidebar .verified-standings {grid-column:2;grid-row:2;padding:4px;}
+ #settings-dialog #spectate-sidebar #verified-list {--page-size:1;}
+ #spectate-sidebar #active-drivers-list {--page-size:1;display:block;}
+ #settings-dialog #spectate-sidebar #championship {grid-column:1 / -1;grid-row:3;padding:5px;}
+ #settings-dialog #spectate-sidebar .championship-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;}
+ #settings-dialog #spectate-sidebar .championship-grid > section {padding:4px;}
+ #settings-dialog #spectate-sidebar .championship-grid h4 {font-size:9px;}
+ #settings-dialog #spectate-sidebar .championship-grid li {font-size:9px;}
+ #spectate-sidebar #championship-clock {font-size:9px;}
+}
+@media(max-height:750px) and (max-width:650px) {
+ #active-drivers-list {--page-size:1;}
+ #championship-fastest,#championship-volume,#championship-monthly {--page-size:1;}
+ #settings-dialog #championship-personal {font-size:8px;}
+}

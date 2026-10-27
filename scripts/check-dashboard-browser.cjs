@@ -1,0 +1,82 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {launchBrowser}=require('./browser.cjs');
+(async()=>{
+ const {revision,createWorld}=require('../verification/world.cjs'),game=require('../server.js').createServer();
+ await new Promise(r=>game.listen(0,'127.0.0.1',r));
+ const origin=`http://127.0.0.1:${game.address().port}`;let browser;
+ try{
+  browser=await launchBrowser({headless:true});
+  const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.addInitScript(()=>{
+   localStorage.setItem('lpr-account',JSON.stringify({nickname:'Test Driver',token:'a'.repeat(64),expiresAt:Date.now()+3600000,series:'human'}));
+   localStorage.setItem('lpr-chat-visible','true');
+  });
+  await page.route('**/verification/config.js*',r=>r.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig={service:'https://service.test',leaderboard:'https://board.test'};`}));
+  const rows=Array.from({length:10},(_,i)=>({nickname:'Driver '+(i+1)+' with a long name',speedRank:i+1,volumeRank:i+1,rank:i+1,bestMs:65000+i*100,laps:20-i,points:100-i}));
+  const ids=rows.map((_,i)=>(i+1).toString(16).padStart(32,'0'));
+  await page.route('https://board.test/**',r=>{
+   const url=new URL(r.request().url());
+   if(url.pathname.endsWith('/championship'))return r.fulfill({json:{today:'2026-10-27',day:'2026-10-27',month:'2026-10',serverNow:Date.now(),endsAt:Date.now()+3600000,final:false,fastest:rows,mostLaps:rows,monthly:rows,me:{streak:5,bestStreak:10,todayLaps:8,activeToday:true,selectedDay:{points:30,breakdown:{speed:10,volume:10,participation:5,milestones:3,streak:2}}}}});
+   return r.fulfill({json:{protocol:'driving-v1',revision,results:rows.map((row,i)=>({nickname:row.nickname,lap_ms:row.bestMs,lap:1,session_id:ids[i],replay_available:true}))}});
+  });
+  const {world}=createWorld(),recorder=new (require('../verification/replay.cjs').Recorder)(world,revision),frame=recorder.frame();
+  await page.route('https://service.test/**',r=>{
+   const url=new URL(r.request().url());
+   if(url.pathname==='/health')return r.fulfill({json:{revision,protocol:'driving-v1'}});
+   if(url.pathname==='/spectate')return r.fulfill({json:{results:rows.map((row,i)=>({id:ids[i],nickname:row.nickname}))}});
+   if(url.pathname.startsWith('/spectate/'))return r.fulfill({json:{format:'lpr-live-v1',sceneRevision:revision,hz:120,nickname:rows[0].nickname,lap:1,track:recorder.track,frames:[frame,[120,...frame.slice(1)]],inputs:[[0,1,0,0,false,false,true]]}});
+   return r.fulfill({json:{onlineCount:10,messages:[{id:'1',at:Date.now(),nickname:'Varikko',text:'Terve!'}]}});
+  });
+  await page.goto(origin);await page.waitForFunction(()=>document.querySelector('#championship-fastest li'),null,{polling:100});
+  const dir=path.resolve(__dirname,'../artifacts/dashboard');fs.mkdirSync(dir,{recursive:true});
+  async function check(label){
+   await page.waitForTimeout(200);
+   const result=await page.evaluate(()=>{
+    const d=document.querySelector('#settings-dialog'),box=d.getBoundingClientRect(),failures=[];
+    if(d.scrollHeight>d.clientHeight+2)failures.push(`dialog scroll ${d.scrollHeight}/${d.clientHeight}`);
+    for(const selector of ['.active-drivers','.verified-standings','#championship-fastest','#championship-volume','#championship-monthly']){
+     const node=document.querySelector(selector),r=node.getBoundingClientRect();
+     if(r.top<box.top-1||r.bottom>box.bottom+1||r.right>box.right+1||r.left<box.left-1)failures.push(selector+' outside viewport '+JSON.stringify({top:r.top,bottom:r.bottom,right:r.right}));
+    }
+    for(const root of document.querySelectorAll('.championship-grid > section,.active-drivers,.verified-standings')){
+     const r=root.getBoundingClientRect();
+     for(const node of root.querySelectorAll('li:not([hidden]),.dashboard-pager:not([hidden])')){
+      const n=node.getBoundingClientRect();if(n.bottom>r.bottom+2||n.right>r.right+2)failures.push('list outside card '+root.id+' '+node.textContent);
+     }
+    }
+    if(document.documentElement.scrollWidth>innerWidth+1)failures.push('horizontal scroll');
+    return {failures,box:{width:box.width,height:box.height},sizes:[...document.querySelectorAll('.championship-grid > section')].map(n=>({height:n.clientHeight,scroll:n.scrollHeight}))};
+   });
+   await page.screenshot({path:path.join(dir,label+'.png')});
+   assert.deepEqual(result.failures,[],label+' '+JSON.stringify(result));
+  }
+  for(const [w,h] of [[1366,768],[1280,720],[1920,1080],[390,844],[390,740]]){
+   await page.setViewportSize({width:w,height:h});await check('menu-'+w+'x'+h);
+  }
+  await page.setViewportSize({width:1366,height:768});
+  const pager=page.locator('#championship-fastest + .dashboard-pager');
+  await pager.locator('button').last().click();
+  assert(await page.locator('#championship-fastest li').nth(3).isVisible(),'Next page exposes further results');
+  await page.locator('#active-drivers-list a').first().click();
+  await page.waitForFunction(()=>window.LPRSpectator.active&&document.querySelector('#spectate-connection').hidden,null,{polling:100});
+  for(const [w,h] of [[1366,768],[1280,720],[390,844],[390,740]]){
+   await page.setViewportSize({width:w,height:h});await check('watch-'+w+'x'+h);
+  }
+  assert(await page.locator('#chat-restore').isHidden());
+  assert.equal(await page.locator('#menu-chat-button,#chat-button').count(),0);
+  await page.locator('#chat-close').click();
+  assert((await page.locator('#chat-restore').boundingBox()).x<20,'Closed chat reopens from the left edge');
+  await check('watch-closed-chat-mobile');
+  await page.setViewportSize({width:1366,height:768});await check('watch-closed-chat-desktop');
+  await page.locator('#chat-restore').click();assert(await page.locator('#chat-restore').isHidden());
+  await page.locator('#spectate-back').click();
+  await page.locator('#dashboard-details-open').click();assert(await page.locator('#championship-day').isVisible());
+  await page.locator('#dashboard-details-close').click();
+  await page.locator('#leaderboard-logout').click();
+  await check('guest-desktop');
+  await page.setViewportSize({width:390,height:740});await check('guest-mobile');
+  assert.deepEqual(errors,[]);
+  console.log('PASS: populated dashboard and spectator statistics fit without scrolling at desktop, laptop and phone sizes; paging and options work');
+ }finally{await browser?.close();game.closeAllConnections();await new Promise(r=>game.close(r));}
+})().catch(e=>{console.error(e);process.exitCode=1;});
