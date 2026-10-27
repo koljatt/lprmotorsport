@@ -87,7 +87,7 @@ export default {
     if(!SERIES.includes(series))return reply({error:'Invalid series'},400);
     const rows=await env.DB.prepare(`SELECT a.nickname,l.lap_ticks,l.sector1,l.sector2,l.sector3,l.session_id,l.lap,
      CASE WHEN r.pinned=1 THEN 1 ELSE 0 END AS replay_available FROM verified_laps l JOIN verified_replays r USING(session_id,lap) JOIN verified_accounts a ON a.player_hash=l.player_hash
-     WHERE l.revision=? AND r.pinned=1 AND ${seriesOf('l.player_hash')}=? ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision,series).all();
+     WHERE l.revision=? AND r.pinned=1 AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap) ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision,series).all();
     return reply({protocol,revision:revision,series,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
    }
    if(url.pathname==='/api/verified/championship'&&request.method==='GET'){
