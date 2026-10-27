@@ -7,6 +7,7 @@ services:
     runtime: node
     plan: free
     branch: main
+    autoDeployTrigger: 'off'
     buildCommand: node --check verification/server.cjs && node -p "require('./verification/world.cjs').revision"
     startCommand: node verification/server.cjs
     healthCheckPath: /health
