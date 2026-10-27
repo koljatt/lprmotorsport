@@ -80,8 +80,8 @@
     closeButton.focus();
   }
   function eligibleForAutomaticDisplay() {
-    // Account/guest selection must finish first; never interrupt driving.
-    return menu.open && !menu.classList.contains('session-start') &&
+    // Show only on the initial menu, never during an active drive.
+    return menu.open && menu.classList.contains('session-start') &&
       !window.LPRSpectator?.active && readSeen() !== latest.id && !shownInSession;
   }
   function sync() {
