@@ -25,6 +25,7 @@ const { translateAdmin } = require('../scripts/translate-admin.cjs');
         const totals = { players: 1, sessions: 2, active_ms: 60000, first_seen: now, last_seen: now };
         const counters = { capacityRejected: 1, startRateRejected: 0, practiceLaps: 2, processingTimeouts: 0, lagTerminations: 0 };
         const fixtures = {
+          '/api/verified/admin/laps': {results:[]},
           '/api/admin/summary': { totals, daily: [{ day: '2026-10-26', ...totals }], states: [{ state: 'driving', ms: 60000 }], devices: [{ device: 'desktop', sessions: 2 }], players: [{ nickname: 'Päivä', player_hash: hash, ...totals }] },
           '/api/admin/capacity-history': { totals: { lastReportAt: now, ...counters }, daily: [], since: now },
           '/api/admin/capacity': { activeSessions: 1, maxSessions: 10, counters, since: now, observedAt: now },
@@ -38,7 +39,7 @@ const { translateAdmin } = require('../scripts/translate-admin.cjs');
       assert.equal(await page.locator('a[lang="en"]').getAttribute('href'), '?lang=en');
       await page.locator('#token').fill('a'.repeat(32));
       await page.locator('#login button').click();
-      await page.locator('#laps button').first().waitFor();
+      await page.locator('#laps table').waitFor();
       assert.equal(await page.locator('#token').inputValue(), '');
       assert.match(await page.locator('#states').textContent(), language === 'en' ? /Driving/ : /Ajaminen/);
       await page.locator('#players button').click();

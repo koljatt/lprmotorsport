@@ -43,6 +43,19 @@ function client(storage = new Map()) {
   const send = (p,extra={})=>worker.fetch(new Request('https://service.test/api/analytics/events',{method:'POST',headers:{Origin:'https://panulut.github.io','Content-Type':'application/json',...extra},body:JSON.stringify(p)}),env);
   const admin = (route='/api/admin/summary',secret=env.ANALYTICS_ADMIN_TOKEN,method='GET')=>worker.fetch(new Request('https://service.test'+route,{method,headers:{Authorization:'Bearer '+secret}}),env);
   assert.equal((await admin('/api/admin/summary','wrong')).status,401);
+  assert.equal((await admin('/api/verified/admin/laps','wrong')).status,401);
+  const originalFetch=globalThis.fetch,forwarded=[];
+  try {
+    globalThis.fetch=async(url,options)=>{forwarded.push({url,options});return Response.json({results:[]});};
+    assert.equal((await admin('/api/verified/admin/laps?series=bot')).status,200);
+    assert.equal((await admin('/api/verified/admin/laps?reset=1',env.ANALYTICS_ADMIN_TOKEN,'POST')).status,200);
+    assert.equal(forwarded[0].url,'https://lpr-verified.panu-musakka.workers.dev/api/verified/admin/laps?series=bot');
+    assert.equal(forwarded[0].options.headers.Authorization,'Bearer '+env.ANALYTICS_ADMIN_TOKEN);
+    assert.equal(forwarded[1].options.method,'POST');
+    assert.equal(forwarded[1].options.redirect,'error','Credentials cannot follow upstream redirects');
+    assert.equal((await admin('/api/verified/admin/laps',env.ANALYTICS_ADMIN_TOKEN,'DELETE')).status,405);
+    assert.equal(forwarded.length,2);
+  } finally { globalThis.fetch=originalFetch; }
   assert.equal((await worker.fetch(new Request('https://service.test/api/admin/summary'),{DB:binding})).status,503);
   assert.equal((await send(payload)).status,200);
   assert.equal((await send(payload)).status,200);

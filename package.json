@@ -2,6 +2,7 @@
   "name": "lpr-lap-challenge",
   "private": true,
   "scripts": {
+    "test:release-browser": "node scripts/check-release-browser.cjs",
     "test:dashboard-browser": "node scripts/check-dashboard-browser.cjs",
     "test:spectate": "node tests/spectate.test.cjs && node tests/replay-viewer.test.cjs",
     "test:spectate-browser": "node scripts/check-spectate-browser.cjs && node scripts/check-spectate-menu-browser.cjs",

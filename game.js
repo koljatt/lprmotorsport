@@ -503,17 +503,17 @@
       ui.notice.classList.add('hidden');
     }
     const steps = Math.max(1, Math.ceil(dt * 90));
-    let finishLinePrevious = {x:car.x,y:car.y};
+    let crossedFinishLine = false;
     for (let i = 0; i < steps; i++) {
       car.grassFraction = grassContact(car);
       const previous = { x:car.x, y:car.y, angle:car.angle };
-      finishLinePrevious = previous;
       dynamics.step(car, input, dt / steps, car.grassFraction);
       const collision=window.LPRCampus.resolveObstacleCollision(car, previous, contact=>{
         const damage=dynamics.applyImpact(car,contact.normal,contact.impactMaterial,contact);
         audio.impact(car.impactSpeed);
         if(damage>0) showNotice(t("Auto vaurioitui."),2500);
       });
+      crossedFinishLine ||= window.LPRCampus.crossesFinishLine(previous,car);
       if(collision && car.crashed) {
         car.crashedAt=now;
         showNotice(t("Auto hajosi! Aloita uudelleen."),0);
@@ -530,7 +530,7 @@
     car.grassFraction = grassContact(car);
     car.offroad = car.grassFraction > .5;
     if (!car.crashed && nearest.distance < ROAD_HALF && car.speed > 2.2) {
-      if (!car.lapTimingArmed && window.LPRCampus.crossesFinishLine(finishLinePrevious,car)) {
+      if (!car.lapTimingArmed && crossedFinishLine) {
         car.lapTimingArmed=true;
         car.lapStart=now;
         car.stage=0;
@@ -547,7 +547,7 @@
         showSector(now - car.lapStart);
       }
       else if (car.lapTimingArmed && car.stage === 2 && nearest.index > 175 && nearest.index < 205) car.stage = 3;
-      else if (car.lapTimingArmed && car.stage === 3 && window.LPRCampus.crossesFinishLine(finishLinePrevious,car)) {
+      else if (car.lapTimingArmed && car.stage === 3 && crossedFinishLine) {
         const lapTime = now - car.lapStart;
         if (lapTime > 5000) {
           window.LPRAnalytics?.event('lap_complete', { lapMs: Math.round(lapTime) });

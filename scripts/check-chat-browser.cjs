@@ -15,7 +15,7 @@ const {launchBrowser}=require('./browser.cjs');
  try{
   browser=await launchBrowser({headless:true,args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const errors=[];
-  async function player(name){
+  async function player(name,guest=false){
    const context=await browser.newContext({viewport:{width:1280,height:800}});
    const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
    await page.addInitScript(()=>{window.requestAnimationFrame=()=>0;});
@@ -25,8 +25,10 @@ const {launchBrowser}=require('./browser.cjs');
     const source=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8').replaceAll('\r\n','\n').replace('  reset();\n  openTestScene','  window.__chatGame={held,readInput};\n  reset();\n  openTestScene');
     return route.fulfill({contentType:'text/javascript',body:source});
    });
-   await page.goto(origin);await page.waitForFunction(()=>window.__chatGame,null,{polling:50});
-   assert(await page.locator('#chat-panel').isVisible(),'Chat is visible on first arrival');
+   await page.addInitScript(()=>localStorage.setItem('lpr-release-notes-seen','2026-10-27-major-update'));
+  await page.goto(origin);await page.waitForFunction(()=>window.__chatGame,null,{polling:50});
+  if(await page.locator('#release-notes-panel').isVisible())await page.locator('#release-notes-close').click();
+  assert(await page.locator('#chat-panel').isVisible(),'Chat is visible on first arrival');
    assert(await page.locator('#chat-input').isEnabled(),'Chat is usable in startup modal');
    assert((await page.locator('#chat-panel').boundingBox()).x<20,'Chat is on the left');
    assert(await page.locator('#chat-restore').isHidden(),'Open chat has no duplicate opener');
@@ -38,13 +40,20 @@ const {launchBrowser}=require('./browser.cjs');
    await page.locator('#chat-restore').click();
    assert(await page.locator('#chat-panel').isVisible(),'Chat can be reopened from the startup menu');
    assert(await page.locator('#chat-restore').isHidden(),'Opener disappears when chat is restored');
-   await page.locator('#leaderboard-create').click();
-   await page.locator('#leaderboard-name').fill(name);await page.locator('#leaderboard-password').fill('chat-browser-password');
-   await page.locator('#leaderboard-start').click();await page.locator('label:has(#leaderboard-series-human)').click();await page.locator('#leaderboard-start').click();await page.waitForFunction(()=>!window.LPRLeaderboard.requiresName,null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),errors});throw error;});
+   if(guest){
+    await page.locator('#leaderboard-practice').click();await page.locator('#leaderboard-guest-name').fill(name);
+    await page.locator('#leaderboard-guest-start').click();
+    assert.equal(await page.evaluate(()=>window.LPRLeaderboard.chatIdentity?.guest),true,'Guest identity is available to chat');
+   }else{
+    await page.locator('#leaderboard-login').click();
+    await page.locator('#leaderboard-create').click();
+    await page.locator('#leaderboard-name').fill(name);await page.locator('#leaderboard-password').fill('chat-browser-password');
+    await page.locator('#leaderboard-start').click();await page.locator('label:has(#leaderboard-series-human)').click();await page.locator('#leaderboard-start').click();await page.waitForFunction(()=>!window.LPRLeaderboard.requiresName,null,{polling:50}).catch(async error=>{console.error({status:await page.textContent('#leaderboard-status'),label:await page.textContent('#leaderboard-start-label'),errors});throw error;});
+   }
    assert(await page.locator('#chat-panel').isVisible(),'Chat stays visible when driving starts');return page;
   }
-  const first=await player('Kuljettaja'),second=await player('Varikko');
-  await first.waitForFunction(()=>document.querySelector('#chat-online-count').textContent==='2',null,{timeout:25000,polling:50});
+  const first=await player('Kuljettaja'),second=await player('Varikko'),guest=await player('ChatGuest',true);
+  await first.waitForFunction(()=>document.querySelector('#chat-online-count').textContent==='3',null,{timeout:25000,polling:50});
   const rail=await first.locator('#chat-panel').boundingBox();
   assert.equal(rail.y,0);assert.equal(rail.height,800,'Chat fills the viewport height');
   await first.locator('#chat-input').fill('wasd E P B T <img src=x onerror=alert(1)>');
@@ -56,11 +65,13 @@ const {launchBrowser}=require('./browser.cjs');
   assert.equal(await second.locator('#chat-messages img').count(),0,'HTML is shown as text');
   await second.locator('#chat-input').fill('Viesti vastaanotettu!');await second.locator('#chat-input').press('Enter');
   await first.waitForFunction(()=>document.querySelector('#chat-messages').textContent.includes('Viesti vastaanotettu!'),null,{timeout:15000,polling:50});
+  await guest.locator('#chat-input').fill('Vieraan tervehdys');await guest.locator('#chat-input').press('Enter');
+  await first.waitForFunction(()=>document.querySelector('#chat-messages').textContent.includes('ChatGuest (vierailija)')&&document.querySelector('#chat-messages').textContent.includes('Vieraan tervehdys'),null,{timeout:15000,polling:50});
   await first.evaluate(()=>window.LPRI18n.setLanguage('en'));
   assert.equal(await first.locator('#chat-title').textContent(),'Paddock chat');
   assert((await first.locator('#chat-messages').textContent()).includes('Viesti vastaanotettu!'));
   await first.locator('#chat-input').press('Escape');assert(await first.locator('#chat-panel').isHidden());
-  await first.locator('#chat-restore').blur();await first.keyboard.down('w');
+  await first.locator('#chat-restore').blur();await first.locator('#leaderboard-drive').click();await first.keyboard.down('w');
   assert.equal(await first.evaluate(()=>window.__chatGame.held.gas),true,'Driving controls work after leaving chat');
   await first.keyboard.up('w');
   await first.locator('#chat-restore').click();
@@ -84,10 +95,6 @@ const {launchBrowser}=require('./browser.cjs');
   assert(await first.evaluate(()=>!!window.LPRLeaderboard.chatIdentity),'Remembered account authenticates chat before driving');
   await first.locator('#chat-input').fill('Viesti ennen ajoa');await first.locator('#chat-input').press('Enter');
   await second.waitForFunction(()=>document.querySelector('#chat-messages').textContent.includes('Viesti ennen ajoa'),null,{timeout:15000,polling:50});
-  await first.locator('#leaderboard-practice').click();
-  assert.equal(await first.evaluate(()=>window.LPRLeaderboard.identity),null,'Practice does not activate verified driving');
-  await first.locator('#chat-input').fill('Viesti harjoittelusta');await first.locator('#chat-input').press('Enter');
-  await second.waitForFunction(()=>document.querySelector('#chat-messages').textContent.includes('Viesti harjoittelusta'),null,{timeout:15000,polling:50});
   await first.reload();await first.waitForFunction(()=>window.__chatGame,null,{polling:50});
   await first.locator('.leaderboard-options > summary').click();
   await first.locator('#chat-visible').uncheck();
@@ -98,7 +105,7 @@ const {launchBrowser}=require('./browser.cjs');
   await first.setViewportSize({width:360,height:800});
   await first.locator('#chat-restore').click();
   assert(await first.locator('#chat-panel').isVisible(),'Hidden chat can also be reopened from the mobile menu');
-  assert.deepEqual(errors,[]);console.log('Chat browser: two players, safe text, driving while reading, remembered visibility, language and mobile layout OK');
+  assert.deepEqual(errors,[]);console.log('Chat browser: registered players and guest, safe text, driving while reading, remembered visibility, language and mobile layout OK');
  }finally{
   await browser?.close();
   service.closeAllConnections();game.closeAllConnections();board.closeAllConnections();

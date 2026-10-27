@@ -12,7 +12,7 @@ for(let i=0;i<fast.track.length;i++){
 for(const [x,y] of points)assert.deepEqual(fast.nearestTrack(x,y),reference.nearestTrack(x,y),`Nearest segment at ${x},${y}`);
 // Compare every state and lap boundary, including collisions/grass and a full lap.
 const {driver}=require('./helpers-driving.cjs');let laps=0;
-for(let tick=0;tick<24000;tick++){
+for(let tick=0;tick<30000 && laps<2;tick++){
  const input=driver(reference),a=reference.step(input),b=fast.step(input);
  assert.deepEqual(b,a);assert.deepEqual(fast.result(),reference.result(),`State at tick ${tick}`);
  if(a.completed)laps++;

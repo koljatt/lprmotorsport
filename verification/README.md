@@ -59,6 +59,12 @@ aina kirjautuneen tilin tiedoista: peli hakee Cloudflare Workerilta
 kymmenen minuuttia voimassa olevan, `VERIFICATION_SECRET`illä allekirjoitetun chat-lipun.
 Render hyväksyy viestin vain voimassa olevalla lipulla ja ottaa nimimerkin lipusta,
 ei pyynnön sisällöstä. Uloskirjautunut tai väärennetty tunniste ei saa uutta lippua.
+Render tallentaa viestit `lpr-verified`-Workerin D1-tietokantaan allekirjoitetulla
+palvelinten välisellä pyynnöllä. `CHAT_STORAGE_URL` osoittaa Workerin
+`/api/verified/chat-storage`-osoitteeseen; se on asetettu `render.yaml`-tiedostossa.
+Worker luo chat-taulun automaattisesti. Julkaise muutokset sekä Render-palveluun
+että `npm run build:verified-worker` -komennon tuottama Worker-koodi; Renderin
+automaattijulkaisu on pois käytöstä, joten julkaisu käynnistetään erikseen.
 Julkaise päivitetty palvelin, Worker (`npm run build:verified-worker`) sekä
 `npm run build` -komennon tuottama peli yhdessä. Paikallisesti kaikki
 käynnistyvät komennolla `npm run dev:verified`.
@@ -69,10 +75,10 @@ Viestissä saa olla enintään 280 merkkiä. Raja on kuusi viestiä minuutissa
 tiliä ja 30 viestiä minuutissa yhdistävää IP-osoitetta kohti.
 Käänteisen välityspalvelimen takana jälkimmäinen raja voi olla yhteinen kaikille.
 
-Palvelin pitää muistissa viimeiset 100 viestiä enintään 24 tuntia. Historia
-tyhjenee uudelleenkäynnistyksessä. Käytä yhtä palvelininstanssia: eri instansseilla
-on omat huoneensa. Viestit näkyvät julkisesti; pelaajatunnisteita ja IP-osoitteita
-ei palauteta chatissa. Viestien sisältöä ei lähetetä analytiikkaan.
+Cloudflare D1 säilyttää viimeiset 100 viestiä enintään 24 tuntia. Historia säilyy
+Render-palvelimen uudelleenkäynnistyksen yli. Viestit näkyvät julkisesti;
+pelaajatunnisteita ja IP-osoitteita ei tallenneta chat-historiaan eikä palauteta
+chatissa. Viestien sisältöä ei lähetetä analytiikkaan.
 
 Tarkistukset: `npm run test:chat`, `npm run test:chat-browser`.
 

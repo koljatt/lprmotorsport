@@ -19,3 +19,5 @@ services:
         value: https://panulut.github.io
       - key: VERIFICATION_SECRET
         generateValue: true
+      - key: CHAT_STORAGE_URL
+        value: https://lpr-verified.panu-musakka.workers.dev/api/verified/chat-storage

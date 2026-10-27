@@ -6,7 +6,7 @@ const {Recorder}=require('../verification/replay.cjs');
 (async()=>{
  const factory=createWorldFactory(),a=factory.create(),b=factory.create(),reference=createIsolatedWorld();
  assert.deepEqual({x:a.world.car.x,y:a.world.car.y,angle:a.world.car.angle},factory.definition.launchPosition,
-  'Pooled verification sessions use the same 150-metre pre-finish launch as browser sessions');
+  'Pooled verification sessions use the same 200-metre pre-finish launch as browser sessions');
  assert.deepEqual({x:a.world.car.x,y:a.world.car.y,angle:a.world.car.angle},
   {x:reference.world.car.x,y:reference.world.car.y,angle:reference.world.car.angle},
   'Pooled and isolated driving worlds start at the same position');

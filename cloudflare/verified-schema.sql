@@ -1,4 +1,10 @@
 -- Separate verified results; never migrates legacy lap times.
+CREATE TABLE IF NOT EXISTS verified_chat_messages (
+ id TEXT PRIMARY KEY,nickname TEXT NOT NULL,text TEXT NOT NULL,at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS verified_chat_expiry ON verified_chat_messages(at);
+CREATE TABLE IF NOT EXISTS verified_lap_exclusions (
+ session_id TEXT NOT NULL,lap INTEGER NOT NULL,reason TEXT NOT NULL DEFAULT 'admin',created_ms INTEGER NOT NULL,
+ PRIMARY KEY(session_id,lap));
 CREATE TABLE IF NOT EXISTS verified_laps (
   session_id TEXT NOT NULL,lap INTEGER NOT NULL,revision TEXT NOT NULL,player_hash TEXT NOT NULL,nickname TEXT NOT NULL,
   start_tick INTEGER NOT NULL,end_tick INTEGER NOT NULL,lap_ticks INTEGER NOT NULL,

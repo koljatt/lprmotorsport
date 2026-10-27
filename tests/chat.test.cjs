@@ -57,6 +57,10 @@ assert.throws(()=>shared.post(fresh(99),'shared',{text:'Hi'}),{status:429},'IP l
   assert.equal((await send({nickname:'Panu',text:'No'},'b'.repeat(64),null)).status,401,'A random token without an Origin header cannot post');
   assert.equal((await send({text:'No'},await signed({nickname:'Panu'},'attacker-secret-'.repeat(4)),null)).status,401,'Forged tickets are rejected');
   assert.equal((await send({text:'No'},await signed({kind:'start'}))).status,401,'Driving start tickets cannot post');
+  const guestTicket=await signed({kind:'guest-chat',playerHash:'c'.repeat(64),nickname:'Vierailija'});
+  const guestResponse=await send({text:'Hei!'},guestTicket);
+  assert.equal(guestResponse.status,201);
+  assert.equal((await guestResponse.json()).message.nickname,'Vierailija (vierailija)');
   assert.equal((await send({text:'No'},await signed({issuedAt:Date.now()-700000,expiresAt:Date.now()-100000}))).status,401,'Expired tickets are rejected');
   assert.equal((await send({text:'x'.repeat(3000)})).status,413);
   assert.equal((await fetch(url,{method:'DELETE'})).status,405);
@@ -64,5 +68,32 @@ assert.throws(()=>shared.post(fresh(99),'shared',{text:'Hi'}),{status:429},'IP l
   for(let i=1;i<6;i++)assert.equal((await send({text:'Moi'})).status,201);
   assert.equal((await send({text:'Liikaa'},await signed())).status,429,'A new ticket for the same account shares its rate limit');
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
- console.log('Chat: signed nickname ownership, shared messages, validation, rate limits, expiry and HTTP routes OK');
+ const leaderboard=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({
+  secret,revision:require('../verification/world.cjs').revision
+ });
+ await new Promise(resolve=>leaderboard.listen(0,'127.0.0.1',resolve));
+ const storageURL=`http://127.0.0.1:${leaderboard.address().port}/api/verified/chat-storage`;
+ let persistentServer;
+ const startPersistentServer=async()=>require('../verification/server.cjs').createServer({
+  secret,origins:['https://game.test'],chatStorageURL:storageURL
+ });
+ try{
+  persistentServer=await startPersistentServer();await new Promise(resolve=>persistentServer.listen(0,'127.0.0.1',resolve));
+  const persistentURL=`http://127.0.0.1:${persistentServer.address().port}/api/chat`;
+  const saved=await fetch(persistentURL,{method:'POST',headers:{Origin:'https://game.test','Content-Type':'application/json',Authorization:'Bearer '+await signed()},
+   body:JSON.stringify({text:'Säilyy uudelleenkäynnistyksessä'})});
+  assert.equal(saved.status,201);
+  persistentServer.closeAllConnections();await new Promise(resolve=>persistentServer.close(resolve));
+  persistentServer=await startPersistentServer();await new Promise(resolve=>persistentServer.listen(0,'127.0.0.1',resolve));
+  const restored=await(await fetch(`http://127.0.0.1:${persistentServer.address().port}/api/chat`)).json();
+  assert.equal(restored.messages.length,1);
+  assert.equal(restored.messages[0].text,'Säilyy uudelleenkäynnistyksessä','Cloudflare D1 restores chat history after a server restart');
+  leaderboard.db.prepare('UPDATE verified_chat_messages SET at=?').run(Date.now()-86400001);
+  assert.deepEqual(await(await fetch(`http://127.0.0.1:${persistentServer.address().port}/api/chat`)).json(),{messages:[]},
+   'Persisted messages expire after 24 hours');
+ }finally{
+  if(persistentServer){persistentServer.closeAllConnections();await new Promise(resolve=>persistentServer.close(resolve));}
+  leaderboard.closeAllConnections();await new Promise(resolve=>leaderboard.close(resolve));
+ }
+ console.log('Chat: signed nickname ownership, shared messages, persistence, validation, rate limits and expiry OK');
 })().catch(error=>{console.error(error);process.exitCode=1;});

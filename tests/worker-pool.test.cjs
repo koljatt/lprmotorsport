@@ -18,7 +18,7 @@ const waitFor=async test=>{for(let i=0;i<100;i++){if(test())return;await new Pro
   assert.equal(sessions.pool.snapshot().workers,1);assert.equal(sessions.pool.snapshot().sessions,4);
   await assert.rejects(()=>sessions.create(revision,{}),e=>e.code==='capacity');
   const worlds=players.map(()=>createWorld()),laps=Array(4).fill(0);
-  for(let from=0,seq=0;from<24000;from+=60,seq++){
+  for(let from=0,seq=0;from<30000 && laps.some(n=>n<2);from+=60,seq++){
    const batches=worlds.map(({world,api},i)=>{
     const inputs=[];for(let tick=0;tick<60;tick++){
      const input=driver(world);input.gas*=1-i*.03;input.tc=i%2===0;inputs.push(api.encode(input));world.step(input);

@@ -7,19 +7,21 @@
       fi: {
         title: 'Uutta LPR Motorsissa',
         items: [
+          ['Vauhtilähtö', 'Kiihdytä 200 metriä ennen maalilinjaa. Kierrosaika alkaa vasta maalilinjan ylityksestä.'],
           ['Pelaajatilit', 'Kirjaudu sisään tai pelaa vierailijana. Tuloslistoille osallistuminen edellyttää kirjautumista.'],
           ['Liveseuranta', 'Näe radalla ajavat kuljettajat ja seuraa ajoa suorana.'],
           ['Päivän kilpailu', 'Kilpaile nopeimmista kierroksista ja kierrosmääristä sekä kuukauden pisteistä.'],
-          ['Chat ja kilpailuluokat', 'Keskustele muiden kanssa. Ihmisillä ja boteilla on omat sarjansa.']
+          ['Chat ja kilpailuluokat', 'Keskustele myös vierailijana. Viimeiset 100 viestiä säilyvät enintään vuorokauden. Ihmisillä ja boteilla on omat sarjansa.']
         ]
       },
       en: {
         title: 'What’s new in LPR Motors',
         items: [
+          ['Rolling start', 'Accelerate from 200 metres before the finish line. Lap timing starts when you cross the line.'],
           ['Player accounts', 'Sign in or continue as a guest. You must sign in to enter the leaderboards.'],
           ['Live spectating', 'See who is driving and watch their runs live.'],
           ['Daily competitions', 'Race for fastest laps, most laps and monthly championship points.'],
-          ['Chat and racing classes', 'Talk to other drivers. Humans and bots have separate standings.']
+          ['Chat and racing classes', 'Talk to other drivers, including as a guest. The latest 100 messages stay for up to 24 hours. Humans and bots have separate standings.']
         ]
       }
     }

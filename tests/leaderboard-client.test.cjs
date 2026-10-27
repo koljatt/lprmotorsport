@@ -130,6 +130,7 @@ function setup(storage=new Map(),options={}){
   assert(guest.board.requiresName);guest.node('#leaderboard-guest-name').value='Practice Guest';
   await guest.node('#leaderboard-guest-start').trigger('click');
   assert(!guest.board.requiresName);assert.equal(guest.board.identity,null);assert(guest.node('#settings-dialog').open,'Guest selection keeps the player in the lobby');
+  assert.equal(guest.board.chatIdentity.nickname,'Practice Guest');assert.equal(guest.board.chatIdentity.guest,true,'Guest nickname is available to chat without creating an account');
   assert.equal(accountCalls.length,beforeGuestCalls,'Practice never creates or signs in to an account');
   await guest.lap();assert.equal(guest.starts().length,0);assert.equal(guest.finishes().length,0,'Practice laps are never submitted');
   guest.node('#settings-dialog').showModal();await guest.login('Guest upgrade');

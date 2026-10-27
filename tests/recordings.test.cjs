@@ -137,6 +137,27 @@ const assert=require('node:assert/strict');
   assert.equal((await board_()).results.length,0,'The moved account leaves the human series');
   assert((await board_('bot')).results.every(r=>r.session_id===botSession));
   assert.deepEqual(board.db.prepare('SELECT lap FROM verified_replays WHERE session_id=? ORDER BY lap').all(sessionId).map(r=>r.lap),[13,25],'Only flagged recordings of the moved account survive outside the bot top twenty');
-  console.log('PASS: mandatory signed artifacts, excluded legacy scores, private/public access, review authorization, per-series top-twenty retention, skipped slow writes, scheduled cleanup, bot series, viewer reports, admin series moves');
+  // Record exclusions must preserve lap history, daily points and restorable replays.
+  const adminPath='/api/verified/admin/laps';
+  const listing=async credential=>fetch(base+adminPath+'?series=bot',{headers:{Authorization:'Bearer '+credential}});
+  assert.equal((await listing('bad')).status,401);
+  const before=await(await listing(adminToken)).json();assert(before.results.length);
+  const selected=before.results.find(r=>r.session_id===botSession);
+  assert(selected);
+  const lapCount=()=>board.db.prepare('SELECT COUNT(*) n FROM verified_laps').get().n;
+  const dailyCount=()=>board.db.prepare('SELECT COUNT(*) n FROM championship_laps').get().n;
+  const counts=[lapCount(),dailyCount()];
+  const selectedPath=adminPath+'?sessionId='+selected.session_id+'&lap='+selected.lap;
+  assert.equal((await post(selectedPath,{},adminToken)).status,200);
+  assert(!(await board_('bot')).results.some(r=>r.session_id===selected.session_id&&r.lap===selected.lap));
+  assert.deepEqual([lapCount(),dailyCount()],counts);
+  assert(board.db.prepare('SELECT 1 FROM verified_replays WHERE session_id=? AND lap=?').get(selected.session_id,selected.lap));
+  assert.equal((await post(selectedPath+'&restore=1',{},adminToken)).status,200);
+  assert((await board_('bot')).results.some(r=>r.session_id===selected.session_id&&r.lap===selected.lap));
+  assert.equal((await post(adminPath+'?reset=1',{},adminToken)).status,200);
+  assert.equal((await board_('bot')).results.length,0);
+  assert.deepEqual([lapCount(),dailyCount()],counts);
+  assert(board.db.prepare('SELECT 1 FROM verified_replays WHERE session_id=? AND lap=?').get(selected.session_id,selected.lap));
+  console.log('PASS: signed artifacts, access, retention, reports, series moves, authenticated exclusions/restoration/reset preserve lap history and replays');
  }finally{await new Promise(r=>board.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

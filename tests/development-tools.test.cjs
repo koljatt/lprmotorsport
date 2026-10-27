@@ -116,6 +116,10 @@ async function check(production){
 }
 (async()=>{
   const output=build();
+  for(const match of gameHtml.matchAll(/(?:src|href)="([^"?#]+)(?:\?[^"#]*)?"/g)){
+    const file=match[1];
+    if(/\.(?:js|css)$/.test(file)&&!file.includes('://'))assert(fs.existsSync(path.join(output,file)),`Build includes ${file}`);
+  }
   assert.ok(!fs.existsSync(path.join(output,'tools')));
   assert.ok(!fs.existsSync(path.join(output,'server.js')));
   assert.ok(!fs.existsSync(path.join(output,'tests')));

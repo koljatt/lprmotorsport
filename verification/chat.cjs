@@ -30,11 +30,12 @@ function createChat({now=Date.now,protocol='driving-v1'}={}) {
   post(identity,ip,data){
    clean();
    const time=now();
-   // The nickname always comes from the account-bound ticket, never from the request body.
-   if(identity?.kind!=='chat'||identity.protocol!==protocol||typeof identity.playerHash!=='string'||!/^[a-f0-9]{64}$/.test(identity.playerHash)||
+   // The nickname always comes from a signed ticket, never from the chat request body.
+   const guest=identity?.kind==='guest-chat';
+   if(!['chat','guest-chat'].includes(identity?.kind)||identity.protocol!==protocol||typeof identity.playerHash!=='string'||!/^[a-f0-9]{64}$/.test(identity.playerHash)||
     !validName(identity.nickname)||!Number.isSafeInteger(identity.issuedAt)||!Number.isSafeInteger(identity.expiresAt)||
     identity.issuedAt>time+5000||identity.expiresAt<=time||identity.expiresAt-identity.issuedAt>TICKET_MAX_MS)throw fail(401,'Sign in required');
-   const nickname=identity.nickname;
+   const nickname=guest?`${identity.nickname} (vierailija)`:identity.nickname;
    const text=typeof data?.text==='string'?data.text.trim().normalize('NFC'):'';
    if(!text||text.length>280||/[\p{Cc}\p{Cf}]/u.test(text))throw fail(400,'Invalid message');
    const owner=identity.playerHash;
@@ -43,7 +44,8 @@ function createChat({now=Date.now,protocol='driving-v1'}={}) {
    messages.push(message);if(messages.length>100)messages.shift();
    const {owner:_,...publicMessage}=message;
    return {message:publicMessage};
-  }
+  },
+  discard(id){const index=messages.findIndex(message=>message.id===id);if(index>=0)messages.splice(index,1);}
  };
 }
 function fail(status,message){return Object.assign(Error(message),{status});}

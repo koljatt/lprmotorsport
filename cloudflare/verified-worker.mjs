@@ -12,8 +12,12 @@ const accountSchema=`CREATE TABLE IF NOT EXISTS verified_accounts (
 const sessionSchema=`CREATE TABLE IF NOT EXISTS verified_login_sessions (
  token_hash TEXT PRIMARY KEY,player_hash TEXT NOT NULL,secret_hash TEXT NOT NULL,created_ms INTEGER NOT NULL,expires_ms INTEGER NOT NULL)`;
 const sessionIndex='CREATE INDEX IF NOT EXISTS verified_login_expiry ON verified_login_sessions(expires_ms)';
+const chatStorageSchema=`CREATE TABLE IF NOT EXISTS verified_chat_messages (
+ id TEXT PRIMARY KEY,nickname TEXT NOT NULL,text TEXT NOT NULL,at INTEGER NOT NULL)`;
+const chatStorageIndex='CREATE INDEX IF NOT EXISTS verified_chat_expiry ON verified_chat_messages(at)';
 const SESSION_MS=7*86400000;
 const CHAT_TICKET_MS=10*60000;
+const CHAT_RETENTION_MS=24*60*60*1000;
 async function newSession(db,account,secret){
  const now=Date.now(),token=randomHex()+randomHex(),expiresAt=now+SESSION_MS;
  await db.prepare('DELETE FROM verified_login_sessions WHERE expires_ms<=?').bind(now).run();
@@ -29,13 +33,13 @@ export const schema=[...replaySchema,
   PRIMARY KEY(session_id,lap))`,
  'CREATE INDEX IF NOT EXISTS verified_order ON verified_laps(revision,lap_ticks,issued_ms,session_id,lap)',
  'CREATE TABLE IF NOT EXISTS verified_limits (key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires INTEGER NOT NULL)',
- accountSchema,sessionSchema,sessionIndex,...championshipSchema
+ accountSchema,sessionSchema,sessionIndex,chatStorageSchema,chatStorageIndex,...championshipSchema
 ];
 const accountsReady=new WeakSet();
 const ensureAccounts=async db=>{
  if(accountsReady.has(db))return;
  // Cache completion only: never share request-owned I/O promises across Worker requests.
- for(const sql of [accountSchema,sessionSchema,sessionIndex,...moderationSchema,...championshipSchema])await db.prepare(sql).run();
+ for(const sql of [accountSchema,sessionSchema,sessionIndex,chatStorageSchema,chatStorageIndex,...moderationSchema,...championshipSchema])await db.prepare(sql).run();
  accountsReady.add(db);
 };
 // Cloudflare Workers caps PBKDF2 at 100 000 iterations. If sign-ins exceed the plan's CPU limit,
@@ -66,7 +70,9 @@ export default {
   const revision=env.SIMULATION_REVISION||BUILD_REVISION;
   // Without a valid revision the ranking is empty and every recording would be deleted.
   if(!validPlayer(revision))return;
+  await ensureAccounts(env.DB);
   await env.DB.batch(retentionStatements(env.DB,revision));
+  await env.DB.prepare('DELETE FROM verified_chat_messages WHERE at<=?').bind(Date.now()-CHAT_RETENTION_MS).run();
  },
  async fetch(request,env){
   const revision=env.SIMULATION_REVISION||BUILD_REVISION;
@@ -81,6 +87,38 @@ export default {
    if(!env.DB||!validPlayer(revision)||typeof env.VERIFICATION_SECRET!=='string'||env.VERIFICATION_SECRET.length<32)return reply({error:'Verification not configured'},503);
    const url=new URL(request.url);
    await ensureAccounts(env.DB);
+   if(url.pathname==='/api/verified/chat-storage'){
+    const now=Date.now(),credential=request.headers.get('Authorization')?.replace(/^Bearer /,'');
+    let access;try{access=await verify(credential,env.VERIFICATION_SECRET);}catch{return reply({error:'Unauthorized'},401);}
+    if(access.kind!=='chat-storage'||!['read','write'].includes(access.operation)||
+     !Number.isSafeInteger(access.issuedAt)||!Number.isSafeInteger(access.expiresAt)||access.issuedAt>now+5000||
+     access.expiresAt<=now||access.expiresAt-access.issuedAt>30000)return reply({error:'Unauthorized'},401);
+    if(request.method==='GET'&&access.operation==='read'){
+     await env.DB.prepare('DELETE FROM verified_chat_messages WHERE at<=?').bind(now-CHAT_RETENTION_MS).run();
+     const rows=await env.DB.prepare(`SELECT id,nickname,text,at FROM
+      (SELECT id,nickname,text,at FROM verified_chat_messages WHERE at>? ORDER BY at DESC,id DESC LIMIT 100)
+      ORDER BY at,id`).bind(now-CHAT_RETENTION_MS).all();
+     return reply({messages:rows.results});
+    }
+    if(request.method==='POST'&&access.operation==='write'){
+     const message=access.message;
+     const nickname=typeof message?.nickname==='string'?message.nickname:'';
+     const baseName=nickname.replace(/ \(vierailija\)$/,'');
+     if(typeof message?.id!=='string'||!/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/.test(message.id)||
+      !validName(baseName)||nickname!==baseName&&nickname!==`${baseName} (vierailija)`||
+      typeof message.text!=='string'||!message.text.trim()||message.text.length>280||/[\p{Cc}\p{Cf}]/u.test(message.text)||
+      !Number.isSafeInteger(message.at)||message.at<=now-CHAT_RETENTION_MS||message.at>now+5000)return reply({error:'Invalid message'},400);
+     await env.DB.batch([
+      env.DB.prepare('INSERT OR IGNORE INTO verified_chat_messages(id,nickname,text,at) VALUES (?,?,?,?)')
+       .bind(message.id,nickname,message.text,message.at),
+      env.DB.prepare('DELETE FROM verified_chat_messages WHERE at<=?').bind(now-CHAT_RETENTION_MS),
+      env.DB.prepare(`DELETE FROM verified_chat_messages WHERE id NOT IN
+       (SELECT id FROM verified_chat_messages ORDER BY at DESC,id DESC LIMIT 100)`)
+     ]);
+     return reply({saved:true});
+    }
+    return reply({error:'Method not allowed'},405);
+   }
    if(url.pathname.startsWith('/api/verified/replays/')||url.pathname.startsWith('/api/verified/admin/'))return await replayRoute(request,env,url,reply,headers,body,revision);
    if(url.pathname==='/api/verified/leaderboard'&&request.method==='GET'){
     const series=url.searchParams.get('series')||'human';
@@ -146,6 +184,18 @@ export default {
       SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM verified_accounts WHERE player_hash=?)`).bind(created.player_hash,series,now,created.player_hash)]);
     if(!inserted.meta.changes)return reply({error:'Nickname taken'},409);
     return reply({...await newSession(env.DB,created,env.VERIFICATION_SECRET),created:true},201);
+   }
+   if(url.pathname==='/api/verified/guest-chat-ticket'){
+    if(request.method!=='POST')return reply({error:'POST required'},405);
+    const now=Date.now(),ip=await hash(request.headers.get('CF-Connecting-IP')||'unknown');
+    if(await limit(`guest-chat:${ip}:${Math.floor(now/60000)}`,30,120000))return reply({error:'Too many requests'},429);
+    const data=await body(request,2048);
+    if(!accountName(data?.nickname))return reply({error:'Invalid nickname'},400);
+    if(await env.DB.prepare('SELECT 1 FROM verified_accounts WHERE name_key=?').bind(nameKey(data.nickname)).first())
+     return reply({error:'Nickname taken'},409);
+    const expiresAt=now+CHAT_TICKET_MS,playerHash=randomHex()+randomHex();
+    return reply({protocol,nickname:data.nickname,expiresInMs:CHAT_TICKET_MS,
+     ticket:await sign({kind:'guest-chat',protocol,playerHash,nickname:data.nickname,issuedAt:now,expiresAt},env.VERIFICATION_SECRET)});
    }
    if(!['/api/verified/start','/api/verified/chat-ticket','/api/verified/laps','/api/verified/logout','/api/verified/report'].includes(url.pathname))return reply({error:'Not found'},404);
    if(request.method!=='POST')return reply({error:'POST required'},405);

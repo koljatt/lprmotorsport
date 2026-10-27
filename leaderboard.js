@@ -26,7 +26,7 @@
   const accountTitle = document.querySelector('#leaderboard-account-title');
   const accountEndpoint = () => window.LPRVerificationConfig?.leaderboard;
   const accountKey = 'lpr-account';
-  let sessionChosen = false, guestSelection = false;
+  let sessionChosen = false, guestSelection = false, guestNickname = '';
   const guestFields = document.querySelector('#leaderboard-guest-fields');
   const guestName = document.querySelector('#leaderboard-guest-name');
   let token, activeName = '', activeSeries = 'human', account = null, authMode = null, signingIn = false;
@@ -98,6 +98,7 @@
     if (signingIn) return;
     authMode = mode;
     guestSelection = false;
+    guestNickname = '';
     password.value = '';
     createStep = 1; chosenSeries = null;
     for (const choice of seriesChoices) if (choice) choice.checked = false;
@@ -192,6 +193,7 @@
       } finally { signingIn = false; startButton.disabled = false; }
       password.value = ''; authMode = null; createStep = 1; chosenSeries = null; status.textContent = '';
       account = identity;
+      guestNickname = '';
       try { localStorage.setItem(accountKey, JSON.stringify(account)); localStorage.setItem('lpr-nickname', account.nickname); } catch {}
     }
     sessionChosen = true;
@@ -219,7 +221,7 @@
   });
   document.querySelector('#leaderboard-practice')?.addEventListener('click', () => {
     if (signingIn) return;
-    guestSelection = true; authMode = null; showAccount();
+    guestSelection = true; authMode = null; guestNickname = ''; showAccount();
     guestName.value = localStorage.getItem('lpr-guest-nickname') || '';
     guestName.focus();
   });
@@ -234,6 +236,7 @@
       guestName.reportValidity(); return;
     }
     try { localStorage.setItem('lpr-guest-nickname',name); } catch {}
+    guestNickname = name;
     sessionChosen = true; guestSelection = false; activeName = ''; token = undefined; pending = []; activeLap = null;
     password.value = ''; authMode = null; status.textContent = '';
     window.LPRVerifiedDriving?.identityCleared?.();
@@ -340,6 +343,7 @@
       get identity() { return activeName && token ? {nickname:activeName,token,series:activeSeries} : null; },
       // Chat authentication is independent of choosing a verified driving session.
       get chatIdentity() {
+        if (guestNickname) return {nickname:guestNickname,guest:true};
         if (account?.expiresAt > Date.now()) return {nickname:account.nickname,token:account.token,series:account.series};
         return null;
       },
@@ -349,7 +353,7 @@
       // Called when the server no longer accepts the remembered account (deleted or revoked).
       signOut(message) {
         forget();
-        sessionChosen = false; activeName = ''; token = undefined; pending = [];
+        sessionChosen = false; activeName = ''; guestNickname = ''; token = undefined; pending = [];
         window.LPRVerifiedDriving?.identityCleared?.();
         dialog.classList.remove('lobby-ready');
         showAccount();

@@ -4,7 +4,7 @@ const {Sessions}=require('./sessions.cjs');
 const {createCapacityReporter}=require('./capacity-reporter.cjs');
 const {revision}=require('./world.cjs');
 const {createChat}=require('./chat.cjs');
-async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],sessionsOptions={},metricsToken=process.env.VERIFICATION_METRICS_TOKEN,capacityReportURL=process.env.CAPACITY_REPORT_URL}={}) {
+async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],sessionsOptions={},metricsToken=process.env.VERIFICATION_METRICS_TOKEN,capacityReportURL=process.env.CAPACITY_REPORT_URL,chatStorageURL=process.env.CHAT_STORAGE_URL}={}) {
  const {sign,verify,protocol,validPlayer,validName}=await import('./protocol.mjs');
  if(typeof secret!=='string'||secret.length<32)throw Error('VERIFICATION_SECRET must contain at least 32 characters');
  const reporter=createCapacityReporter({url:capacityReportURL,token:metricsToken});
@@ -15,6 +15,28 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
   sessionId:s.id,playerHash:s.identity.playerHash,nickname:s.identity.nickname,...lap,issuedAt:Date.now()},secret)});
  const allowed=new Set(origins);
  const chat=createChat({protocol});
+ const chatStorageURLParsed=chatStorageURL?new URL(chatStorageURL):null;
+ if(chatStorageURLParsed&&chatStorageURLParsed.protocol!=='https:'&&
+  !['localhost','127.0.0.1'].includes(chatStorageURLParsed.hostname))throw Error('CHAT_STORAGE_URL must use HTTPS');
+ async function chatStorage(operation,message){
+  if(!chatStorageURLParsed)return null;
+  const now=Date.now();
+  const token=await sign({kind:'chat-storage',operation,issuedAt:now,expiresAt:now+30000,...(message?{message}:{})},secret);
+  let response;
+  try{
+   response=await fetch(chatStorageURLParsed,{method:operation==='write'?'POST':'GET',
+    headers:{Authorization:'Bearer '+token},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(10000)});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const data=await response.json();
+   if(operation==='read'&&(!Array.isArray(data.messages)||data.messages.length>100||
+    !data.messages.every(row=>typeof row?.id==='string'&&typeof row.nickname==='string'&&typeof row.text==='string'&&Number.isSafeInteger(row.at))))
+    throw Error('Invalid chat history');
+   return data;
+  }catch(error){
+   console.error('Chat storage request failed',operation,error.message);
+   throw fail(503,'Chat storage unavailable');
+  }
+ }
  const server=http.createServer(async(req,res)=>{
   const origin=req.headers.origin;
   const headers={'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin','X-Content-Type-Options':'nosniff'};
@@ -41,12 +63,15 @@ async function createServer({secret=process.env.VERIFICATION_SECRET,origins=[],s
     return reply(200,chat.presence(url.searchParams.get('visitor')));
    }
    if(url.pathname==='/api/chat'){
-    if(req.method==='GET')return reply(200,chat.list());
+    if(req.method==='GET')return reply(200,chatStorageURLParsed?await chatStorage('read'):chat.list());
     if(req.method!=='POST')return reply(405,{error:'Method not allowed'});
     // Trust the connecting socket; client-supplied forwarding headers can be forged.
     const data=await readJSON(req,2048);
     let identity;try{identity=await verify(req.headers.authorization?.replace(/^Bearer /,''),secret);}catch{throw fail(401,'Sign in required');}
-    return reply(201,chat.post(identity,req.socket.remoteAddress||'unknown',data));
+    const result=chat.post(identity,req.socket.remoteAddress||'unknown',data);
+    try{if(chatStorageURLParsed)await chatStorage('write',result.message);}
+    catch(error){chat.discard(result.message.id);throw error;}
+    return reply(201,result);
    }
    if(url.pathname==='/sessions'&&req.method==='POST'){
     const data=await readJSON(req),now=Date.now();

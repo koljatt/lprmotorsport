@@ -37,7 +37,7 @@ const {driver}=require('./helpers-driving.cjs');
  const optimized=createWorld(),baseline=createWorld({baseline:true});
  const recordings=[new Recorder(optimized.world,optimized.revision),new Recorder(baseline.world,baseline.revision)];
  let laps=0;
- for(let tick=0;tick<24000;tick++){
+ for(let tick=0;tick<30000 && laps<2;tick++){
   const input=driver(baseline.world),value=baseline.api.encode(input);
   const oldEvent=baseline.world.step(input),newEvent=optimized.world.step(input);
   assert.deepEqual(newEvent,oldEvent);assert.deepEqual(optimized.world.car,baseline.world.car,`Full car state at tick ${tick}`);

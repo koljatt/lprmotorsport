@@ -152,7 +152,6 @@
             <div id="leaderboard-credentials">
             <label for="leaderboard-name">Nimimerkki</label>
             <input id="leaderboard-name" required maxlength="24" autocomplete="username" autocapitalize="off" enterkeyhint="next" placeholder="Nimimerkki" />
-            <button id="leaderboard-logout" class="leaderboard-logout" type="button" hidden>Kirjaudu ulos</button>
             <label id="leaderboard-password-label" for="leaderboard-password">Salasana</label>
             <input id="leaderboard-password" type="password" minlength="8" maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Vähintään 8 merkkiä" />
             <p id="leaderboard-password-hint" class="leaderboard-password-hint">Salasana varaa nimimerkin sinulle. Salasanaa ei voi palauttaa.</p>
@@ -181,6 +180,7 @@
             </fieldset>
             </details>
             <button id="leaderboard-start" class="leaderboard-start" type="submit" hidden><span id="leaderboard-start-label">Kirjaudu sisään</span> <span aria-hidden="true">→</span></button>
+            <button id="leaderboard-logout" class="leaderboard-logout" type="button" hidden>Kirjaudu ulos</button>
             <p id="leaderboard-status" role="status"></p>
           </form>
       <section class="leaderboard-panel active-drivers" aria-labelledby="active-drivers-title">

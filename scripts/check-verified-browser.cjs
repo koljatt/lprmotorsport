@@ -5,7 +5,7 @@ const {launchBrowser}=require('./browser.cjs');
 const {driver}=require('../tests/helpers-driving.cjs');
 (async()=>{
  const secret='browser-test-only-'.repeat(4),adminToken='browser-admin-test-only-'.repeat(3),{revision}=require('../verification/world.cjs');
- let clock=0,browser;
+ let clock=0,browser,releaseHealth;
  const game=require('../server.js').createServer();
  await new Promise(r=>game.listen(0,'127.0.0.1',r));
  const origin=`http://127.0.0.1:${game.address().port}`;
@@ -20,7 +20,7 @@ const {driver}=require('../tests/helpers-driving.cjs');
   page.on('pageerror',error=>errors.push(error.message));
   await page.addInitScript(()=>{window.requestAnimationFrame=()=>0;});
   await page.route('**/verification/config.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
-  let firstHealth=true,releaseHealth;
+  let firstHealth=true;
   const healthGate=new Promise(resolve=>{releaseHealth=resolve;});
   await page.route(serviceURL+'/health',async route=>{
    if(firstHealth){firstHealth=false;await healthGate;}
@@ -33,6 +33,7 @@ const {driver}=require('../tests/helpers-driving.cjs');
    source=source.replace('  reset();\n  openTestScene',`  window.__verifiedGame={update,held,updateDriving,reset,get car(){return car},get world(){return drivingWorld},render(){renderer.render(car,performance.now());}};\n  reset();\n  openTestScene`);
    return route.fulfill({contentType:'text/javascript',body:source});
   });
+  await page.addInitScript(()=>localStorage.setItem('lpr-release-notes-seen','2026-10-27-major-update'));
   await page.goto(origin);await page.waitForFunction(()=>window.__verifiedGame,null,{polling:20});
   const controls=Array.from({length:180},(_,i)=>[1,i>150?.2:0,i<60?.3:i<120?-.3:0,i>=60,i>=120,i<90]);
   const local=require('../verification/world.cjs').createWorld();for(const input of controls)local.world.step(local.api.decode(input));
@@ -41,8 +42,11 @@ const {driver}=require('../tests/helpers-driving.cjs');
   for(const key of Object.keys(expectedControls.state))assert(Math.abs(browserControls.state[key]-expectedControls.state[key])<1e-7,`Browser control state matches: ${key}`);
   assert.deepEqual({...browserControls,state:null},{...expectedControls,state:null},'Keyboard, gamepad, wheel and traction-control transitions match across browser and server');
   await page.click('#leaderboard-practice');
+  await page.fill('#leaderboard-guest-name','Practice Guest');await page.click('#leaderboard-guest-start');
   assert(await page.evaluate(()=>!window.LPRLeaderboard.requiresName&&!window.LPRLeaderboard.identity&&!window.LPRVerifiedDriving.active),'Practice needs no account or analytics');
-  await page.click('#leaderboard-button');
+  await page.click('#leaderboard-drive');
+  await page.reload();await page.waitForFunction(()=>window.__verifiedGame,null,{polling:20});
+  await page.click('#leaderboard-login');
   await page.click('#leaderboard-create');
   await page.fill('#leaderboard-name','Browser Driver');
   await page.fill('#leaderboard-password','browser-test-password');
@@ -58,6 +62,9 @@ const {driver}=require('../tests/helpers-driving.cjs');
   assert.equal(board.db.prepare('SELECT COUNT(*) n FROM verified_accounts').get().n,1,'Confirmed registration creates the account');
   assert.equal(await page.inputValue('#leaderboard-password'),'','The password is cleared after sign-in');
   const startArtifacts=path.resolve(__dirname,'../artifacts/verification');fs.mkdirSync(startArtifacts,{recursive:true});
+  assert(await page.locator('#settings-dialog').evaluate(d=>d.open),'Sign-in keeps the player in the lobby');
+  assert(!await page.evaluate(()=>window.LPRVerifiedDriving.active),'Sign-in does not start driving');
+  await page.click('#leaderboard-drive');
   assert.equal(await page.locator('#start-lights').getAttribute('data-phase'),'red');
   await page.evaluate(()=>window.__verifiedGame.render());
   await page.screenshot({path:path.join(startArtifacts,'start-red-desktop.png')});
@@ -168,8 +175,8 @@ const {driver}=require('../tests/helpers-driving.cjs');
   assert(await page.evaluate(()=>!window.LPRLeaderboard.requiresName&&!!window.LPRLeaderboard.identity),'Withdrawing analytics consent keeps leaderboard participation');
   assert.deepEqual(errors,[]);
   const report={generatedAt:new Date().toISOString(),browser:browser.version(),revision,ticks,verifiedLaps:2,
-   scope:'Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim',automaticStart:true,automaticRestart:true,startLights:true,heldDuringPreparation:true,optionalAnalytics:true,driverSeatReplay:true,replaySeek:true,viewerReports:true,adminSeriesMoves:true,dailyChampionship:true,tamperedPhysicsRejected:true,tamperedPowerRejected:true,errors};
+   scope:'Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim',explicitDriveRequired:true,rollingStartMetres:200,automaticRestart:true,startLights:true,heldDuringPreparation:true,optionalAnalytics:true,driverSeatReplay:true,replaySeek:true,viewerReports:true,adminSeriesMoves:true,dailyChampionship:true,tamperedPhysicsRejected:true,tamperedPowerRejected:true,errors};
   fs.writeFileSync(path.join(artifacts,'browser-report.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
- }finally{if(browser)await browser.close();await service.sessions.close();await Promise.all([game,service,board].map(server=>new Promise(r=>server.close(r))));}
+ }finally{releaseHealth?.();if(browser)await browser.close();await service.sessions.close();await Promise.all([game,service,board].map(server=>new Promise(r=>{server.closeAllConnections();server.close(r);})));}
 })().catch(error=>{console.error(error);process.exitCode=1;});
