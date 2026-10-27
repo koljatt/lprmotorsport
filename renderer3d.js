@@ -466,13 +466,13 @@ window.LPRRenderer3D = class LPRRenderer3D {
       beginTree:()=>{treeStart=data.length;},endTree:tree=>{
         this.obstacleMeshes.push({body:tree.body,start:treeStart,end:data.length});
       }},window.LPRCampus.treeSeed);
+    const gantryHalf = window.LPRCampus.gantryHalfWidth;
     for (const side of [-1,1]) {
-      const x = first.x + normals[0].x * (shoulderOuter + 5) * side;
-      const z = first.y + normals[0].z * (shoulderOuter + 5) * side;
+      const x = first.x + normals[0].x * gantryHalf * side;
+      const z = first.y + normals[0].z * gantryHalf * side;
       box(x,0,z,3,30,3,[.035,.17,.12]);
     }
     const beamCenter = [first.x, first.y];
-    const gantryHalf = shoulderOuter + 5;
     for (let i = -gantryHalf; i < gantryHalf; i += 4) {
       const x = beamCenter[0] + normals[0].x * (i + 2);
       const z = beamCenter[1] + normals[0].z * (i + 2);

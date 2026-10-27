@@ -367,21 +367,15 @@
       brushPoint=p;addBrushStamps(p);
       canvas.setPointerCapture(e.pointerId);draw();return;
     }
-    const hitIndex = findHitObjectIndex(p);
     if(selected>=0&&!api.isScene(objects[selected].type)&&isOnRotationHandle(objects[selected],p)){
       const o=objects[selected];
       drag={id:e.pointerId,mode:'rotate',originAngle:o.angle,pointerAngle:Math.atan2(p.y-o.y,p.x-o.x),moved:false};
       canvas.setPointerCapture(e.pointerId);canvas.style.cursor='grabbing';return;
     }
     if(adding){
-      if(hitIndex >= 0) {
-        selected = hitIndex;
-        drag={id:e.pointerId,x:e.clientX,y:e.clientY,p,origin:{...objects[selected]},moved:false};
-        canvas.setPointerCapture(e.pointerId);sync();
-        return;
-      }
       if(objects.length>=api.maxObjects){$('status').textContent=`Enintään ${api.maxObjects} elementtiä.`;return;}checkpoint();objects.push({type:$('type').value,x:clamp(p.x,5200),y:clamp(p.y,4400),angle:0,scale:1});selected=objects.length-1;canvas.style.cursor='crosshair';sync();return;
     }
+    const hitIndex = findHitObjectIndex(p);
     const treeIndex = treeAt(p);
     if(treeIndex !== null&&(hitIndex<0||objects[hitIndex].type==='tree')){
       const tree = LPRCampus.trees[treeIndex];
