@@ -29,6 +29,8 @@ K?ytt??notto ja luottamusketju: [verification/README.md](verification/README.md)
 Uusinnat: [verification/REPLAYS.md](verification/REPLAYS.md).
 Haarojen yhdist?minen ja julkaisun tarkistukset: [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md).
 
+Tulevat päivitykset ja ideat: [docs/future-updates-roadmap.md](docs/future-updates-roadmap.md).
+
 Auton kori, etusiipi ja renkaiden kiinteät sekä pyörivät osat säilytetään
 näytönohjaimen muistissa. Ajon aikana päivitetään niiden asennot; jousituksen
 muuttuva geometria lasketaan edelleen joka ruudulle. Yksityiskohtia tai
