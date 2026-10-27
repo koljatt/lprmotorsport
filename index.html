@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="styles.css?v=track-record-20261027" />
     <link rel="stylesheet" href="3d.css?v=track-record-20261027" />
     <link rel="stylesheet" href="dashboard.css?v=viewport-chat-20261027" />
-    <link rel="stylesheet" href="release-notes.css?v=20261027" />
+    <link rel="stylesheet" href="release-notes.css?v=20261027-language-switch" />
     <script src="i18n.js?v=track-record-20261027" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
@@ -240,7 +240,16 @@
       </section>
       <section id="release-notes-panel" hidden aria-labelledby="release-notes-title" role="region">
         <div class="release-notes-content">
-          <div class="release-notes-heading"><div><h2 id="release-notes-title">Mitä uutta?</h2><p id="release-notes-meta"></p></div><button id="release-notes-close" type="button">Sulje</button></div>
+          <div class="release-notes-heading">
+            <div><h2 id="release-notes-title">Mitä uutta?</h2><p id="release-notes-meta"></p></div>
+            <div class="release-notes-actions">
+              <div class="language-switcher" role="group" aria-label="Kieli / Language">
+                <button type="button" data-language="fi" aria-label="Suomi" aria-pressed="true" title="Suomi" lang="fi"><svg viewBox="0 0 36 22" aria-hidden="true"><path fill="#fff" d="M0 0h36v22H0z"/><path fill="#003580" d="M10 0h6v22h-6zM0 8h36v6H0z"/></svg></button>
+                <button type="button" data-language="en" aria-label="English" aria-pressed="false" title="English" lang="en"><svg viewBox="0 0 60 30" aria-hidden="true"><path fill="#012169" d="M0 0h60v30H0z"/><path stroke="#fff" stroke-width="6" d="m0 0 60 30m0-30L0 30"/><path fill="#c8102e" d="M0 0 30 15h-4.472L0 2.236zM60 0 30 15v-2.236L55.528 0zM60 30 30 15h4.472L60 27.764zM0 30 30 15v2.236L4.472 30z"/><path stroke="#fff" stroke-width="10" d="M30 0v30M0 15h60"/><path stroke="#c8102e" stroke-width="6" d="M30 0v30M0 15h60"/></svg></button>
+              </div>
+              <button id="release-notes-close" type="button">Sulje</button>
+            </div>
+          </div>
           <ol id="release-notes-list"></ol>
         </div>
       </section>
