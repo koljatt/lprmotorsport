@@ -26,7 +26,9 @@
   const accountTitle = document.querySelector('#leaderboard-account-title');
   const accountEndpoint = () => window.LPRVerificationConfig?.leaderboard;
   const accountKey = 'lpr-account';
-  let sessionChosen = false;
+  let sessionChosen = false, guestSelection = false;
+  const guestFields = document.querySelector('#leaderboard-guest-fields');
+  const guestName = document.querySelector('#leaderboard-guest-name');
   let token, activeName = '', activeSeries = 'human', account = null, authMode = null, signingIn = false;
   // Account creation asks credentials first, then an explicit human/bot series choice.
   let createStep = 1, chosenSeries = null;
@@ -52,17 +54,22 @@
     window.LPRChat?.identityChanged?.();
     // A remembered sign-in skips the password, but every page load still needs Aloita ajo.
     const remembered = !!account;
-    const showFields = remembered || !!activeName || !!authMode;
-    if (choices) choices.hidden = showFields;
-    if (accountFields) accountFields.hidden = !showFields;
+    const showFields = !!activeName || !!authMode;
+    if (guestFields) guestFields.hidden = !guestSelection;
+    const lobbyDrive=document.querySelector('#leaderboard-drive');
+    if (lobbyDrive) lobbyDrive.hidden=!sessionChosen;
+    if (choices) choices.hidden = showFields || guestSelection || sessionChosen;
+    if (accountFields) accountFields.hidden = !showFields || sessionChosen;
     const backButton = document.querySelector('#leaderboard-back');
-    if (backButton) backButton.hidden = remembered || !!activeName;
+    if (backButton) backButton.hidden = !!activeName;
     startButton.hidden = !showFields || !!activeName;
     nickname.disabled = !showFields;
     password.disabled = !showFields || remembered || !!activeName;
     nickname.readOnly = !!account || !!activeName;
     for (const element of passwordRow) if (element) element.hidden = !!account || !!activeName;
     if (logoutButton) logoutButton.hidden = !remembered;
+    const createButton = document.querySelector('#leaderboard-create');
+    if (createButton) createButton.hidden = !authMode || remembered || !!activeName || authMode === 'create';
     password.autocomplete = authMode === 'create' ? 'new-password' : 'current-password';
     const creating = authMode === 'create' && !remembered && !activeName;
     const choosingSeries = creating && createStep === 2;
@@ -90,6 +97,7 @@
   function chooseAuth(mode) {
     if (signingIn) return;
     authMode = mode;
+    guestSelection = false;
     password.value = '';
     createStep = 1; chosenSeries = null;
     for (const choice of seriesChoices) if (choice) choice.checked = false;
@@ -149,7 +157,7 @@
   startForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (signingIn) return;
-    if (!account && !activeName && !authMode) return;
+    if (!activeName && !authMode) return;
     const name = activeName || nickname.value.trim().normalize('NFC');
     if (!validName(name)) {
       nickname.setCustomValidity(t('Kirjoita 1–24 merkin nimimerkki. Käytä kirjaimia, numeroita, välilyöntiä, pistettä, viivaa tai alaviivaa.'));
@@ -204,20 +212,38 @@
     startButton.hidden = true;
     closeButton.hidden = false;
     dialog.classList.remove('session-start');
-    dialog.close();
+    dialog.classList.add('lobby-ready');
     flushPending();
-    window.LPRVerifiedDriving?.identityReady?.();
+    // Login selects an identity, not a verified driving slot. Keep the lobby open.
+    document.dispatchEvent(new Event('lpr-lobby-ready'));
   });
   document.querySelector('#leaderboard-practice')?.addEventListener('click', () => {
     if (signingIn) return;
-    sessionChosen = true; activeName = ''; token = undefined; pending = []; activeLap = null;
+    guestSelection = true; authMode = null; showAccount();
+    guestName.value = localStorage.getItem('lpr-guest-nickname') || '';
+    guestName.focus();
+  });
+  document.querySelector('#leaderboard-guest-back')?.addEventListener('click', () => {
+    guestSelection = false; showAccount();
+  });
+  document.querySelector('#leaderboard-guest-start')?.addEventListener('click', () => {
+    if (signingIn || !guestSelection) return;
+    const name = guestName.value.trim().normalize('NFC');
+    if (!validName(name)) {
+      guestName.setCustomValidity(t('Kirjoita 1–24 merkin nimimerkki. Käytä kirjaimia, numeroita, välilyöntiä, pistettä, viivaa tai alaviivaa.'));
+      guestName.reportValidity(); return;
+    }
+    try { localStorage.setItem('lpr-guest-nickname',name); } catch {}
+    sessionChosen = true; guestSelection = false; activeName = ''; token = undefined; pending = []; activeLap = null;
     password.value = ''; authMode = null; status.textContent = '';
     window.LPRVerifiedDriving?.identityCleared?.();
     window.LPRAnalytics?.identify('');
     showAccount(); closeButton.hidden = false;
-    dialog.classList.remove('session-start'); dialog.close();
-    document.querySelector('#restart-button')?.click?.();
+    dialog.classList.remove('session-start'); dialog.classList.add('lobby-ready');
+    document.dispatchEvent(new Event('lpr-lobby-ready'));
+
   });
+  guestName?.addEventListener('input',()=>guestName.setCustomValidity(''));
   dialog.addEventListener('cancel', event => { if (!sessionChosen) event.preventDefault(); });
   consent.addEventListener('change',()=>window.LPRLeaderboard.consentChanged());
   async function api(path, options) {
@@ -325,6 +351,7 @@
         forget();
         sessionChosen = false; activeName = ''; token = undefined; pending = [];
         window.LPRVerifiedDriving?.identityCleared?.();
+        dialog.classList.remove('lobby-ready');
         showAccount();
         window.LPRLeaderboard.beginSession();
         if (message) status.textContent = t(message);

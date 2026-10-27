@@ -127,14 +127,23 @@
       <div class="leaderboard-entry-grid">
           <form id="leaderboard-start-form" class="leaderboard-panel leaderboard-start-form">
             <h3>Kuljettaja <span id="dashboard-account-name"></span></h3>
-            <button id="leaderboard-practice" class="leaderboard-start" type="button">Harjoittele ilman kirjautumista</button>
+            <button id="leaderboard-drive" class="leaderboard-start" type="button" hidden>Siirry radalle</button>
             <div id="leaderboard-choices" class="leaderboard-choices">
               <button id="leaderboard-login" class="leaderboard-choice" type="button">Kirjaudu sisään</button>
-              <button id="leaderboard-create" class="leaderboard-choice" type="button">Luo käyttäjätunnus</button>
+              <button id="leaderboard-practice" class="leaderboard-choice" type="button">Jatka vierailijana</button>
+            </div>
+            <div id="leaderboard-guest-fields" hidden>
+              <h4>Jatka vierailijana</h4>
+              <label for="leaderboard-guest-name">Nimimerkki</label>
+              <input id="leaderboard-guest-name" maxlength="24" autocomplete="nickname" placeholder="Valitse nimimerkki" />
+              <p>Voit harjoitella ilman tiliä. Kierroksia ei tallenneta virallisiin tuloslistoihin.</p>
+              <button id="leaderboard-guest-start" class="leaderboard-start" type="button">Aloita pelaaminen</button>
+              <button id="leaderboard-guest-back" class="leaderboard-back" type="button">Takaisin</button>
             </div>
             <div id="leaderboard-account-fields" hidden>
             <button id="leaderboard-back" class="leaderboard-back" type="button">Takaisin valikkoon</button>
             <h4 id="leaderboard-account-title">Kirjaudu sisään</h4>
+            <button id="leaderboard-create" class="leaderboard-choice" type="button">Luo uusi käyttäjätunnus</button>
             <p id="leaderboard-create-step" class="leaderboard-create-step" hidden></p>
             <p>Leaderboardiin osallistuminen tallentaa nimimerkin, varmennetut kierrosajat ja ajon tarkastamiseen tarvittavat tiedot. Kehitysanalytiikka on vapaaehtoinen.</p>
             <div id="leaderboard-credentials">

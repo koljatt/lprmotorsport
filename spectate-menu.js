@@ -9,14 +9,14 @@
  const panelHome=document.createComment('active drivers'),appHome=document.createComment('game');
  panel.before(panelHome);app.before(appHome);
  const t=(text,values)=>window.LPRI18n?.t(text,values)??(text==='watchingDriver'?'Seurataan pelaajaa '+values.name:text);
- let busy=false,timer=null,signature=null,selected='',watching=false,hooks=null;
+ let busy=false,timer=null,signature=null,selected='',watchIdentity='',watching=false,hooks=null;
  let requested=new URLSearchParams(location.search).get('spectate');
  let generation=0,pollTimer=null,controller=null,recording=null,anchorTick=0,anchorAt=0;
  const car={};
  function connection(text){$('#spectate-connection').textContent=t(text);$('#spectate-connection').hidden=!text;}
  function markSelected(){for(const a of list.querySelectorAll('a')){if(watching&&a.dataset.session===selected)a.setAttribute('aria-current','true');else a.removeAttribute('aria-current');}}
  function stopWatching(){
-  ++generation;clearTimeout(pollTimer);controller?.abort();controller=null;recording=null;watching=false;
+  ++generation;clearTimeout(pollTimer);controller?.abort();controller=null;recording=null;watchIdentity='';watching=false;
   appHome.after(app);panelHome.after(panel);standingsHome.after(standings);championshipHome.after(championship);view.hidden=true;
   dialog.classList.remove('spectating');document.body.classList.remove('spectating');
   $('#spectate-label').hidden=true;connection('');hooks?.end();markSelected();
@@ -28,7 +28,7 @@
   if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
   event.preventDefault();
   if(watching&&selected===driver.id)return;
-  ++generation;clearTimeout(pollTimer);controller?.abort();controller=null;recording=null;selected=driver.id;
+  ++generation;clearTimeout(pollTimer);controller?.abort();controller=null;recording=null;selected=driver.id;watchIdentity=driver.watchId||driver.id;
   if(!watching){
    watching=true;$('#spectate-game').append(app);sidebar.append(panel,standings,championship);
    view.hidden=false;dialog.classList.add('spectating');document.body.classList.add('spectating');
@@ -45,6 +45,17 @@
    r.inputs.every(f=>Array.isArray(f)&&f.length===7&&f.slice(0,4).every(Number.isFinite)&&f.slice(4).every(v=>typeof v==='boolean'));
  }
  function tickAt(now){return recording?Math.max(recording.frames[0][0],Math.min(recording.frames.at(-1)[0],anchorTick+(now-anchorAt)*.12)):0;}
+ async function reconnect(gen,expiredId){
+  // A crash or restart creates a fresh verified session. Follow the player,
+  // not the expired verification session, until the viewer chooses to leave.
+  const response=await fetch(window.LPRVerificationConfig.service+'/spectate',{cache:'no-store',signal:controller?.signal});
+  if(!response.ok)throw Error('Directory unavailable');
+  const directory=await response.json();
+  if(gen!==generation||selected!==expiredId)return;
+  const replacement=directory.results?.find(d=>d.watchId===watchIdentity&&d.id!==expiredId);
+  if(replacement){selected=replacement.id;markSelected();connection('Yhdistetään kuljettajan uuteen ajoon…');}
+  else connection('Kuljettajan seuraavaa ajoa odotetaan…');
+ }
  async function poll(){
   clearTimeout(pollTimer);if(!watching||document.hidden||controller)return;
   const gen=generation,id=selected,requestController=new AbortController();controller=requestController;
@@ -52,7 +63,7 @@
   try{
    const response=await fetch(window.LPRVerificationConfig.service+'/spectate/'+id,{cache:'no-store',signal:requestController.signal});
    if(gen!==generation)return;
-   if(response.status===410){recording=null;connection('Kuljettajan ajo päättyi. Valitse toinen kuljettaja.');return;}
+   if(response.status===410){recording=null;await reconnect(gen,id);return;}
    if(!response.ok)throw Error();const data=await response.json();if(gen!==generation)return;
    if(data.sceneRevision!==window.LPRDrivingRevision){recording=null;connection('Kuljettajan peliversio poikkeaa katselimesta. Päivitä sivu.');return;}
    if(data.frames?.length<2||!data.inputs?.length){connection('Odotetaan kuljettajan liikkeellelähtöä…');return;}
@@ -84,7 +95,7 @@
    const response=await fetch(window.LPRVerificationConfig.service+'/spectate',{cache:'no-store',signal:AbortSignal.timeout(10000)});
    if(!response.ok)throw Error();const data=await response.json();
    if(!Array.isArray(data.results)||data.results.some(r=>!/^[a-f0-9]{32}$/.test(r.id)||typeof r.nickname!=='string'))throw Error();
-   const next=JSON.stringify(data.results.map(r=>[r.id,r.nickname]));
+   const next=JSON.stringify(data.results.map(r=>[r.id,r.nickname,r.watchId]));
    if(next!==signature){
     const focused=document.activeElement?.dataset.session,fragment=document.createDocumentFragment();
     for(const driver of data.results){

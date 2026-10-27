@@ -801,13 +801,20 @@
     window.LPRLeaderboard?.refresh();
     void window.LPRVerifiedDriving?.refresh();
   });
+  document.querySelector('#leaderboard-drive')?.addEventListener('click', () => {
+    if(window.LPRLeaderboard?.requiresName || window.LPRSpectator?.active)return;
+    ui.dialog.classList.remove('lobby-ready');
+    ui.dialog.close();
+    reset();
+    if(window.LPRLeaderboard?.identity)window.LPRVerifiedDriving?.identityReady?.();
+  });
   document.querySelector('#close-settings').addEventListener('click', () => {
-    if (!window.LPRLeaderboard?.requiresName) ui.dialog.close();
+    if (!window.LPRLeaderboard?.requiresName && !ui.dialog.classList.contains('lobby-ready')) ui.dialog.close();
   });
   window.addEventListener('resize', resize);
   const landscapeDriving = window.matchMedia('(pointer:coarse) and (orientation:landscape), (max-width:900px) and (max-height:500px) and (orientation:landscape)');
   landscapeDriving.addEventListener('change', event => {
-    if (event.matches && ui.dialog.open && !window.LPRLeaderboard?.requiresName && !window.LPRSpectator?.active) ui.dialog.close();
+    if (event.matches && ui.dialog.open && !window.LPRLeaderboard?.requiresName && !ui.dialog.classList.contains('lobby-ready') && !window.LPRSpectator?.active) ui.dialog.close();
   });
   new ResizeObserver(resize).observe(document.querySelector('.game-shell'));
   window.addEventListener('gamepadconnected', event => {
