@@ -92,6 +92,32 @@ async function admin(request,env){
 export async function replayRoute(request,env,url,reply,headers,readBody,revision){
  const privateRoute=url.pathname.startsWith('/api/verified/admin/');
  if(privateRoute&&!await admin(request,env))return reply({error:'Unauthorized'},401);
+ if(privateRoute&&url.pathname==='/api/verified/admin/laps'){
+  if(request.method==='GET'){
+   const series=url.searchParams.get('series')||'human';
+   if(!SERIES.includes(series))return reply({error:'Invalid series'},400);
+   const rows=await env.DB.prepare(`SELECT l.session_id,l.lap,l.nickname,l.lap_ticks,l.issued_ms,
+     l.sector1,l.sector2,l.sector3 FROM verified_laps l
+     WHERE l.revision=? AND ${seriesOf('l.player_hash')}=?
+     ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 100`).bind(revision,series).all();
+   return reply({series,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
+  }
+  if(request.method==='DELETE'){
+   const id=url.searchParams.get('sessionId'),lap=Number(url.searchParams.get('lap'));
+   if(!/^[a-f0-9]{32}$/.test(id||'')||!Number.isSafeInteger(lap)||lap<1||lap>999999)return reply({error:'Invalid lap identifier'},400);
+   const exists=await env.DB.prepare('SELECT 1 FROM verified_laps WHERE session_id=? AND lap=?').bind(id,lap).first();
+   if(!exists)return reply({error:'Lap not found'},404);
+   await env.DB.batch([
+    env.DB.prepare('DELETE FROM verified_reports WHERE session_id=? AND lap=?').bind(id,lap),
+    env.DB.prepare('DELETE FROM verified_replays WHERE session_id=? AND lap=?').bind(id,lap),
+    env.DB.prepare('DELETE FROM championship_laps WHERE session_id=? AND lap=?').bind(id,lap),
+    env.DB.prepare('DELETE FROM verified_laps WHERE session_id=? AND lap=?').bind(id,lap),
+    ...retentionStatements(env.DB,revision)
+   ]);
+   return reply({deleted:true,sessionId:id,lap});
+  }
+  return reply({error:'Method not allowed'},405);
+ }
  const reports=url.pathname.match(/^\/api\/verified\/admin\/replays\/([a-f0-9]{32})\/([1-9][0-9]{0,5})\/reports$/);
  if(reports){
   if(request.method!=='GET')return reply({error:'GET required'},405);
