@@ -56,7 +56,7 @@
     const remembered = !!account;
     const showFields = !!activeName || !!authMode;
     if (guestFields) guestFields.hidden = !guestSelection;
-    if (choices) choices.hidden = showFields;
+    if (choices) choices.hidden = showFields || guestSelection;
     if (accountFields) accountFields.hidden = !showFields;
     const backButton = document.querySelector('#leaderboard-back');
     if (backButton) backButton.hidden = !!activeName;
