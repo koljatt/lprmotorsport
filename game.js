@@ -796,6 +796,7 @@
   document.querySelector('#leaderboard-drive')?.addEventListener('click', () => {
     if(window.LPRLeaderboard?.requiresName || window.LPRSpectator?.active)return;
     ui.dialog.classList.remove('lobby-ready');
+    document.querySelector('#close-settings').hidden=false;
     ui.dialog.close();
     reset();
   });
