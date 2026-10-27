@@ -7,7 +7,7 @@ const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
  constructor({clock=()=>performance.now(),workerCount=1,workerHeapMb=256,executorFactory=options=>new VerificationPool(options),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=2000,idleMs=24000,ttlMs=620000,onMetric=()=>{},signLap=async()=>{throw Error('Missing signer')}}={}){
-  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap,onMetric});this.sessions=new Map();this.creations=[];this.closed=false;
+  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap,onMetric});this.sessions=new Map();this.creations=[];this.closed=false;this.spectatorSalt=randomBytes(32);
   for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
   this.pool=executorFactory({workerCount,workerHeapMb,onLost:id=>{const s=this.sessions.get(id);if(s?.slot)this.invalidate(s,'worker_lost');}});
   this.metricsSince=Date.now();
@@ -134,14 +134,19 @@ class Sessions {
    return reply;
   }catch(error){this.invalidate(s,error.code||'physics');throw error;}
  }
+ watchId(s){
+  // Opaque, server-local identity keeps successive verified sessions linkable
+  // without exposing the private account hash or session credential.
+  return createHash('sha256').update(this.spectatorSalt).update(String(s.identity.playerHash||s.id)).digest('hex').slice(0,32);
+ }
  spectators(id){
   this.sweep();
   const active=[...this.sessions.values()].filter(s=>s.slot&&s.phase==='running'&&s.live);
-  if(!id)return {results:active.map(s=>({id:s.id,nickname:s.identity.nickname,tick:s.ticks})),revision};
+  if(!id)return {results:active.map(s=>({id:s.id,watchId:this.watchId(s),nickname:s.identity.nickname,tick:s.ticks})),revision};
   const s=active.find(s=>s.id===id);
   if(!s)throw fail(410,'session_closed','Driving session has ended');
   return {format:'lpr-live-v1',sceneRevision:revision,hz,lap:s.receipts.get(s.nextSeq-1)?.reply.result.lap||1,
-   nickname:s.identity.nickname,track:s.live.track,frames:s.live.frames,inputs:s.live.inputs,
+   nickname:s.identity.nickname,watchId:this.watchId(s),track:s.live.track,frames:s.live.frames,inputs:s.live.inputs,
    lapStates:s.live.lapStates,bestLapMs:s.live.bestLapMs};
  }
  release(s){s.slot=false;void this.pool.release(s.id);}
