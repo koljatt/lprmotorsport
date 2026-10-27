@@ -56,8 +56,10 @@
     const remembered = !!account;
     const showFields = !!activeName || !!authMode;
     if (guestFields) guestFields.hidden = !guestSelection;
-    if (choices) choices.hidden = showFields || guestSelection;
-    if (accountFields) accountFields.hidden = !showFields;
+    const lobbyDrive=document.querySelector('#leaderboard-drive');
+    if (lobbyDrive) lobbyDrive.hidden=!sessionChosen;
+    if (choices) choices.hidden = showFields || guestSelection || sessionChosen;
+    if (accountFields) accountFields.hidden = !showFields || sessionChosen;
     const backButton = document.querySelector('#leaderboard-back');
     if (backButton) backButton.hidden = !!activeName;
     startButton.hidden = !showFields || !!activeName;
@@ -210,9 +212,10 @@
     startButton.hidden = true;
     closeButton.hidden = false;
     dialog.classList.remove('session-start');
-    dialog.close();
+    dialog.classList.add('lobby-ready');
     flushPending();
-    window.LPRVerifiedDriving?.identityReady?.();
+    // Login selects an identity, not a verified driving slot. Keep the lobby open.
+    document.dispatchEvent(new Event('lpr-lobby-ready'));
   });
   document.querySelector('#leaderboard-practice')?.addEventListener('click', () => {
     if (signingIn) return;
@@ -236,8 +239,9 @@
     window.LPRVerifiedDriving?.identityCleared?.();
     window.LPRAnalytics?.identify('');
     showAccount(); closeButton.hidden = false;
-    dialog.classList.remove('session-start'); dialog.close();
-    document.querySelector('#restart-button')?.click?.();
+    dialog.classList.remove('session-start'); dialog.classList.add('lobby-ready');
+    document.dispatchEvent(new Event('lpr-lobby-ready'));
+
   });
   guestName?.addEventListener('input',()=>guestName.setCustomValidity(''));
   dialog.addEventListener('cancel', event => { if (!sessionChosen) event.preventDefault(); });
@@ -347,6 +351,7 @@
         forget();
         sessionChosen = false; activeName = ''; token = undefined; pending = [];
         window.LPRVerifiedDriving?.identityCleared?.();
+        dialog.classList.remove('lobby-ready');
         showAccount();
         window.LPRLeaderboard.beginSession();
         if (message) status.textContent = t(message);
