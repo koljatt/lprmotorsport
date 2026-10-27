@@ -36,6 +36,44 @@ window.LPRCampus = (() => {
   // Rotate existing samples so the road geometry stays exactly the same.
   const startIndex = Math.round(50 / window.LPRVehicleSpec.metresPerWorldUnit / (length / track.length));
   track.push(...track.splice(0, startIndex));
+  const start={x:track[0].x,y:track[0].y};
+  const startLength=Math.hypot(track[1].x-start.x,track[1].y-start.y);
+  const gantryHalfWidth=road.shoulderOuter+5;
+  const gantryPostHalfWidth=1.5;
+  const finishGate={
+    x:start.x,y:start.y,
+    tangentX:(track[1].x-start.x)/startLength,
+    tangentY:(track[1].y-start.y)/startLength,
+    normalX:-(track[1].y-start.y)/startLength,
+    normalY:(track[1].x-start.x)/startLength,
+    halfWidth:gantryHalfWidth-gantryPostHalfWidth
+  };
+  const trackDistances=[0];
+  for(let i=0;i<track.length;i++) trackDistances.push(trackDistances[i]+Math.hypot(
+    track[(i+1)%track.length].x-track[i].x,track[(i+1)%track.length].y-track[i].y));
+  const launchAlong=trackDistances[track.length]-100/window.LPRVehicleSpec.metresPerWorldUnit;
+  let launchSegment=0;
+  while(trackDistances[launchSegment+1]<launchAlong) launchSegment++;
+  const launchFrom=track[launchSegment],launchTo=track[(launchSegment+1)%track.length];
+  const launchFraction=(launchAlong-trackDistances[launchSegment])/
+    (trackDistances[launchSegment+1]-trackDistances[launchSegment]);
+  const launchPosition={
+    x:launchFrom.x+(launchTo.x-launchFrom.x)*launchFraction,
+    y:launchFrom.y+(launchTo.y-launchFrom.y)*launchFraction,
+    angle:Math.atan2(launchTo.y-launchFrom.y,launchTo.x-launchFrom.x)
+  };
+  function crossesFinishLine(previous,current) {
+    const before=(previous.x-finishGate.x)*finishGate.tangentX+
+      (previous.y-finishGate.y)*finishGate.tangentY;
+    const after=(current.x-finishGate.x)*finishGate.tangentX+
+      (current.y-finishGate.y)*finishGate.tangentY;
+    if(before>0||after<=0)return false;
+    const fraction=-before/(after-before);
+    const x=previous.x+(current.x-previous.x)*fraction;
+    const y=previous.y+(current.y-previous.y)*fraction;
+    const lateral=(x-finishGate.x)*finishGate.normalX+(y-finishGate.y)*finishGate.normalY;
+    return Math.abs(lateral)<=finishGate.halfWidth;
+  }
   const outsideTrackClearance = (x,y,clearance) => {
     const clearanceSquared=clearance*clearance;
     for(let i=0;i<track.length;i++) {
@@ -395,6 +433,10 @@ window.LPRCampus = (() => {
     [80,15,[.57,.59,.55]],[111,15,[.85,.85,.8]],[143,15,[.16,.19,.2]],[105,-35,[.7,.7,.65]]];
   const footprint=(x,y,width,depth,angle=0)=>({minX:x-width/2,maxX:x+width/2,
     minY:y-depth/2,maxY:y+depth/2,angle});
+  const finishPostBounds=[-1,1].map(side=>footprint(
+    finishGate.x+finishGate.normalX*gantryHalfWidth*side,
+    finishGate.y+finishGate.normalY*gantryHalfWidth*side,
+    gantryPostHalfWidth*2,gantryPostHalfWidth*2));
   const vehicleBounds=campusCars.map(car=>{
     const p=world(car.row,car.z);
     return footprint(p.x,p.y,car.width*scale,car.depth*scale,car.angle);
@@ -442,7 +484,7 @@ window.LPRCampus = (() => {
   const poolSite={x:saunaSite.x-57*diagonal,y:saunaSite.y-57*diagonal};
   const poolBounds=footprint(poolSite.x,poolSite.y,28,28);
   const peopleBounds=[];
-  const obstacleBounds=[...buildingBounds,...saleAccessBounds,...treeBounds,...vehicleBounds,...tyreBarrierBounds,poolBounds];
+  const obstacleBounds=[...buildingBounds,...saleAccessBounds,...treeBounds,...vehicleBounds,...finishPostBounds,...tyreBarrierBounds,poolBounds];
   // SI velocities and masses; only positions and mesh coordinates use world units.
   const bodies=[];
   function makeBody(bounds,kind,mass=Infinity,targetBodies=bodies) {
@@ -458,6 +500,7 @@ window.LPRCampus = (() => {
   saleAccessBounds.forEach(b=>makeBody(b,'wall'));
   vehicleBounds.forEach((b,i)=>makeBody(b,i===vehicleBounds.length-1?'sauna':'car',
     i===vehicleBounds.length-1?3500:i===vehicleBounds.length-2?4200:1200));
+  finishPostBounds.forEach(b=>makeBody(b,'wall'));
   const poolBody=makeBody(poolBounds,'pool',2200);
   function registerPerson(index,x,y) {
     if(peopleBounds[index]) return peopleBounds[index].body;
@@ -627,7 +670,8 @@ window.LPRCampus = (() => {
       return {...fields,origin:{...body.origin},spawn:{...body.spawn},dents:body.dents.map(d=>({...d}))};
     });
     const indices=list=>list.map(b=>boundIds.get(b));
-    const definition=freeze({track:campus.track,road:campus.road,length:campus.length,
+    const definition=freeze({track:campus.track,road:campus.road,length:campus.length,finishGate:campus.finishGate,
+      launchPosition:campus.launchPosition,
       saunaSite:{...campus.saunaSite},bonfireSite:{...campus.bonfireSite},poolSite:{...campus.poolSite},
       peopleSites:(campus.peopleSites||[]).map(p=>({...p})),carGeometry:campus.carGeometry,
       bounds:{...campus.bounds},spawns,bodySpawns,
@@ -643,7 +687,9 @@ window.LPRCampus = (() => {
       }
       const localPeople=[];
       const select=ids=>ids.map(i=>localBounds[i]);
-      return {track:definition.track,road:definition.road,length:definition.length,world,
+      return {track:definition.track,road:definition.road,length:definition.length,finishGate:definition.finishGate,
+        launchPosition:definition.launchPosition,
+        crossesFinishLine,world,
         saunaSite:definition.saunaSite,bonfireSite:definition.bonfireSite,poolSite:definition.poolSite,
         peopleSites:definition.peopleSites,carGeometry:definition.carGeometry,bounds:definition.bounds,
         obstacleBounds:localBounds,buildingBounds:select(definition.buildings),treeBounds:select(definition.trees),
@@ -1075,7 +1121,7 @@ window.LPRCampus = (() => {
     // Three small marina jetties on the lakefront.
     for(let i=0;i<3;i++) block(727+i*24,213,5,64,1,[.56,.46,.32],0,'wood');
   }
-  return { track, road, length, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
+  return { track, road, length, finishGate, launchPosition, gantryHalfWidth, crossesFinishLine, finishPostBounds, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
     campusCars, studentCarModels, lakesideCars, vehicleBounds, buildingBounds, obstacleBounds, resolveBoundsCollision, resolveBuildingCollision,
     resolveObstacleCollision, carGeometry, carCollisionParts, tyreBarrier, tyreBarrierBounds,
     prepareSessionFactory,bodies,poolSite,poolBody,registerPerson,movePerson,placeBody,makeBody,stepObstacles,resetObstacles,deformPoint, bounds:{width:5200,height:4400} };

@@ -101,6 +101,8 @@ class Sessions {
    s.ticks=endTick;s.nextSeq++;s.lastAccepted=this.clock();
    if(s.live&&message.live){
     s.live.frames.push(...message.live.frames);s.live.inputs.push(...message.live.inputs);
+     if(message.live.lapStartTick!==undefined&&s.live.lapStates[0]?.lap===1)
+      s.live.lapStates[0].startTick=message.live.lapStartTick;
     s.live.frames=s.live.frames.filter(f=>f[0]>=endTick-600);
     s.live.inputs=s.live.inputs.filter(f=>f[0]>=s.live.frames[0][0]);
     for(const lap of message.laps||[]){

@@ -15,10 +15,11 @@ function runNext(){
    const {world,api}=factory.create();s.world=world;s.api=api;s.recorder=new Recorder(world,revision);s.busy=false;
    reply(task,{result:world.result(),queueMs,live:{track:s.recorder.track,frames:[s.recorder.frame()],inputs:[]}});
   }else{
-   const laps=[],frames=[],inputs=[];let physicsMs=0,replayMs=0;
+   const laps=[],frames=[],inputs=[];let physicsMs=0,replayMs=0,lapStartTick=null;
    for(const input of task.inputs){
     inputs.push([s.world.ticks,...input]);
     const before=performance.now(),event=s.world.step(s.api.decode(input));physicsMs+=performance.now()-before;
+    if(event.started)lapStartTick=s.world.result().lapStartTick;
     const recordStart=performance.now(),recording=s.recorder.step(input,event);replayMs+=performance.now()-recordStart;
     if(s.world.ticks%6===0)frames.push(s.recorder.frames.at(-1));
     if(event.completed)laps.push({lap:event.completed,recording,started:performance.now()});
@@ -27,7 +28,7 @@ function runNext(){
    // Packing a finished replay runs outside the physics queue. Other sessions can
    // advance while zlib works. A session stays busy until its own reply is ready.
    Promise.all(laps.map(async value=>{const replay=await value.recording;replayMs+=performance.now()-value.started;return {...value.lap,replay};})).then(values=>{
-    if(!s.cancelled)reply(task,{result,live:{frames,inputs},laps:values,physicsMs,replayMs,queueMs,wallMs:performance.now()-start});
+    if(!s.cancelled)reply(task,{result,live:{frames,inputs,...(lapStartTick===null?{}:{lapStartTick})},laps:values,physicsMs,replayMs,queueMs,wallMs:performance.now()-start});
    }).catch(()=>{if(!s.cancelled)error(task,'Replay recording failed');}).finally(()=>{s.busy=false;});
   }
  }catch(e){s.busy=false;error(task,e.message);}

@@ -99,13 +99,13 @@
 
 
     const people=root.LPRPeople.create({campus:LPRCampus});
-    let ticks=0,lapStartTick=0,lastSplit=0,stage=0,lap=1,sectors=[],lastLap=null;
+    let ticks=0,lapStartTick=0,lastSplit=0,stage=0,lap=1,sectors=[],lastLap=null,started=false;
     let query;
     function reset(state) {
       LPRCampus.resetObstacles();
-      car=state||{x:track[0].x,y:track[0].y,angle:Math.atan2(track[1].y-track[0].y,track[1].x-track[0].x)};
+      car=state||{...LPRCampus.launchPosition};
       dynamics.reset(car);dynamics.parameters.tractionControlEnabled=true;car.tcEnabled=true;
-      ticks=0;lapStartTick=0;lastSplit=0;stage=0;lap=1;sectors=[];lastLap=null;
+      ticks=0;lapStartTick=0;lastSplit=0;stage=0;lap=1;sectors=[];lastLap=null;started=false;
       people.update(0);query=root.LPRCreateCollisionIndex(LPRCampus.obstacleBounds,160,LPRCampus.collisionIndex);return car;
     }
     function step(input) {
@@ -129,21 +129,24 @@
       if(x!==car.x||y!==car.y){car.vx=0;car.vy=0;}car.x=x;car.y=y;
       car.grassFraction=grassContact(car);car.offroad=car.grassFraction>.5;
       if(![car.x,car.y,car.angle,car.vx,car.vy].every(Number.isFinite))throw Error('Non-finite physics');
-      const nearest=nearestTrack(car.x,car.y);let completed=null,split=null;
+      const nearest=nearestTrack(car.x,car.y);let completed=null,split=null,startedNow=false;
       if(!car.crashed&&nearest.distance<ROAD_HALF&&car.speed>2.2){
-        if(stage===0&&nearest.index>55&&nearest.index<85){stage=1;split=ticks-lapStartTick;}
-        else if(stage===1&&nearest.index>115&&nearest.index<145){stage=2;split=ticks-lapStartTick;}
-        else if(stage===2&&nearest.index>175&&nearest.index<205)stage=3;
-        else if(stage===3&&(nearest.index<5||nearest.index>235)){
+        if(!started&&LPRCampus.crossesFinishLine(previous,car)){
+          started=true;startedNow=true;lapStartTick=ticks;lastSplit=ticks;stage=0;sectors=[];
+        }
+        else if(started&&stage===0&&nearest.index>55&&nearest.index<85){stage=1;split=ticks-lapStartTick;}
+        else if(started&&stage===1&&nearest.index>115&&nearest.index<145){stage=2;split=ticks-lapStartTick;}
+        else if(started&&stage===2&&nearest.index>175&&nearest.index<205)stage=3;
+        else if(started&&stage===3&&LPRCampus.crossesFinishLine(previous,car)){
           split=ticks-lapStartTick;
           completed={lap:lap++,startTick:lapStartTick,endTick:ticks,lapTicks:split,sectorTicks:[...sectors,ticks-lastSplit]};
           lastLap=completed;stage=0;lapStartTick=ticks;
         }
         if(split!==null){if(completed){sectors=[];}else sectors.push(ticks-lastSplit);lastSplit=ticks;}
       }
-      return {completed,split};
+      return {completed,split,started:startedNow};
     }
-    function result(){return {ticks,stage,lap,lapStartTick,sectorTicks:[...sectors],lastLap,crashed:!!car.crashed,
+    function result(){return {ticks,stage,lap,lapStartTick,started,sectorTicks:[...sectors],lastLap,crashed:!!car.crashed,
       state:{x:car.x,y:car.y,angle:car.angle,vx:car.vx,vy:car.vy,yawRate:car.yawRate,damage:car.damage??0}};}
     reset(car);
     return {reset,step,result,get ticks(){return ticks},nearestTrack,grassContact,get car(){return car},dynamics,people,track,trackDistances};

@@ -55,6 +55,12 @@ const {driver}=require('./helpers-driving.cjs');
    assert.equal(document.startTick,signed.startTick);assert.equal(document.endTick,signed.endTick);
    assert.equal(document.frames[0][0],signed.startTick);assert.equal(document.frames.at(-1)[0],signed.endTick);
    assert.equal(document.inputs[0][0],signed.startTick,'Flying laps include their own starting control and server trajectory');
+   const warmup=document.warmupInputs||[];let warmupControl=0;
+   for(let tick=replayWorld.world.ticks;tick<signed.startTick;tick++){
+    while(warmupControl+1<warmup.length&&warmup[warmupControl+1][0]===tick)warmupControl++;
+    replayWorld.world.step(replayWorld.api.decode(warmup[warmupControl].slice(1)));
+   }
+   assert.equal(replayWorld.world.ticks,signed.startTick,'Initial replay warm-up reproduces the launch-to-line run');
    let control=0,frame=1;
    for(let tick=document.startTick;tick<document.endTick;tick++){
     if(control+1<document.inputs.length&&document.inputs[control+1][0]===tick)control++;

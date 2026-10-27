@@ -114,7 +114,7 @@ const EXPECTED_SCENARIO = '307c8dd4';
 
 // Verification server world: the exact code path verification/world.cjs compiles for
 // the session worker must also reproduce the Chromium recording (autopilot lap).
-const EXPECTED_VERIFIED_LAP = { hash: 'f1bf0cb2', laps: 1, lapTicks: [10046] };
+const EXPECTED_VERIFIED_LAP = { hash: '2c0307be', laps: 1, lapTicks: [10040] };
 if (fs.existsSync(path.join(root, 'verification/world.cjs'))) {
   const { createWorld, files } = require('../verification/world.cjs');
   assert.equal(files[0], 'shared/dmath.js', 'verification world must compile dmath.js before the physics');

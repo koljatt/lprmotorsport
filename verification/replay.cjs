@@ -14,16 +14,22 @@ class Recorder {
   this.reset();
  }
  frame(){const r=this.world.result(),s=r.state;return [r.ticks,round(s.x),round(s.y),round(s.angle),round(s.vx),round(s.vy),pose.capture(this.world.car)];}
- reset(){this.startTick=this.world.ticks;this.frames=[this.frame()];this.inputs=[];}
+ reset(){this.startTick=this.world.ticks;this.frames=[this.frame()];this.inputs=[];this.warmupInputs=[];}
  step(input,event){
   const tick=this.world.ticks;
   const last=this.inputs.at(-1);
-  if(!last||!input.every((v,i)=>v===last[i+1]))this.inputs.push([tick-1,...input]);
+  const changed=!last||!input.every((v,i)=>v===last[i+1]);
+  if(event.started){
+   if(changed)this.inputs.push([tick-1,...input]);
+   const warmupInputs=this.inputs;this.reset();this.warmupInputs=warmupInputs;return null;
+  }
+  if(changed)this.inputs.push([tick-1,...input]);
   if(tick%6===0||event.completed)this.frames.push(this.frame());
   if(!event.completed)return null;
   const lap=event.completed;
   const document={format:'lpr-replay-v1',sceneRevision:this.revision,visualState:true,lap:lap.lap,hz:120,sampleHz:20,metresPerWorldUnit,track:this.track,roadHalfWidth:33,
-   startTick:this.startTick,endTick:lap.endTick,frames:this.frames,inputs:this.inputs};
+   startTick:this.startTick,endTick:lap.endTick,frames:this.frames,inputs:this.inputs,
+   ...(this.warmupInputs.length?{warmupInputs:this.warmupInputs}:{})};
   const json=JSON.stringify(document);
   this.reset();
   return this.pack(json);

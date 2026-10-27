@@ -39,7 +39,7 @@
     if (muted && !saunaLife.muted) saunaLife.stopSound();
     saunaLife.muted = muted;
   }
-  const startAngle = Math.atan2(track[1].y - track[0].y, track[1].x - track[0].x);
+  const startAngle = LPRCampus.launchPosition.angle;
   const held = { left: false, right: false, gas: false, brake: false };
   const keyboard = new Set();
   const touchPointers = new Map();
@@ -329,7 +329,7 @@
     window.LPRRaceEffects?.clear();
     clearInput();
     saunaLife.leave();
-    car = { x: track[0].x, y: track[0].y, angle: startAngle, speed: 0, lap: 1, lapStart: 0, stage: 0, started: false, offroad: false, damage:0, crashed:false, pool:false, poolX:0, poolZ:0 };
+    car = { x: LPRCampus.launchPosition.x, y: LPRCampus.launchPosition.y, angle: startAngle, speed: 0, lap: 1, lapStart: 0, lapTimingArmed:false, stage: 0, started: false, offroad: false, damage:0, crashed:false, pool:false, poolX:0, poolZ:0 };
     dynamics.reset(car);
     dynamics.parameters.tractionControlEnabled=true;
     car.tcEnabled=true;
@@ -472,7 +472,7 @@
       lastDeviceUpdate = now;
     }
     if (ui.dialog.open || car.sauna || car.sale || car.pool) {
-      if (car.started) {
+      if (car.lapTimingArmed) {
         car.lapElapsedMs = Math.max(0, now - car.lapStart);
         ui.time.textContent = formatTime(car.lapElapsedMs);
       }
@@ -499,15 +499,15 @@
     input.steer = Math.abs(input.steer) < .04 ? 0 : input.steer;
     if (!car.started && input.gas > .08) {
       car.started = true;
-      window.LPRAnalytics?.event('lap_start');
-      if(!window.LPRVerifiedDriving) window.LPRLeaderboard?.startLap?.();
       car.lapStart = now;
       ui.notice.classList.add('hidden');
     }
     const steps = Math.max(1, Math.ceil(dt * 90));
+    let finishLinePrevious = {x:car.x,y:car.y};
     for (let i = 0; i < steps; i++) {
       car.grassFraction = grassContact(car);
       const previous = { x:car.x, y:car.y, angle:car.angle };
+      finishLinePrevious = previous;
       dynamics.step(car, input, dt / steps, car.grassFraction);
       const collision=window.LPRCampus.resolveObstacleCollision(car, previous, contact=>{
         const damage=dynamics.applyImpact(car,contact.normal,contact.impactMaterial,contact);
@@ -530,16 +530,24 @@
     car.grassFraction = grassContact(car);
     car.offroad = car.grassFraction > .5;
     if (!car.crashed && nearest.distance < ROAD_HALF && car.speed > 2.2) {
-      if (car.stage === 0 && nearest.index > 55 && nearest.index < 85) {
+      if (!car.lapTimingArmed && window.LPRCampus.crossesFinishLine(finishLinePrevious,car)) {
+        car.lapTimingArmed=true;
+        car.lapStart=now;
+        car.stage=0;
+        timing.reset();
+        window.LPRAnalytics?.event('lap_start');
+        if(!window.LPRVerifiedDriving) window.LPRLeaderboard?.startLap?.();
+      }
+      else if (car.lapTimingArmed && car.stage === 0 && nearest.index > 55 && nearest.index < 85) {
         car.stage = 1;
         showSector(now - car.lapStart);
       }
-      else if (car.stage === 1 && nearest.index > 115 && nearest.index < 145) {
+      else if (car.lapTimingArmed && car.stage === 1 && nearest.index > 115 && nearest.index < 145) {
         car.stage = 2;
         showSector(now - car.lapStart);
       }
-      else if (car.stage === 2 && nearest.index > 175 && nearest.index < 205) car.stage = 3;
-      else if (car.stage === 3 && (nearest.index < 5 || nearest.index > 235)) {
+      else if (car.lapTimingArmed && car.stage === 2 && nearest.index > 175 && nearest.index < 205) car.stage = 3;
+      else if (car.lapTimingArmed && car.stage === 3 && window.LPRCampus.crossesFinishLine(finishLinePrevious,car)) {
         const lapTime = now - car.lapStart;
         if (lapTime > 5000) {
           window.LPRAnalytics?.event('lap_complete', { lapMs: Math.round(lapTime) });
@@ -564,8 +572,8 @@
         }
       }
     }
-    if (car.started) ui.time.textContent = formatTime(now - car.lapStart);
-    car.lapElapsedMs=car.started ? Math.max(0,now-car.lapStart) : 0;
+    if (car.lapTimingArmed) ui.time.textContent = formatTime(now - car.lapStart);
+    car.lapElapsedMs=car.lapTimingArmed ? Math.max(0,now-car.lapStart) : 0;
     car.throttleInput=input.gas;
     car.brakeInput=input.brake;
     ui.speed.textContent = String(Math.round(car.speed * 3.6));
@@ -582,7 +590,8 @@
     renderer.peopleTime=result.ticks*1000/120;
     window.LPRVerifiedDriving.step(input,result,event);
     car.stage=result.stage;car.lap=result.lap;
-    car.lapElapsedMs=(result.ticks-result.lapStartTick)*1000/120;
+    car.started=result.started;
+    car.lapElapsedMs=result.started?(result.ticks-result.lapStartTick)*1000/120:0;
     if(event.split!==null)showSector(event.split*1000/120);
     if(event.completed){
       const lapMs=event.completed.lapTicks*1000/120;
@@ -602,10 +611,9 @@
   window.LPRVerifiedDriving?.attach({prepare(){reset({verified:true});ui.notice.classList.add('hidden');},start(){
     reset({verified:true});
     drivingWorld=window.LPRDriving.create({car,dynamics,onImpact:(contact,damage)=>{audio.impact(car.impactSpeed);if(damage>0)showNotice(t("Auto vaurioitui."),2500);}});
-    car.started=true;car.lapStart=performance.now();
+    car.started=false;car.lapTimingArmed=false;car.lapStart=0;
     accumulator=0;lastFrame=performance.now();
     ui.dialog.close();ui.notice.classList.add('hidden');
-    window.LPRAnalytics?.event('lap_start');
   },saved(lapMs){showNotice('Kierrosaika '+formatTime(lapMs)+' tallennettu',3500);}});
 
   let lastPresentation = null;

@@ -5,6 +5,11 @@ const {driver}=require('./helpers-driving.cjs');
 const {Recorder}=require('../verification/replay.cjs');
 (async()=>{
  const factory=createWorldFactory(),a=factory.create(),b=factory.create(),reference=createIsolatedWorld();
+ assert.deepEqual({x:a.world.car.x,y:a.world.car.y,angle:a.world.car.angle},factory.definition.launchPosition,
+  'Pooled verification sessions use the same 100-metre pre-finish launch as browser sessions');
+ assert.deepEqual({x:a.world.car.x,y:a.world.car.y,angle:a.world.car.angle},
+  {x:reference.world.car.x,y:reference.world.car.y,angle:reference.world.car.angle},
+  'Pooled and isolated driving worlds start at the same position');
  assert.strictEqual(a.definition,b.definition);assert.strictEqual(a.world.track,b.world.track);
  assert.strictEqual(a.world.trackDistances,b.world.trackDistances);assert.strictEqual(a.campus.carGeometry,b.campus.carGeometry);
  assert.strictEqual(a.campus.collisionIndex,b.campus.collisionIndex);
@@ -20,7 +25,7 @@ const {Recorder}=require('../verification/replay.cjs');
  const bInitial=JSON.stringify({bodies:b.campus.bodies,result:b.world.result()});
  const spawnsBefore=JSON.stringify(factory.definition);
  const ra=new Recorder(a.world,'shared-state-parity'),rr=new Recorder(reference.world,'shared-state-parity');let laps=0;
- for(let tick=0;tick<24000;tick++){
+ for(let tick=0;tick<30000;tick++){
   const input=driver(reference.world),value=reference.api.encode(input),oldEvent=reference.world.step(input),event=a.world.step(input);
   assert.deepEqual(event,oldEvent);assert.deepEqual(a.world.car,reference.world.car);
   assert.deepEqual(a.world.result(),reference.world.result());
