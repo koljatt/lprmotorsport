@@ -556,3 +556,7 @@ Yhteinen tehdas on otettu tässä haarassa [rajatun säiejoukon](WORKER_POOL.md)
 
 Ajonvarmennuksen säikeiden reititys, vuorottelu, siivous, asetukset ja paikalliset kuormakokeet:
 [WORKER_POOL.md](WORKER_POOL.md). Oletus on yksi laskentasäie ja enintään kaksi ajosessiota.
+
+### Separate administrator keys
+
+The analytics dashboard forwards its authenticated verified-lap controls to the verified Worker. If their administrator keys differ, set `VERIFIED_ADMIN_TOKEN` on the analytics Worker to the verified Worker administrator key. The analytics login continues to use its existing `ANALYTICS_ADMIN_TOKEN`; neither existing key needs to be changed.

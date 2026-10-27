@@ -48,10 +48,12 @@ function client(storage = new Map()) {
   try {
     globalThis.fetch=async(url,options)=>{forwarded.push({url,options});return Response.json({results:[]});};
     assert.equal((await admin('/api/verified/admin/laps?series=bot')).status,200);
+    env.VERIFIED_ADMIN_TOKEN='separate-verified-admin-secret'.repeat(2);
     assert.equal((await admin('/api/verified/admin/laps?reset=1',env.ANALYTICS_ADMIN_TOKEN,'POST')).status,200);
     assert.equal(forwarded[0].url,'https://lpr-verified.panu-musakka.workers.dev/api/verified/admin/laps?series=bot');
     assert.equal(forwarded[0].options.headers.Authorization,'Bearer '+env.ANALYTICS_ADMIN_TOKEN);
     assert.equal(forwarded[1].options.method,'POST');
+    assert.equal(forwarded[1].options.headers.Authorization,'Bearer '+env.VERIFIED_ADMIN_TOKEN,'Independent service admin keys are supported');
     assert.equal(forwarded[1].options.redirect,'error','Credentials cannot follow upstream redirects');
     assert.equal((await admin('/api/verified/admin/laps',env.ANALYTICS_ADMIN_TOKEN,'DELETE')).status,405);
     assert.equal(forwarded.length,2);

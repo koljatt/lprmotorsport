@@ -302,7 +302,7 @@ async function analyticsRoute(request, env, url, reply) {
     // Keep the dashboard same-origin and forward only this authenticated route.
     const target = new URL('https://lpr-verified.panu-musakka.workers.dev/api/verified/admin/laps');
     target.search = url.search;
-    const response = await fetch(target.href, {method:request.method,headers:{Authorization:'Bearer '+bearer},redirect:'error',signal:AbortSignal.timeout(10000)});
+    const response = await fetch(target.href, {method:request.method,headers:{Authorization:'Bearer '+(env.VERIFIED_ADMIN_TOKEN||bearer)},redirect:'error',signal:AbortSignal.timeout(10000)});
     return reply(await response.json(),response.status);
   }
   if (url.pathname === '/api/admin/capacity-history') return capacityHistory(request,env,url,reply);
