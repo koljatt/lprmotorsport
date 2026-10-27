@@ -51,7 +51,7 @@ window.LPRCampus = (() => {
   const trackDistances=[0];
   for(let i=0;i<track.length;i++) trackDistances.push(trackDistances[i]+Math.hypot(
     track[(i+1)%track.length].x-track[i].x,track[(i+1)%track.length].y-track[i].y));
-  const launchAlong=trackDistances[track.length]-100/window.LPRVehicleSpec.metresPerWorldUnit;
+  const launchAlong=trackDistances[track.length]-150/window.LPRVehicleSpec.metresPerWorldUnit;
   let launchSegment=0;
   while(trackDistances[launchSegment+1]<launchAlong) launchSegment++;
   const launchFrom=track[launchSegment],launchTo=track[(launchSegment+1)%track.length];

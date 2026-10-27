@@ -45,8 +45,8 @@ for(let i=0;i<campus.track.length;i++) {
   if(distance<nearestLaunch){nearestLaunch=distance;launchAlong=distances[i]+f*(distances[i+1]-distances[i]);}
 }
 assert(nearestLaunch<1e-8,'The launch position stays on the track');
-assert(Math.abs((distances.at(-1)-launchAlong)*context.window.LPRVehicleSpec.metresPerWorldUnit-100)<.01,
-  'The launch position is 100 metres before the finish line');
+assert(Math.abs((distances.at(-1)-launchAlong)*context.window.LPRVehicleSpec.metresPerWorldUnit-150)<.01,
+  'The launch position is 150 metres before the finish line');
 
 const {world, campus:physicsCampus}=require('../verification/world.cjs').createWorld();
 assert(Math.hypot(world.car.x-physicsCampus.launchPosition.x,world.car.y-physicsCampus.launchPosition.y)<1e-8,

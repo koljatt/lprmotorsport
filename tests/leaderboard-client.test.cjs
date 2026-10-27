@@ -15,7 +15,7 @@ function accountReply(body){
   return {status:201,data:{nickname:account.nickname,token:account.token,expiresAt:Date.now()+7*86400000,created:true,series:account.series}};
 }
 function setup(storage=new Map(),options={}){
-  const nodes=new Map(),calls=[],celebrations=[],handlers=new Map(),identified=[];
+  const nodes=new Map(),calls=[],celebrations=[],handlers=new Map(),identified=[],dispatched=[];
   const network={offline:false,finishOffline:false,status:200,statuses:[],...options};
   const node=id=>{
     if(!nodes.has(id)){
@@ -24,15 +24,15 @@ function setup(storage=new Map(),options={}){
         get textContent(){return text;},set textContent(value){text=value;this.children=[];},
         classList:{add(){},remove(){}},addEventListener:(type,fn)=>events.set(type,fn),
         trigger(type,event={preventDefault(){}}){return events.get(type)?.(event);},
-        append(item){this.children.push(item);},setAttribute(){},setCustomValidity(message){this.validationMessage=message;},
+        append(item){this.children.push(item);},focus(){},setAttribute(){},setCustomValidity(message){this.validationMessage=message;},
         reportValidity(){this.reported=true;},showModal(){this.open=true;},close(){this.open=false;}});
     }
     return nodes.get(id);
   };
-  const context={window:{addEventListener:(type,fn)=>handlers.set(type,fn),LPRAnalytics:{identify:name=>identified.push(name)},
+  const context={Event:class{constructor(type){this.type=type;}},window:{addEventListener:(type,fn)=>handlers.set(type,fn),LPRAnalytics:{identify:name=>identified.push(name)},
     LPRVerificationConfig:{leaderboard:'https://verified.test'},LPRRaceEffects:{celebrate:ms=>celebrations.push(ms)}},crypto:require('node:crypto').webcrypto,AbortSignal,
     setInterval(){},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
-    document:{querySelector:node,createElement:()=>({textContent:'',append(...items){this.textContent+=items.map(item=>item.textContent).join('');}})},
+    document:{querySelector:node,dispatchEvent:event=>dispatched.push(event),createElement:()=>({textContent:'',append(...items){this.textContent+=items.map(item=>item.textContent).join('');}})},
     async fetch(url,request){
       calls.push({url,options:request});
       if(url==='https://verified.test/api/verified/account'){
@@ -56,7 +56,7 @@ function setup(storage=new Map(),options={}){
     }};
   vm.createContext(context);vm.runInContext(source,context);
   const board=context.window.LPRLeaderboard;
-  return {board,node,calls,storage,celebrations,network,handlers,identified,
+  return {board,node,calls,storage,celebrations,network,handlers,identified,dispatched,
     // Select the explicit sign-in or account-creation flow.
     async login(name='Panu',password='salasana',series='human'){
       const creating=!storage.get('lpr-account')&&!serverAccounts.has(name.trim().normalize('NFC').toLowerCase());
@@ -100,7 +100,8 @@ function setup(storage=new Map(),options={}){
   await node('#leaderboard-start-form').trigger('submit');
   assert.equal(accountCalls.at(-1).create,false,'Retrying sign-in never creates an account');
   node('#leaderboard-name').trigger('input');assert.equal(node('#leaderboard-start-label').textContent,'Kirjaudu sisään');
-  await app.login(' Panu ');assert(!board.requiresName);assert(!node('#settings-dialog').open);
+  await app.login(' Panu ');assert(!board.requiresName);assert(node('#settings-dialog').open,'Login keeps the player in the lobby');
+  assert.equal(app.dispatched.at(-1)?.type,'lpr-lobby-ready');
   assert.equal(accountCalls.at(-1).create,true);assert.equal(accountCalls.at(-1).nickname,'Panu');
   assert.equal(accountCalls.at(-1).series,'human');assert.equal(board.identity.series,'human');
   assert.deepEqual(app.identified,['Panu']);assert(node('#leaderboard-name').readOnly);assert(node('#leaderboard-start').hidden);
@@ -123,10 +124,12 @@ function setup(storage=new Map(),options={}){
   const withdrawn=setup();await withdrawn.login();assert(!withdrawn.node('#analytics-consent').checked,'Leaderboard works without analytics');
   withdrawn.node('#analytics-consent').checked=true;withdrawn.node('#analytics-consent').trigger('change');
   const withdrawalIdentity=withdrawn.board.identity.token;withdrawn.node('#analytics-consent').checked=false;withdrawn.node('#analytics-consent').trigger('change');
-  assert(!withdrawn.board.requiresName);assert.equal(withdrawn.board.identity.token,withdrawalIdentity);assert(!withdrawn.node('#settings-dialog').open,'Analytics withdrawal does not interrupt play or leaderboard participation');
+  assert(!withdrawn.board.requiresName);assert.equal(withdrawn.board.identity.token,withdrawalIdentity);assert(withdrawn.node('#settings-dialog').open,'Analytics withdrawal keeps the player in the lobby');
   const guest=setup();const beforeGuestCalls=accountCalls.length;
   await guest.node('#leaderboard-practice').trigger('click');
-  assert(!guest.board.requiresName);assert.equal(guest.board.identity,null);assert(!guest.node('#settings-dialog').open);
+  assert(guest.board.requiresName);guest.node('#leaderboard-guest-name').value='Practice Guest';
+  await guest.node('#leaderboard-guest-start').trigger('click');
+  assert(!guest.board.requiresName);assert.equal(guest.board.identity,null);assert(guest.node('#settings-dialog').open,'Guest selection keeps the player in the lobby');
   assert.equal(accountCalls.length,beforeGuestCalls,'Practice never creates or signs in to an account');
   await guest.lap();assert.equal(guest.starts().length,0);assert.equal(guest.finishes().length,0,'Practice laps are never submitted');
   guest.node('#settings-dialog').showModal();await guest.login('Guest upgrade');
@@ -135,7 +138,7 @@ function setup(storage=new Map(),options={}){
   const reopened=setup(storage);assert(reopened.board.requiresName);assert.equal(reopened.node('#leaderboard-name').value,'Panu');
   assert(reopened.node('#leaderboard-name').readOnly);assert(reopened.node('#leaderboard-password').hidden,'A remembered account does not ask for the password');
   assert.equal(reopened.node('#leaderboard-logout').hidden,false);
-  await reopened.login('Panu','');assert(!reopened.board.requiresName,'Each page load still needs an explicit start');
+  reopened.node('#leaderboard-login').trigger('click');await reopened.login('Panu','');assert(!reopened.board.requiresName,'Each page load still needs an explicit start');
   assert.equal(reopened.board.identity.token,token);assert.equal(accountCalls.length,calls);
   const rememberedPractice=setup(storage);await rememberedPractice.node('#leaderboard-practice').trigger('click');
   assert.equal(rememberedPractice.board.identity,null,'A remembered account does not opt practice into leaderboard participation');
@@ -183,7 +186,7 @@ function setup(storage=new Map(),options={}){
   retry.network.finishOffline=false;await retry.handlers.get('online')();
   assert.equal(retry.finishes().at(-1).options.body,queued);assert.equal(retry.queue().length,0);
   const saved=setup(new Map(),{finishOffline:true});await saved.login('Reload');await saved.lap();
-  const reload=setup(saved.storage);await reload.login('Reload');await reload.handlers.get('online')();
+  const reload=setup(saved.storage);reload.node('#leaderboard-login').trigger('click');await reload.login('Reload');await reload.handlers.get('online')();
   assert.equal(reload.starts().length,0);assert.equal(reload.finishes().length,1,'Reload retries the original ticket rather than starting again');
   assert.equal(reload.queue().length,0);assert.deepEqual(reload.identified,['Reload']);
   const failure=setup(new Map(),{finishOffline:true});await failure.login();await failure.lap();await failure.lap();
@@ -209,7 +212,7 @@ function setup(storage=new Map(),options={}){
   assert.equal(bot.node('#leaderboard-series-step').hidden,true);assert.equal(bot.node('#leaderboard-name').value,'Robotti','Back keeps the credentials');
   await bot.node('#leaderboard-start-form').trigger('submit');await bot.chooseSeries('bot');
   assert.equal(accountCalls.at(-1).series,'bot');assert.equal(bot.board.identity.series,'bot');assert.equal(bot.account().series,'bot');
-  const returning=setup(botStorage);returning.board.beginSession();await returning.node('#leaderboard-start-form').trigger('submit');
+  const returning=setup(botStorage);returning.board.beginSession();returning.node('#leaderboard-login').trigger('click');await returning.node('#leaderboard-start-form').trigger('submit');
   assert.equal(returning.board.identity.series,'bot','A remembered login keeps its series');
   console.log('PASS: required identity, server start/finish hooks, no retrospective tickets, cancellation, moderation, safe rendering, records, password accounts with confirmed nickname claims, bot series choice, offline play, durable retries and terminal/transient queue errors');
 })().catch(error=>{console.error(error);process.exitCode=1;});

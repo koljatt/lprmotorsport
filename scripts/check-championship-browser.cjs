@@ -46,6 +46,7 @@ const {launchBrowser}=require('./browser.cjs');
   assert.match(await page.textContent('#daily-race-countdown'),/^Time left \d{2}:\d{2}:\d{2}$/);
   assert.equal(await page.textContent('#daily-race-time'),'41.667 s');
   await page.evaluate(()=>{document.querySelector('#settings-dialog').close();document.querySelector('#dashboard-details').hidden=true;});
+  await page.locator('#chat-close').click();
   const before=await page.textContent('#daily-race-countdown');
   await page.waitForTimeout(2000);
   assert.notEqual(await page.textContent('#daily-race-countdown'),before,'Countdown ticks with menu closed');
@@ -66,7 +67,19 @@ const {launchBrowser}=require('./browser.cjs');
   await page.unroute(api+'/api/verified/championship?series=human');
   await page.evaluate(()=>document.dispatchEvent(new Event('lpr-lap-saved')));
   await page.waitForFunction(()=>document.querySelector('#daily-race-hud').dataset.stale==='false',null,{polling:20});
+  await page.route(api+'/api/verified/championship?series=human',async route=>{
+   const response=await route.fetch(),result=await response.json();
+   result.fastest=[{nickname:'Eve',speedRank:1,bestMs:40000},{nickname:'Panu',speedRank:1,bestMs:40000}];
+   await route.fulfill({json:result});
+  });
+  await page.evaluate(()=>document.dispatchEvent(new Event('lpr-lap-saved')));
+  await page.waitForFunction(()=>document.querySelector('#daily-race-name').textContent==='Eve, Panu',null,{polling:20});
+  assert.equal(await page.textContent('#daily-race-leader-label'),'Joint leaders');
+  await page.evaluate(()=>Object.defineProperty(window.LPRLeaderboard,'identity',{get:()=>({nickname:'Bot driver',series:'bot'})}));
+  await page.waitForFunction(()=>document.querySelector('#daily-race-name').textContent==='No results yet',null,{polling:20});
+  assert.equal(await page.textContent('#daily-race-label'),'Daily race · Bots');
+  assert.equal(await page.textContent('#daily-race-time'),'');
   assert.deepEqual(errors,[]);
-  console.log('PASS: real daily API in desktop/mobile Chromium, rankings, date selection, today shortcut, localization and no script errors');
+  console.log('PASS: daily API, desktop/mobile/landscape driving HUD, countdown and leader polling with menu closed, history isolation, ties, series, outage recovery and localization');
  }finally{await browser?.close();await new Promise(r=>{board.close(r);board.closeAllConnections();});await new Promise(r=>{game.close(r);game.closeAllConnections();});}
 })().catch(e=>{console.error(e);process.exitCode=1;});

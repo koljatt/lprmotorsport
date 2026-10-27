@@ -1,6 +1,6 @@
 # LPR Lap Challenge
 
-Ajo alkaa noin 100 metriä ennen maalilinjaa. Ensimmäinen ylitys on kiihdytysjakso, ja varsinainen kierrosaika alkaa vasta maalilinjalta, jotta ensimmäinenkin mitattu kierros alkaa vauhdista.
+Ajo alkaa noin 150 metriä ennen maalilinjaa. Ensimmäinen ylitys on kiihdytysjakso, ja varsinainen kierrosaika alkaa vasta maalilinjalta, jotta ensimmäinenkin mitattu kierros alkaa vauhdista.
 
 K?ynnist? paikallinen peli ja ajovarmennus komennolla `npm run dev:verified`
 ja avaa http://127.0.0.1:8000. **Pelaa ilman leaderboardia** ei vaadi tili?.
