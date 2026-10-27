@@ -793,6 +793,13 @@
     window.LPRLeaderboard?.refresh();
     void window.LPRVerifiedDriving?.refresh();
   });
+  document.querySelector('#leaderboard-drive')?.addEventListener('click', () => {
+    if(window.LPRLeaderboard?.requiresName || window.LPRSpectator?.active)return;
+    ui.dialog.classList.remove('lobby-ready');
+    ui.dialog.close();
+    reset();
+    if(window.LPRLeaderboard?.chatIdentity?.())window.LPRVerifiedDriving?.identityReady?.();
+  });
   document.querySelector('#close-settings').addEventListener('click', () => {
     if (!window.LPRLeaderboard?.requiresName) ui.dialog.close();
   });
