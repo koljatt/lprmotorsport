@@ -1,0 +1,112 @@
+(() => {
+  'use strict';
+  const releases = [
+    {
+      id: '2026-10-27-major-update',
+      date: '27.10.2026',
+      fi: {
+        title: 'Uutta LPR Motorsissa',
+        items: [
+          ['Pelaajatilit', 'Kirjaudu sisään tai pelaa vierailijana. Tuloslistoille osallistuminen edellyttää kirjautumista.'],
+          ['Liveseuranta', 'Näe radalla ajavat kuljettajat ja seuraa ajoa suorana.'],
+          ['Päivän kilpailu', 'Kilpaile nopeimmista kierroksista ja kierrosmääristä sekä kuukauden pisteistä.'],
+          ['Chat ja kilpailuluokat', 'Keskustele muiden kanssa. Ihmisillä ja boteilla on omat sarjansa.']
+        ]
+      },
+      en: {
+        title: 'What’s new in LPR Motors',
+        items: [
+          ['Player accounts', 'Sign in or continue as a guest. You must sign in to enter the leaderboards.'],
+          ['Live spectating', 'See who is driving and watch their runs live.'],
+          ['Daily competitions', 'Race for fastest laps, most laps and monthly championship points.'],
+          ['Chat and racing classes', 'Talk to other drivers. Humans and bots have separate standings.']
+        ]
+      }
+    }
+  ];
+  const storageKey = 'lpr-release-notes-seen';
+  const menu = document.querySelector('#settings-dialog');
+  const openButton = document.querySelector('#release-notes-open');
+  const panel = document.querySelector('#release-notes-panel');
+  const closeButton = document.querySelector('#release-notes-close');
+  const title = document.querySelector('#release-notes-title');
+  const meta = document.querySelector('#release-notes-meta');
+  const list = document.querySelector('#release-notes-list');
+  if (!menu || !openButton || !panel || !closeButton || !title || !meta || !list) return;
+
+  const latest = releases[0];
+  let shownInSession = false;
+  let previousFocus = null;
+  function language() {
+    return document.documentElement.lang?.toLowerCase().startsWith('en') ? 'en' : 'fi';
+  }
+  function readSeen() {
+    try { return localStorage.getItem(storageKey); } catch { return null; }
+  }
+  function markSeen() {
+    try { localStorage.setItem(storageKey, latest.id); } catch {}
+    openButton.classList.remove('release-notes-unread');
+  }
+  function render() {
+    const lang = language();
+    const release = latest[lang];
+    title.textContent = release.title;
+    meta.textContent = latest.date;
+    openButton.textContent = lang === 'en' ? 'What’s new' : 'Mitä uutta?';
+    closeButton.textContent = lang === 'en' ? 'Close' : 'Sulje';
+    list.replaceChildren();
+    for (const [heading, description] of release.items) {
+      const item = document.createElement('li');
+      const strong = document.createElement('strong');
+      const body = document.createElement('p');
+      strong.textContent = heading;
+      body.textContent = description;
+      item.append(strong, body);
+      list.append(item);
+    }
+  }
+  function hide() {
+    if (panel.hidden) return;
+    panel.hidden = true;
+    if (previousFocus?.isConnected) previousFocus.focus();
+    previousFocus = null;
+  }
+  function show() {
+    if (!menu.open || !panel.hidden) return;
+    previousFocus = document.activeElement;
+    render();
+    panel.hidden = false;
+    markSeen();
+    closeButton.focus();
+  }
+  function eligibleForAutomaticDisplay() {
+    // Show only on the initial menu, never during an active drive.
+    return menu.open && menu.classList.contains('session-start') &&
+      !window.LPRSpectator?.active && readSeen() !== latest.id && !shownInSession;
+  }
+  function sync() {
+    render();
+    openButton.classList.toggle('release-notes-unread', readSeen() !== latest.id);
+    if (!menu.open) { hide(); return; }
+    if (eligibleForAutomaticDisplay()) { shownInSession = true; show(); }
+  }
+  openButton.addEventListener('click', show);
+  closeButton.addEventListener('click', hide);
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); hide(); }
+    if (event.key !== 'Tab') return;
+    const focusable = [...panel.querySelectorAll('button:not([disabled]), a[href]')];
+    if (!focusable.length) return;
+    if (event.shiftKey && document.activeElement === focusable[0]) {
+      event.preventDefault(); focusable.at(-1).focus();
+    } else if (!event.shiftKey && document.activeElement === focusable.at(-1)) {
+      event.preventDefault(); focusable[0].focus();
+    }
+  });
+  menu.addEventListener('click', event => {
+    if (event.target === menu && !panel.hidden) hide();
+  });
+  new MutationObserver(sync).observe(menu, {attributes:true,attributeFilter:['open','class']});
+  new MutationObserver(render).observe(document.documentElement, {attributes:true,attributeFilter:['lang']});
+  sync();
+})();
