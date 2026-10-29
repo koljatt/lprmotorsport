@@ -1,3 +1,4 @@
+import {databaseNowSQL} from './guests.mjs';
 import {seriesOf,SERIES} from './replays.mjs';
 // Daily competition is separate from the all-time lap leaderboard. No browser scores.
 export const championshipSchema=[
@@ -32,8 +33,21 @@ export function championshipEntry(db,lap,now,login){
  return db.prepare(`INSERT OR IGNORE INTO championship_laps(session_id,lap,day,player_hash,revision,lap_ticks)
  SELECT session_id,lap,?,player_hash,revision,lap_ticks FROM verified_laps
  WHERE session_id=? AND lap=? AND issued_ms=? AND player_hash=? AND revision=? AND lap_ticks=? AND CAST(strftime('%s','now') AS INTEGER)*1000<?
- AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>? AND secret_hash=? AND player_hash=?)`)
+ AND EXISTS (SELECT 1 FROM verified_accounts a WHERE a.player_hash=verified_laps.player_hash)
+ AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>MAX(?,${databaseNowSQL}) AND secret_hash=? AND player_hash=?)`)
  .bind(day,lap.sessionId,lap.lap,lap.issuedAt,lap.playerHash,lap.revision,lap.lapTicks,dayStart(shiftDay(day,1)),login.tokenHash,now,login.secretHash,lap.playerHash);
+}
+// Enrollment is part of account creation's transaction. Never backfill a closed
+// day, even in an active month. Monthly scores derive from finalized daily rows.
+export function claimChampionshipEntries(db,playerHash,key,passwordHash,now,login){
+ const day=competitionDay(now),start=dayStart(day),end=dayStart(shiftDay(day,1));
+ return db.prepare(`INSERT OR IGNORE INTO championship_laps(session_id,lap,day,player_hash,revision,lap_ticks)
+ SELECT l.session_id,l.lap,?,l.player_hash,l.revision,l.lap_ticks FROM verified_laps l
+ WHERE l.player_hash=? AND l.issued_ms>=? AND l.issued_ms<?
+ AND CAST(strftime('%s','now') AS INTEGER)*1000<?
+ AND EXISTS (SELECT 1 FROM verified_accounts a WHERE a.player_hash=l.player_hash AND a.name_key=? AND a.password_hash=?)
+ AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND player_hash=l.player_hash AND secret_hash=? AND expires_ms>MAX(?,${databaseNowSQL}))`)
+ .bind(day,playerHash,start,end,end,key,passwordHash,login.tokenHash,login.secretHash,now);
 }
 export function scoreDays(rows,from,to){
  const byDay=new Map(),streaks=new Map();

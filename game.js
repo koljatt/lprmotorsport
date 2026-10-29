@@ -380,7 +380,7 @@
   }
 
   function readInput() {
-    if(window.LPRChat?.typing)return {steer:0,gas:0,brake:0,analog:false,wheel:false};
+    if(window.LPRChat?.typing||document.activeElement?.closest?.('#guest-register-form'))return {steer:0,gas:0,brake:0,analog:false,wheel:false};
     const pad = currentPad();
     if (pad && (!activePad || activePad.id !== pad.id)) {
       activePad = pad;

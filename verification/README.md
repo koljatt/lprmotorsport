@@ -1,3 +1,7 @@
+# Verified guest update
+
+See [VERIFIED-GUESTS.md](VERIFIED-GUESTS.md) for authenticated guest driving, secure account promotion, open-day championship enrollment, replay archives, migration and staging validation. This supersedes older account-only and replay-retention descriptions below.
+
 # 3D-pelin palvelinvarmennus
 
 ## Suora ajonseuranta

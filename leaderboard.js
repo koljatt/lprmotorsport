@@ -26,7 +26,7 @@
   const accountTitle = document.querySelector('#leaderboard-account-title');
   const accountEndpoint = () => window.LPRVerificationConfig?.leaderboard;
   const accountKey = 'lpr-account';
-  let sessionChosen = false, guestSelection = false, guestNickname = '';
+  let sessionChosen = false, guestSelection = false, guestNickname = '', guestSession = null;
   const guestFields = document.querySelector('#leaderboard-guest-fields');
   const guestName = document.querySelector('#leaderboard-guest-name');
   let token, activeName = '', activeSeries = 'human', account = null, authMode = null, signingIn = false;
@@ -52,6 +52,8 @@
   } catch {}
   function showAccount() {
     window.LPRChat?.identityChanged?.();
+    const promotionPanel = document.querySelector('#guest-register-panel');
+    if (promotionPanel) promotionPanel.hidden = !guestSession;
     // A remembered sign-in skips the password, but every page load still needs Aloita ajo.
     const remembered = !!account;
     const showFields = !!activeName || !!authMode;
@@ -67,7 +69,7 @@
     password.disabled = !showFields || remembered || !!activeName;
     nickname.readOnly = !!account || !!activeName;
     for (const element of passwordRow) if (element) element.hidden = !!account || !!activeName;
-    if (logoutButton) logoutButton.hidden = !remembered;
+    if (logoutButton) logoutButton.hidden = !remembered && !guestSession;
     const createButton = document.querySelector('#leaderboard-create');
     if (createButton) createButton.hidden = !authMode || remembered || !!activeName || authMode === 'create';
     password.autocomplete = authMode === 'create' ? 'new-password' : 'current-password';
@@ -95,7 +97,7 @@
     if (choice.checked) { chosenSeries = seriesOf(choice.value); status.textContent = ''; }
   });
   function chooseAuth(mode) {
-    if (signingIn) return;
+    if (signingIn || guestSession) return;
     authMode = mode;
     guestSelection = false;
     guestNickname = '';
@@ -140,11 +142,12 @@
   });
   password.addEventListener('input', () => password.setCustomValidity(''));
   logoutButton?.addEventListener('click', async () => {
-    if (!account || signingIn) return;
+    const current = guestSession || account;
+    if (!current || signingIn) return;
     signingIn = true; logoutButton.disabled = true; startButton.disabled = true;
     try {
       const response = await fetch(accountEndpoint() + '/api/verified/logout', {
-        method: 'POST', headers: { Authorization: 'Bearer ' + account.token }, signal: AbortSignal.timeout(15000)
+        method: 'POST', headers: { Authorization: 'Bearer ' + current.token }, signal: AbortSignal.timeout(15000)
       });
       if (!response.ok) throw Error('Logout failed');
       window.LPRLeaderboard.signOut();
@@ -228,23 +231,82 @@
   document.querySelector('#leaderboard-guest-back')?.addEventListener('click', () => {
     guestSelection = false; showAccount();
   });
-  document.querySelector('#leaderboard-guest-start')?.addEventListener('click', () => {
+  document.querySelector('#leaderboard-guest-start')?.addEventListener('click', async () => {
     if (signingIn || !guestSelection) return;
     const name = guestName.value.trim().normalize('NFC');
     if (!validName(name)) {
       guestName.setCustomValidity(t('Kirjoita 1–24 merkin nimimerkki. Käytä kirjaimia, numeroita, välilyöntiä, pistettä, viivaa tai alaviivaa.'));
       guestName.reportValidity(); return;
     }
-    try { localStorage.setItem('lpr-guest-nickname',name); } catch {}
-    guestNickname = name;
-    sessionChosen = true; guestSelection = false; activeName = ''; token = undefined; pending = []; activeLap = null;
+    const series = document.querySelector('#leaderboard-guest-series')?.value;
+    if (!['human','bot'].includes(series)) { status.textContent = t('Valitse ihmisten tai bottien sarja.'); return; }
+    signingIn = true;
+    try {
+      let remembered;
+      try { remembered = JSON.parse(localStorage.getItem('lpr-guest-session') || 'null'); } catch {}
+      const resume = remembered?.nickname === name && remembered?.series === series && remembered.expiresAt > Date.now() && validToken(remembered.token);
+      const response = await fetch(accountEndpoint() + '/api/verified/guest', {
+        method:'POST',headers:{'Content-Type':'application/json',...(resume?{Authorization:'Bearer '+remembered.token}:{})},
+        body:JSON.stringify({nickname:name,series}),signal:AbortSignal.timeout(15000)
+      });
+      if (!response.ok) {
+        if (response.status === 401) localStorage.removeItem('lpr-guest-session');
+        throw Object.assign(Error('Guest session unavailable'),{status:response.status});
+      }
+      const data = await response.json();
+      if (!validName(data.nickname) || !validToken(data.token) || !Number.isSafeInteger(data.expiresAt) || data.expiresAt <= Date.now() || !['human','bot'].includes(data.series) || typeof data.guest !== 'boolean') throw Error('Invalid guest session');
+      guestSession = data;
+      try { localStorage.setItem('lpr-guest-session',JSON.stringify(data)); localStorage.setItem('lpr-guest-nickname',name); } catch {}
+    } catch (error) { status.textContent = signInError(error.status,name); return; }
+    finally { signingIn = false; }
+    guestNickname = guestSession.nickname;
+    activeSeries = guestSession.series;
+    const resumedAccount = !guestSession.guest ? guestSession : null;
+    sessionChosen = true; guestSelection = false; activeName = ''; token = guestSession.token; pending = []; activeLap = null;
     password.value = ''; authMode = null; status.textContent = '';
     window.LPRVerifiedDriving?.identityCleared?.();
-    window.LPRAnalytics?.identify('');
+    if (resumedAccount) {
+      account = resumedAccount; activeName = resumedAccount.nickname; guestSession = null; guestNickname = '';
+      try { localStorage.setItem(accountKey,JSON.stringify(account)); localStorage.removeItem('lpr-guest-session'); } catch {}
+      nickname.value = activeName;
+      window.LPRVerifiedDriving?.identityPromoted?.({...resumedAccount,guest:true});
+    }
+    window.LPRAnalytics?.identify(activeName);
     showAccount(); closeButton.hidden = true;
     dialog.classList.remove('session-start'); dialog.classList.add('lobby-ready');
     document.dispatchEvent(new Event('lpr-lobby-ready'));
 
+  });
+  document.querySelector('#guest-register-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!guestSession || signingIn) return;
+    const original = guestSession;
+    const result = document.querySelector('#guest-register-status');
+    const name = document.querySelector('#guest-register-name').value.trim().normalize('NFC');
+    const field = document.querySelector('#guest-register-password');
+    const secret = field.value;
+    if (!validName(name) || [...secret].length < 8 || secret.length > 128) { result.textContent = 'Tarkista nimimerkki ja salasana.'; return; }
+    signingIn = true;
+    try {
+      const response = await fetch(accountEndpoint() + '/api/verified/account', {
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+original.token},
+        body:JSON.stringify({nickname:name,password:secret,create:true,series:original.series}),signal:AbortSignal.timeout(15000)
+      });
+      if (!response.ok) throw Object.assign(Error('Registration failed'),{status:response.status});
+      const data = await response.json();
+      if (guestSession !== original) return;
+      if (!validName(data.nickname) || data.token !== original.token || !data.claimed || data.guest) throw Error('Invalid promotion');
+      account = {nickname:data.nickname,token:data.token,expiresAt:data.expiresAt,series:data.series};
+      activeName = data.nickname; activeSeries = data.series; token = data.token;
+      guestNickname = ''; guestSession = null; field.value = '';
+      try { localStorage.setItem(accountKey,JSON.stringify(account)); localStorage.removeItem('lpr-guest-session'); } catch {}
+      nickname.value = activeName;
+      window.LPRVerifiedDriving?.identityPromoted?.(original);
+      window.LPRAnalytics?.identify(activeName);
+      showAccount();
+      document.dispatchEvent(new Event('lpr-lap-saved'));
+    } catch (error) { result.textContent = signInError(error.status,name); }
+    finally { signingIn = false; }
   });
   guestName?.addEventListener('input',()=>guestName.setCustomValidity(''));
   dialog.addEventListener('cancel', event => { if (!sessionChosen || dialog.classList.contains('lobby-ready')) event.preventDefault(); });
@@ -340,9 +402,10 @@
     },15000);
     window.addEventListener('online', flushPending);
     window.LPRLeaderboard = {
-      get identity() { return activeName && token ? {nickname:activeName,token,series:activeSeries} : null; },
+      get identity() { return guestSession ? {...guestSession,guest:true} : activeName && token ? {nickname:activeName,token,series:activeSeries} : null; },
       // Chat authentication is independent of choosing a verified driving session.
       get chatIdentity() {
+        if (guestSession) return {...guestSession,guest:true};
         if (guestNickname) return {nickname:guestNickname,guest:true};
         if (account?.expiresAt > Date.now()) return {nickname:account.nickname,token:account.token,series:account.series};
         return null;
@@ -353,7 +416,8 @@
       // Called when the server no longer accepts the remembered account (deleted or revoked).
       signOut(message) {
         forget();
-        sessionChosen = false; activeName = ''; guestNickname = ''; token = undefined; pending = [];
+        sessionChosen = false; activeName = ''; guestNickname = ''; guestSession = null; token = undefined; pending = [];
+        try { localStorage.removeItem('lpr-guest-session'); } catch {}
         window.LPRVerifiedDriving?.identityCleared?.();
         dialog.classList.remove('lobby-ready');
         showAccount();

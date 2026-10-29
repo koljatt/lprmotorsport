@@ -19,10 +19,10 @@ function fixture(){
   enqueue(){} async flush(){}
  }
  const document={get hidden(){return hidden;},querySelector:node,addEventListener(name,fn){this[name]=fn;}};
- const window={LPRVerificationConfig:{service:'service',leaderboard:'board'},LPRDrivingRevision:'rev',LPRLeaderboard:{identity,signOut:message=>signOuts.push(message)},
+ const window={LPRVerificationConfig:{service:'service',leaderboard:'board'},LPRDrivingRevision:'rev',LPRLeaderboard:{get identity(){return {...identity};},signOut:message=>signOuts.push(message)},
   LPRLiveClient:Client,LPRDriving:{encode:i=>i},addEventListener(){}};
  const countdowns=[];let retry;
- const context={window,document,fetch,AbortSignal,console,setInterval(){},setTimeout(fn,ms){if(ms===3000){retry=fn;return null;}countdowns.push(ms);return setImmediate(fn);},clearTimeout(handle){if(handle)clearImmediate(handle);},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};
+ const context={window,document,fetch,AbortSignal,console,setInterval(){},setTimeout(fn,ms){if(ms===3000){retry=fn;return null;}countdowns.push(ms);return setImmediate(fn);},clearTimeout(handle){if(handle)clearImmediate(handle);},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}};
  vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(__dirname,'../verified-driving.js'),'utf8'),context);
  let starts=0,prepares=0;window.LPRVerifiedDriving.attach({prepare(){prepares++;},start(){starts++;}});
  return {api:window.LPRVerifiedDriving,nodes,node,storage,requests,clients,identity,document,countdowns,signOuts,setLapStatus(value){lapStatus=value;},setStartStatus(value){startStatus=value;},
@@ -30,6 +30,23 @@ function fixture(){
 }
 const settle=()=>new Promise(r=>setImmediate(r));
 (async()=>{
+ const guest=fixture();guest.identity.guest=true;
+ const guestKey='lpr-verified-guest-receipts:'+guest.identity.token;
+ guest.storage.set(guestKey,JSON.stringify([{receipt:'guest-receipt',replay:'guest-replay'}]));
+ guest.setLapStatus(503);const guestStart=guest.api.start();guest.ready();await guestStart;await settle();
+ const formerGuest={...guest.identity};
+ guest.identity.guest=false;guest.identity.nickname='Claimed Driver';
+ guest.api.identityPromoted(formerGuest);await settle();
+ assert.equal(guest.starts,1,'Promotion never starts a new physics session');assert(guest.api.active);
+ assert.equal(guest.storage.has(guestKey),false,'Guest outbox moves only after the account outbox is durable');
+ assert.equal(JSON.parse(guest.storage.get('lpr-verified-account-receipts:claimed driver'))[0].receipt,'guest-receipt');
+ guest.setLapStatus(200);await guest.api.refresh();await settle();
+ assert.equal(JSON.parse(guest.storage.get('lpr-verified-account-receipts:claimed driver')).length,0,'Claimed pending uploads retry with original evidence');
+ const recoveredGuest=fixture();const oldGuest={nickname:'Guest',token:recoveredGuest.identity.token,guest:true};
+ recoveredGuest.storage.set('lpr-verified-guest-receipts:'+oldGuest.token,JSON.stringify([{receipt:'lost-response-receipt',replay:'lost-response-replay'}]));
+ recoveredGuest.api.identityPromoted(oldGuest);await settle();
+ assert(recoveredGuest.requests.some(r=>r.url.endsWith('/laps')&&JSON.parse(r.options.body).receipt==='lost-response-receipt'),'Reload after a lost claim response recovers the guest outbox');
+ assert.equal(recoveredGuest.starts,0,'Recovering a claim response does not allocate a driving session');
  const expired=fixture(),receiptKey='lpr-verified-account-receipts:driver';
  expired.storage.set(receiptKey,JSON.stringify(['expiry-pending-receipt']));
  expired.setLapStatus(401);expired.api.identityReady();for(let i=0;i<8;i++)await settle();

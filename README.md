@@ -60,6 +60,15 @@ tuloslistan ajaksi ja pelin menettäessä kohdistuksen. Äänet tuotetaan
 selaimen Web Audio API:lla ilman ladattavia äänitiedostoja.
 Äänten toimintatestit: `npm run test:audio`.
 
+## Verified guest records
+
+Guests now use authenticated sessions and the same authoritative verification as
+accounts. Official results display `Nickname (vierailija)`. Register during the
+same active session to retain the original records and enroll eligible laps in
+the open Helsinki daily competition; finalized competitions stay unchanged.
+Architecture, migration, evidence retention, tests and staging validation:
+[verification/VERIFIED-GUESTS.md](verification/VERIFIED-GUESTS.md).
+
 ## Rataeditori
 
 Avaa erillinen rataeditori osoitteessa `http://localhost:8000/tools/track-editor/editor.html`.

@@ -49,12 +49,15 @@
   return null;
  }
  const snapshots=new Map(),pending=[];
- const key=()=>`lpr-verified-account-receipts:${identity?.nickname.normalize('NFC').toLowerCase()}`;
+ const key=()=>identity?.guest?`lpr-verified-guest-receipts:${identity.token}`:`lpr-verified-account-receipts:${identity?.nickname.normalize('NFC').toLowerCase()}`;
  const persist=()=>{try{localStorage.setItem(key(),JSON.stringify(pending));}catch{
   // Keep full artifacts in this tab; a receipt alone is never eligible for TOP 10.
   console.warn('Uusintajono ei mahdu selaimen tallennustilaan. Pidä välilehti auki, kunnes lähetys onnistuu.');
  }};
 
+ function restoreGuestQueue(){
+  try{const saved=JSON.parse(localStorage.getItem(key())||'[]');if(Array.isArray(saved))for(const item of saved.slice(0,20))if(item&&typeof item.receipt==='string'&&item.receipt.length<=4096&&typeof item.replay==='string'&&item.replay.length<=900000&&!pending.some(v=>v.receipt===item.receipt))pending.push(item);}catch{}
+ }
  function restore(){
   const chosen=window.LPRLeaderboard.identity;if(!chosen)return;
   if(identity?.token!==chosen.token)pending.length=0;
@@ -213,6 +216,16 @@
  function sync(){restore();return save();}
  setInterval(()=>{if(!document.hidden&&document.querySelector('#settings-dialog').open)void sync();},15000);
  window.LPRVerifiedDriving.identityCleared=()=>{cancel(null);identity=null;pending.length=0;};
+ window.LPRVerifiedDriving.identityPromoted=formerGuest=>{
+  if(!identity&&formerGuest){identity={...formerGuest,guest:true};restoreGuestQueue();}
+  const oldKey=key(),chosen=window.LPRLeaderboard.identity;
+  if(!chosen||chosen.token!==identity?.token)return;
+  identity=chosen;
+  // Move the whole upload queue without touching the running physics client.
+  restore();persist();
+  try{if(localStorage.getItem(key())===JSON.stringify(pending))localStorage.removeItem(oldKey);}catch{}
+  void save();void refresh();
+ };
  window.LPRVerifiedDriving.identityReady=()=>{restore();showSeries(window.LPRLeaderboard.identity?.series);if(identity){void save();void start();}};
  document.addEventListener('visibilitychange',()=>{
   if(document.hidden){autoRetryAllowed=false;cancel();}

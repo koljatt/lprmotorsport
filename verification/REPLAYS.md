@@ -44,28 +44,16 @@ komentodatasta ja puutteesta näytetään huomautus. Uusiin tallenteisiin tiedot
 tallennetaan palvelimella. WebGL:n puuttuessa katselin kertoo syyn ja käyttää
 vaihtoehtoista 2D-ratakuvaa. Automaattista bottipisteytystä ei lisätty.
 
-## Säilytys ja ylläpito
+## Replay retention and administration
 
-`verified_replays` on erillinen taulu: tulokset säilyvät `verified_laps`-taulussa.
-
-- Tietokantaan säilytetään **kummastakin sarjasta (ihmiset, botit) nykyisen fysiikkarevision
-  20 nopeimman** kierroksen uusinnat (`REPLAY_LIMIT` tiedostossa `cloudflare/replays.mjs`), samassa
-  järjestyksessä kuin tuloslista. Muut tallenteet poistetaan, myös vanhojen revisioiden ja poistettujen
-  tilien, ellei tallenne odota tarkastusta. Tulokset säilyvät `verified_laps`-taulussa ilman tallennetta.
-- Jos kierros ei mahdu oman sarjansa 20 parhaan joukkoon, sen tallennetta ei kirjoiteta lainkaan.
-  Nopeampi kierros syrjäyttää hitaimman säilytetyn tallenteen samassa D1-transaktiossa.
-  Tilankäyttö on siis noin 2 × 20 × 550 kB ≈ 22 MB sekä tarkastusta odottavat tallenteet.
-- TOP 10:een päässyt tallenne saa `pinned=1`-merkinnän ja on julkinen niin kauan kuin se
-  säilyy sarjansa 20 parhaan joukossa. Sijat 11–20 ilman merkintää näkyvät vain ylläpidolle.
-- Ylläpito voi merkitä tallenteen `flagged` (tarkastettava), `reviewed`
-  (tarkastettu) tai `unreviewed` (ei tarkastettu). Merkintä ei poista tulosta eikä väitä
-  pelaajaa botiksi. `flagged`-tallenne säilyy myös 20 parhaan ulkopuolella (ei julkisena),
-  kunnes ylläpito vaihtaa tilan; seuraava siivous poistaa sen sitten normaalisti.
-- Vanhan revision tallennetta ei palauteta julkisesta katselurajapinnasta, vaikka fyysinen
-  siivous olisi vielä tekemättä. Sarake `expires_ms` säilyy skeemassa, mutta sitä ei käytetä.
-- Siivous tapahtuu kierrosten tallennuksen yhteydessä, sarjan vaihdon yhteydessä ja Worker Cron Triggerillä.
-  Ajastettu siivous ei tee mitään, jos Workerin revisio puuttuu. **Väärä
-  `SIMULATION_REVISION` poistaa kaikki tarkastusta odottamattomat tallenteet**, koska ne tulkitaan vanhan revision tallenteiksi.
+The retention policy is documented in [VERIFIED-GUESTS.md](VERIFIED-GUESTS.md#replay-policy-and-diagnostics).
+Each series retains its current fastest twenty recordings, plus flagged/excluded
+recordings. Recordings that have ever reached the public top ten are archived
+permanently, including across revisions and series changes. Their public pin may
+be cleared, but automatic cleanup never deletes their evidence. Administrators
+can retrieve archives from old revisions. Original lap rows and newly accepted
+signed receipts remain even when a non-public replay is not retained. Monitor
+archive growth; the previous fixed-size storage estimate no longer applies.
 
 ## Sarjat: ihmiset ja botit
 

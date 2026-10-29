@@ -35,6 +35,11 @@ function setup(storage=new Map(),options={}){
     document:{querySelector:node,dispatchEvent:event=>dispatched.push(event),createElement:()=>({textContent:'',append(...items){this.textContent+=items.map(item=>item.textContent).join('');}})},
     async fetch(url,request){
       calls.push({url,options:request});
+      if(url==='https://verified.test/api/verified/guest'){
+        const body=JSON.parse(request.body);
+        if(network.accountOffline)throw Error('offline');
+        return {ok:true,status:201,json:async()=>({nickname:body.nickname,series:body.series,token:'e'.repeat(64),expiresAt:Date.now()+86400000,guest:true})};
+      }
       if(url==='https://verified.test/api/verified/account'){
         accountCalls.push(JSON.parse(request.body));
         if(network.accountOffline)throw Error('offline');
@@ -127,14 +132,13 @@ function setup(storage=new Map(),options={}){
   assert(!withdrawn.board.requiresName);assert.equal(withdrawn.board.identity.token,withdrawalIdentity);assert(withdrawn.node('#settings-dialog').open,'Analytics withdrawal keeps the player in the lobby');
   const guest=setup();const beforeGuestCalls=accountCalls.length;
   await guest.node('#leaderboard-practice').trigger('click');
-  assert(guest.board.requiresName);guest.node('#leaderboard-guest-name').value='Practice Guest';
+  assert(guest.board.requiresName);guest.node('#leaderboard-guest-name').value='Practice Guest';guest.node('#leaderboard-guest-series').value='human';
   await guest.node('#leaderboard-guest-start').trigger('click');
-  assert(!guest.board.requiresName);assert.equal(guest.board.identity,null);assert(guest.node('#settings-dialog').open,'Guest selection keeps the player in the lobby');
+  assert(!guest.board.requiresName);assert.equal(guest.board.identity.guest,true);assert.equal(guest.board.identity.token,'e'.repeat(64));assert(guest.node('#settings-dialog').open,'Guest selection keeps the player in the lobby');
   assert.equal(guest.board.chatIdentity.nickname,'Practice Guest');assert.equal(guest.board.chatIdentity.guest,true,'Guest nickname is available to chat without creating an account');
   assert.equal(accountCalls.length,beforeGuestCalls,'Practice never creates or signs in to an account');
   await guest.lap();assert.equal(guest.starts().length,0);assert.equal(guest.finishes().length,0,'Practice laps are never submitted');
-  guest.node('#settings-dialog').showModal();await guest.login('Guest upgrade');
-  assert(guest.board.identity,'Practice can later opt in to the leaderboard without analytics');
+  assert.equal(guest.node('#guest-register-panel').hidden,false,'A guest can register while driving');
   const calls=accountCalls.length;
   const reopened=setup(storage);assert(reopened.board.requiresName);assert.equal(reopened.node('#leaderboard-name').value,'Panu');
   assert(reopened.node('#leaderboard-name').readOnly);assert(reopened.node('#leaderboard-password').hidden,'A remembered account does not ask for the password');
