@@ -4,10 +4,13 @@ const http=require('node:http');
 async function createLocalLeaderboard({secret,revision,database=':memory:',origins='http://localhost:8000,http://127.0.0.1:8000',passwordIterations,adminToken=process.env.ANALYTICS_ADMIN_TOKEN}={}){
  const {default:worker,schema}=await import('../cloudflare/verified-worker.mjs');
  const db=new DatabaseSync(database);for(const sql of schema)db.exec(sql);
- const binding={async batch(statements){db.exec('BEGIN');try{const result=[];for(const statement of statements)result.push(await statement.run());db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}},prepare(sql){let values=[];return {
+ // D1 batches cannot interleave. Execute synchronous SQLite statements without
+ // yielding so concurrent local HTTP requests have the same atomic boundary.
+ const binding={async batch(statements){db.exec('BEGIN');try{const result=statements.map(statement=>statement.execute());db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}},prepare(sql){let values=[];return {
   bind(...args){values=args;return this;},async first(){return db.prepare(sql).get(...values)||null;},
   async all(){return {results:db.prepare(sql).all(...values)};},
-  async run(){return {meta:{changes:Number(db.prepare(sql).run(...values).changes)}};}
+  execute(){return {meta:{changes:Number(db.prepare(sql).run(...values).changes)}};},
+  async run(){return this.execute();}
  };}};
  const env={DB:binding,VERIFICATION_SECRET:secret,SIMULATION_REVISION:revision,GAME_ORIGINS:origins,ANALYTICS_ADMIN_TOKEN:adminToken,...(passwordIterations?{PASSWORD_ITERATIONS:String(passwordIterations)}:{})};
  const server=http.createServer(async(req,res)=>{

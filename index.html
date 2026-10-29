@@ -12,7 +12,7 @@
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
     <link rel="stylesheet" href="styles.css?v=track-record-20261027" />
-    <link rel="stylesheet" href="3d.css?v=track-record-20261027" />
+    <link rel="stylesheet" href="3d.css?v=verified-guests-20261029" />
     <link rel="stylesheet" href="dashboard.css?v=viewport-chat-20261027" />
     <link rel="stylesheet" href="release-notes.css?v=20261027-language-switch" />
     <script src="i18n.js?v=track-record-20261027" defer></script>
@@ -36,17 +36,17 @@
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
     <script src="analytics.js?v=expiring-sessions-20261025" defer></script>
-    <script src="leaderboard.js?v=chat-presence-20261026" defer></script>
+    <script src="leaderboard.js?v=verified-guests-20261029" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
-    <script src="verified-driving.js?v=next-20261026" defer></script>
+    <script src="verified-driving.js?v=verified-guests-20261029" defer></script>
     <script src="track-record.js?v=20261027" defer></script>
     <script src="championship.js?v=daily-hud-20261027" defer></script>
     <script src="dashboard.js?v=viewport-chat-20261027" defer></script>
-    <script src="chat.js?v=chat-dock-20261027" defer></script>
+    <script src="chat.js?v=verified-guests-20261029" defer></script>
     <script src="replay-pose.js" defer></script>
     <script src="spectate-menu.js?v=native-view-20261027" defer></script>
-    <script src="game.js?v=track-record-20261027" defer></script>
+    <script src="game.js?v=verified-guests-20261029" defer></script>
     <script src="release-notes.js?v=20261027" defer></script>
   </head>
   <body>
@@ -139,7 +139,9 @@
               <h4>Jatka vierailijana</h4>
               <label for="leaderboard-guest-name">Nimimerkki</label>
               <input id="leaderboard-guest-name" maxlength="24" autocomplete="nickname" placeholder="Valitse nimimerkki" />
-              <p>Voit harjoitella ilman tiliä. Kierroksia ei tallenneta virallisiin tuloslistoihin.</p>
+              <p>Varmennetut kierrokset tallennetaan virallisiin tuloksiin nimellä (vierailija). Voit luoda tilin tämän istunnon aikana ja säilyttää kierroksesi. Vierailija ei saa kisapisteitä. Ajoasi voi seurata suorana.</p>
+              <label for="leaderboard-guest-series">Sarja</label>
+              <select id="leaderboard-guest-series"><option value="">Valitse sarja</option><option value="human">Ihmiset</option><option value="bot">Botit</option></select>
               <button id="leaderboard-guest-start" class="leaderboard-start" type="button">Aloita pelaaminen</button>
               <button id="leaderboard-guest-back" class="leaderboard-back" type="button">Takaisin</button>
             </div>
@@ -254,5 +256,17 @@
         </div>
       </section>
     </dialog>
+    <details id="guest-register-panel" class="guest-register-panel" hidden>
+      <summary>Luo tili ja säilytä kierroksesi</summary>
+      <form id="guest-register-form">
+        <p>Rekisteröidy tämän vierailijaistunnon aikana. Ajo jatkuu normaalisti. Sarja säilyy. Tänään ajetut varmennetut kierrokset lasketaan avoimeen päiväkisaan. Suljetut kisat eivät muutu.</p>
+        <label for="guest-register-name">Tilin nimimerkki</label>
+        <input id="guest-register-name" required maxlength="24" autocomplete="username" />
+        <label for="guest-register-password">Salasana</label>
+        <input id="guest-register-password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" />
+        <button type="submit">Luo tili</button>
+        <p id="guest-register-status" role="status"></p>
+      </form>
+    </details>
   </body>
 </html>

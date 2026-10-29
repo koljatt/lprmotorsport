@@ -25,6 +25,47 @@ async function hash(value) {
 }
 const validName = value => typeof value==='string' && /^[\p{L}\p{N} _.-]{1,24}$/u.test(value);
 const validPlayer = value => typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
+// A guest is a durable principal, not a nickname. Promotion adds an account with
+// the SAME player_hash; immutable laps and signed evidence never need rewriting.
+const guestSchema=[
+ `CREATE TABLE IF NOT EXISTS verified_guests (
+ player_hash TEXT PRIMARY KEY,nickname TEXT NOT NULL,created_ms INTEGER NOT NULL)`,
+ `CREATE TABLE IF NOT EXISTS verified_lap_evidence (
+ session_id TEXT NOT NULL,lap INTEGER NOT NULL,receipt TEXT NOT NULL,replay_hash TEXT NOT NULL,accepted_ms INTEGER NOT NULL,
+ PRIMARY KEY(session_id,lap))`,
+ `CREATE TABLE IF NOT EXISTS verified_record_archive (
+ session_id TEXT NOT NULL,lap INTEGER NOT NULL,PRIMARY KEY(session_id,lap))`,
+ `CREATE TABLE IF NOT EXISTS verified_lap_upload_failures (
+ session_id TEXT NOT NULL,lap INTEGER NOT NULL,reason TEXT NOT NULL,at_ms INTEGER NOT NULL,
+ PRIMARY KEY(session_id,lap))`
+];
+// SQLite's clock closes expiry races while hashing passwords or waiting for D1.
+const databaseNowSQL="(CAST(strftime('%s','now') AS INTEGER)*1000+CAST(substr(strftime('%f','now'),4,3) AS INTEGER))";
+const guestNameSQL=`COALESCE(a.nickname,g.nickname || ' (vierailija)')`;
+const principalJoins=`LEFT JOIN verified_accounts a ON a.player_hash=l.player_hash
+ LEFT JOIN verified_guests g ON g.player_hash=l.player_hash`;
+const principalExists=`(a.player_hash IS NOT NULL OR g.player_hash IS NOT NULL)`;
+async function sessionOwner(db,token,secret,now=Date.now()){
+ if(!validPlayer(token))return null;
+ return db.prepare(`SELECT COALESCE(a.nickname,g.nickname) nickname,s.player_hash,s.expires_ms,
+ CASE WHEN a.player_hash IS NULL THEN 1 ELSE 0 END guest FROM verified_login_sessions s
+ LEFT JOIN verified_accounts a ON a.player_hash=s.player_hash
+ LEFT JOIN verified_guests g ON g.player_hash=s.player_hash
+ WHERE s.token_hash=? AND s.expires_ms>MAX(?,${databaseNowSQL}) AND s.secret_hash=?
+ AND (a.player_hash IS NOT NULL OR g.player_hash IS NOT NULL)`)
+ .bind(await hash(token),now,await hash(secret)).first();
+}
+async function identityReply(db,owner,token){
+ return {nickname:owner.nickname,token,expiresAt:owner.expires_ms,guest:!!owner.guest,series:(await db.prepare('SELECT series FROM verified_account_series WHERE player_hash=?').bind(owner.player_hash).first())?.series||'human'};
+}
+// Only authenticated, signature-validated lap identifiers reach this audit log.
+async function uploadFailure(db,lap,reason,login){
+ await db.prepare(`INSERT INTO verified_lap_upload_failures(session_id,lap,reason,at_ms)
+ SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM verified_login_sessions
+ WHERE token_hash=? AND expires_ms>MAX(?,${databaseNowSQL}) AND secret_hash=? AND player_hash=?)
+ ON CONFLICT(session_id,lap) DO UPDATE SET reason=excluded.reason,at_ms=excluded.at_ms`)
+ .bind(lap.sessionId,lap.lap,reason,Date.now(),login.tokenHash,Date.now(),login.secretHash,lap.playerHash).run();
+}
 const replaySchema=[
  `CREATE TABLE IF NOT EXISTS verified_replays (
  session_id TEXT NOT NULL,lap INTEGER NOT NULL,payload TEXT NOT NULL,payload_hash TEXT NOT NULL,
@@ -47,21 +88,24 @@ const moderationSchema=[
 replaySchema.push(...moderationSchema);
 // Accounts without a row belong to the human series.
 const seriesOf=player=>`COALESCE((SELECT series FROM verified_account_series WHERE player_hash=${player}),'human')`;
-// Each series keeps its own fastest recordings on the current revision; everything else is deleted
-// unless it is awaiting review.
+// Each series keeps its current fastest recordings; previously public evidence is archived
+// permanently so retention cannot destroy a restorable official record.
 const REPLAY_LIMIT=20;
 const ranked=`FROM verified_laps l JOIN verified_replays r USING(session_id,lap)
- JOIN verified_accounts a ON a.player_hash=l.player_hash WHERE l.revision=? AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap)`;
+ ${principalJoins} WHERE ${principalExists} AND l.revision=? AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap)`;
 const order='ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap';
 const top=limit=>SERIES.map(()=>`SELECT session_id,lap FROM (SELECT l.session_id,l.lap ${ranked} ${order} LIMIT ${limit})`).join(' UNION ALL ');
 const topValues=revision=>SERIES.flatMap(series=>[revision,series]);
 function retentionStatements(db,revision){
  const kept=top(REPLAY_LIMIT),values=topValues(revision);
  return [
+  // Preserve all previously public evidence, including older revisions.
+  db.prepare('INSERT OR IGNORE INTO verified_record_archive SELECT session_id,lap FROM verified_replays WHERE pinned=1'),
   // Sticky pin: a top-ten recording stays public while it remains among its series' retained set.
   db.prepare(`UPDATE verified_replays SET pinned=1 WHERE (session_id,lap) IN (${top(10)})`).bind(...values),
+  db.prepare('INSERT OR IGNORE INTO verified_record_archive SELECT session_id,lap FROM verified_replays WHERE pinned=1'),
   db.prepare(`UPDATE verified_replays SET pinned=0 WHERE pinned=1 AND (session_id,lap) NOT IN (${kept})`).bind(...values),
-  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND (session_id,lap) NOT IN (${kept}) AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=verified_replays.session_id AND x.lap=verified_replays.lap)`).bind(...values),
+  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND NOT EXISTS (SELECT 1 FROM verified_record_archive e WHERE e.session_id=verified_replays.session_id AND e.lap=verified_replays.lap) AND (session_id,lap) NOT IN (${kept}) AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=verified_replays.session_id AND x.lap=verified_replays.lap)`).bind(...values),
   db.prepare('DELETE FROM verified_reports WHERE (session_id,lap) NOT IN (SELECT session_id,lap FROM verified_replays)')
  ];
 }
@@ -75,7 +119,7 @@ async function replayStatements(env,lap,data,now,login){
    (session_id,lap,payload,payload_hash,expires_ms) SELECT ?,?,?,?,?
    WHERE EXISTS (SELECT 1 FROM verified_laps WHERE session_id=? AND lap=?)
    AND (SELECT COUNT(*) FROM (SELECT 1 ${ranked} AND (l.lap_ticks,l.issued_ms,l.session_id,l.lap)<(?,?,?,?) LIMIT ${REPLAY_LIMIT}))<${REPLAY_LIMIT}
-   ${login?`AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>? AND secret_hash=? AND player_hash=?)`:''}`)
+   ${login?`AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>MAX(?,${databaseNowSQL}) AND secret_hash=? AND player_hash=?)`:''}`)
    .bind(lap.sessionId,lap.lap,data.replay,lap.replayHash,lap.issuedAt+30*86400000,lap.sessionId,lap.lap,
     lap.revision,await seriesFor(env.DB,lap.playerHash),lap.lapTicks,lap.issuedAt,lap.sessionId,lap.lap,
     ...(login?[login.tokenHash,Date.now(),login.secretHash,lap.playerHash]:[])));
@@ -119,6 +163,38 @@ async function admin(request,env){
 async function replayRoute(request,env,url,reply,headers,readBody,revision){
  const privateRoute=url.pathname.startsWith('/api/verified/admin/');
  if(privateRoute&&!await admin(request,env))return reply({error:'Unauthorized'},401);
+ if(privateRoute&&url.pathname==='/api/verified/admin/lap-status'){
+  if(request.method!=='GET')return reply({error:'GET required'},405);
+  const id=url.searchParams.get('sessionId'),lap=Number(url.searchParams.get('lap'));
+  if(!/^[a-f0-9]{32}$/.test(id||'')||!Number.isSafeInteger(lap)||lap<1)return reply({error:'Invalid lap identifier'},400);
+  const row=await env.DB.prepare(`SELECT l.session_id,l.lap,l.revision,l.issued_ms,l.lap_ticks,
+   ${guestNameSQL} nickname,${seriesOf('l.player_hash')} series,
+   r.pinned,r.payload_hash,x.reason exclusion,e.receipt,e.replay_hash,
+   CASE WHEN a.player_hash IS NOT NULL THEN 'account' WHEN g.player_hash IS NOT NULL THEN 'guest' ELSE 'unknown' END owner_type,
+   CASE WHEN ar.session_id IS NULL THEN 0 ELSE 1 END archived
+   FROM verified_laps l ${principalJoins}
+   LEFT JOIN verified_replays r USING(session_id,lap)
+   LEFT JOIN verified_lap_exclusions x USING(session_id,lap)
+   LEFT JOIN verified_lap_evidence e USING(session_id,lap)
+   LEFT JOIN verified_record_archive ar USING(session_id,lap)
+   WHERE l.session_id=? AND l.lap=?`).bind(id,lap).first();
+  const failure=await env.DB.prepare('SELECT reason,at_ms FROM verified_lap_upload_failures WHERE session_id=? AND lap=?').bind(id,lap).first();
+  if(!row)return reply({status:failure?'upload_rejected':'not_received',sessionId:id,lap,failure,detail:'No accepted upload. Inspect client upload queue and verification server diagnostics.'});
+  const reasons=[];
+  if(row.owner_type==='unknown')reasons.push('unknown_owner');
+  if(row.revision!==revision)reasons.push('old_revision');
+  if(row.exclusion)reasons.push('excluded:'+row.exclusion);
+  if(!row.payload_hash)reasons.push('replay_not_retained');
+  else if(!row.pinned)reasons.push('outside_public_set');
+  let rank=null;
+  if(!reasons.length){
+   const better=await env.DB.prepare(`SELECT COUNT(*) n ${ranked} AND r.pinned=1
+    AND (l.lap_ticks,l.issued_ms,l.session_id,l.lap)<(?,?,?,?)`)
+    .bind(revision,row.series,row.lap_ticks,row.issued_ms,id,lap).first();
+   rank=better.n+1;if(rank>10)reasons.push('outside_top_ten');
+  }
+  return reply({...row,status:reasons.length?'not_listed':'listed',rank,reasons,last_upload_failure:failure});
+ }
  if(privateRoute&&url.pathname==='/api/verified/admin/laps'){
   if(request.method==='GET'){
    const series=url.searchParams.get('series')||'human';
@@ -184,7 +260,7 @@ async function replayRoute(request,env,url,reply,headers,readBody,revision){
   }
   if(request.method!=='GET')return reply({error:'GET required'},405);
   const r=await env.DB.prepare(`SELECT r.payload FROM verified_replays r JOIN verified_laps l USING(session_id,lap)
-   WHERE r.session_id=? AND r.lap=? AND ${isAdmin?"(l.revision=? OR r.review='flagged')":'l.revision=? AND r.pinned=1'}`)
+   WHERE r.session_id=? AND r.lap=? AND ${isAdmin?"(? IS NOT NULL)":'l.revision=? AND r.pinned=1'}`)
    .bind(id,Number(lap),revision).first();
   if(!r)return reply({error:'Recording unavailable'},404);
   const bytes=Uint8Array.from(atob(r.payload),c=>c.charCodeAt(0));
@@ -195,7 +271,7 @@ async function replayRoute(request,env,url,reply,headers,readBody,revision){
   if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)return reply({error:'Invalid offset'},400);
   const flagged=url.searchParams.get('flagged')==='1';
   const rows=await env.DB.prepare(`SELECT l.session_id,l.lap,l.nickname,l.revision,l.lap_ticks,l.sector1,l.sector2,l.sector3,l.issued_ms,
-   CASE WHEN r.session_id IS NOT NULL AND (l.revision=? OR r.review='flagged') THEN 1 ELSE 0 END AS replay_available,r.pinned,r.review,length(r.payload) AS bytes,
+   CASE WHEN r.session_id IS NOT NULL AND (? IS NOT NULL) THEN 1 ELSE 0 END AS replay_available,r.pinned,r.review,length(r.payload) AS bytes,
    ${seriesOf('l.player_hash')} AS series,
    (SELECT COUNT(*) FROM verified_reports p WHERE p.session_id=l.session_id AND p.lap=l.lap) AS reports
    FROM verified_laps l LEFT JOIN verified_replays r USING(session_id,lap)
@@ -237,8 +313,21 @@ function championshipEntry(db,lap,now,login){
  return db.prepare(`INSERT OR IGNORE INTO championship_laps(session_id,lap,day,player_hash,revision,lap_ticks)
  SELECT session_id,lap,?,player_hash,revision,lap_ticks FROM verified_laps
  WHERE session_id=? AND lap=? AND issued_ms=? AND player_hash=? AND revision=? AND lap_ticks=? AND CAST(strftime('%s','now') AS INTEGER)*1000<?
- AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>? AND secret_hash=? AND player_hash=?)`)
+ AND EXISTS (SELECT 1 FROM verified_accounts a WHERE a.player_hash=verified_laps.player_hash)
+ AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>MAX(?,${databaseNowSQL}) AND secret_hash=? AND player_hash=?)`)
  .bind(day,lap.sessionId,lap.lap,lap.issuedAt,lap.playerHash,lap.revision,lap.lapTicks,dayStart(shiftDay(day,1)),login.tokenHash,now,login.secretHash,lap.playerHash);
+}
+// Enrollment is part of account creation's transaction. Never backfill a closed
+// day, even in an active month. Monthly scores derive from finalized daily rows.
+function claimChampionshipEntries(db,playerHash,key,passwordHash,now,login){
+ const day=competitionDay(now),start=dayStart(day),end=dayStart(shiftDay(day,1));
+ return db.prepare(`INSERT OR IGNORE INTO championship_laps(session_id,lap,day,player_hash,revision,lap_ticks)
+ SELECT l.session_id,l.lap,?,l.player_hash,l.revision,l.lap_ticks FROM verified_laps l
+ WHERE l.player_hash=? AND l.issued_ms>=? AND l.issued_ms<?
+ AND CAST(strftime('%s','now') AS INTEGER)*1000<?
+ AND EXISTS (SELECT 1 FROM verified_accounts a WHERE a.player_hash=l.player_hash AND a.name_key=? AND a.password_hash=?)
+ AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND player_hash=l.player_hash AND secret_hash=? AND expires_ms>MAX(?,${databaseNowSQL}))`)
+ .bind(day,playerHash,start,end,end,key,passwordHash,login.tokenHash,login.secretHash,now);
 }
 function scoreDays(rows,from,to){
  const byDay=new Map(),streaks=new Map();
@@ -318,13 +407,14 @@ async function newSession(db,account,secret){
   .bind(await hash(token),account.player_hash,await hash(secret),now,expiresAt).run();
  return {nickname:account.nickname,token,expiresAt,series:await seriesFor(db,account.player_hash)};
 }
-const schema=[...replaySchema,
+const schema=[...guestSchema,...replaySchema,
  `CREATE TABLE IF NOT EXISTS verified_laps (
   session_id TEXT NOT NULL,lap INTEGER NOT NULL,revision TEXT NOT NULL,player_hash TEXT NOT NULL,nickname TEXT NOT NULL,
   start_tick INTEGER NOT NULL,end_tick INTEGER NOT NULL,lap_ticks INTEGER NOT NULL,
   sector1 INTEGER NOT NULL,sector2 INTEGER NOT NULL,sector3 INTEGER NOT NULL,issued_ms INTEGER NOT NULL,
   PRIMARY KEY(session_id,lap))`,
  'CREATE INDEX IF NOT EXISTS verified_order ON verified_laps(revision,lap_ticks,issued_ms,session_id,lap)',
+ 'CREATE INDEX IF NOT EXISTS verified_owner_time ON verified_laps(player_hash,issued_ms)',
  'CREATE TABLE IF NOT EXISTS verified_limits (key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,expires INTEGER NOT NULL)',
  accountSchema,sessionSchema,sessionIndex,chatStorageSchema,chatStorageIndex,...championshipSchema
 ];
@@ -332,7 +422,7 @@ const accountsReady=new WeakSet();
 const ensureAccounts=async db=>{
  if(accountsReady.has(db))return;
  // Cache completion only: never share request-owned I/O promises across Worker requests.
- for(const sql of [accountSchema,sessionSchema,sessionIndex,chatStorageSchema,chatStorageIndex,...moderationSchema,...championshipSchema])await db.prepare(sql).run();
+ for(const sql of [accountSchema,sessionSchema,sessionIndex,chatStorageSchema,chatStorageIndex,...guestSchema,...moderationSchema,...championshipSchema,'CREATE INDEX IF NOT EXISTS verified_owner_time ON verified_laps(player_hash,issued_ms)'])await db.prepare(sql).run();
  accountsReady.add(db);
 };
 // Cloudflare Workers caps PBKDF2 at 100 000 iterations. If sign-ins exceed the plan's CPU limit,
@@ -416,9 +506,9 @@ export default {
    if(url.pathname==='/api/verified/leaderboard'&&request.method==='GET'){
     const series=url.searchParams.get('series')||'human';
     if(!SERIES.includes(series))return reply({error:'Invalid series'},400);
-    const rows=await env.DB.prepare(`SELECT a.nickname,l.lap_ticks,l.sector1,l.sector2,l.sector3,l.session_id,l.lap,
-     CASE WHEN r.pinned=1 THEN 1 ELSE 0 END AS replay_available FROM verified_laps l JOIN verified_replays r USING(session_id,lap) JOIN verified_accounts a ON a.player_hash=l.player_hash
-     WHERE l.revision=? AND r.pinned=1 AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap) ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision,series).all();
+    const rows=await env.DB.prepare(`SELECT ${guestNameSQL} AS nickname,l.lap_ticks,l.sector1,l.sector2,l.sector3,l.session_id,l.lap,
+     CASE WHEN r.pinned=1 THEN 1 ELSE 0 END AS replay_available FROM verified_laps l JOIN verified_replays r USING(session_id,lap) ${principalJoins}
+     WHERE ${principalExists} AND l.revision=? AND r.pinned=1 AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap) ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap LIMIT 10`).bind(revision,series).all();
     return reply({protocol,revision:revision,series,results:rows.results.map(row=>({...row,lap_ms:row.lap_ticks*1000/120}))});
    }
    if(url.pathname==='/api/verified/championship'&&request.method==='GET'){
@@ -426,7 +516,7 @@ export default {
     let playerHash=null;
     if(validPlayer(credential)){
      const owner=await env.DB.prepare(`SELECT a.player_hash FROM verified_login_sessions s
-      JOIN verified_accounts a ON a.player_hash=s.player_hash WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=?`)
+      JOIN verified_accounts a ON a.player_hash=s.player_hash WHERE s.token_hash=? AND s.expires_ms>MAX(?,${databaseNowSQL}) AND s.secret_hash=?`)
       .bind(await hash(credential),Date.now(),await hash(env.VERIFICATION_SECRET)).first();
      playerHash=owner?.player_hash||null;
     }
@@ -444,13 +534,24 @@ export default {
     const data=await body(request);
     if(!accountName(data?.nickname)||!validPassword(data.password))return reply({error:'Invalid account'},400);
     const key=nameKey(data.nickname);
+    const claimHeader=request.headers.get('Authorization');
+    const claimToken=claimHeader?.replace(/^Bearer /,'');
+    const claimant=claimToken?await sessionOwner(env.DB,claimToken,env.VERIFICATION_SECRET):null;
+    if(claimHeader!==null&&!claimant)return reply({error:'Active guest session required'},401);
+    if(claimToken&&data.create!==true)return reply({error:'Guest promotion requires registration'},400);
     // Only failed passwords count: tightly per nickname and address, loosely per nickname,
     // so one address cannot lock the owner out and successful sign-ins are never throttled.
     const slot=Math.floor(now/600000),nameId=`f:${await hash(key)}:${slot}`,pairId=`g:${await hash(key+'\n'+ip)}:${slot}`;
     const failures=async id=>(await env.DB.prepare('SELECT attempts FROM verified_limits WHERE key=? AND expires>=?').bind(id,now).first())?.attempts??0;
     const account=await env.DB.prepare('SELECT * FROM verified_accounts WHERE name_key=?').bind(key).first();
     if(account){
-     if(data.create===true)return reply({error:'Nickname taken'},409);
+     if(data.create===true){
+      // Recover a lost registration response only with the very same live session
+      // and password. A nickname, a different guest or a new account cannot claim.
+      if(claimant&&!claimant.guest&&claimant.player_hash===account.player_hash&&sameText(await passwordHash(data.password,account.password_salt,account.iterations),account.password_hash))
+       return reply({...await identityReply(env.DB,claimant,claimToken),created:true,claimed:true});
+      return reply({error:'Nickname taken'},409);
+     }
      if(await failures(pairId)>=5||await failures(nameId)>=30)return reply({error:'Too many requests'},429);
      if(!sameText(await passwordHash(data.password,account.password_salt,account.iterations),account.password_hash)){
       await limit(pairId,Infinity,1200000);await limit(nameId,Infinity,1200000);
@@ -465,18 +566,52 @@ export default {
      return reply({...await newSession(env.DB,account,env.VERIFICATION_SECRET),created:false});
     }
     if(data.create!==true)return reply({error:'Account not found'},404);
-    const series=data.series??'human';
+    if(claimant&&!claimant.guest)return reply({error:'Session already registered'},409);
+    const series=claimant?await seriesFor(env.DB,claimant.player_hash):data.series??'human';
+    if(claimant&&data.series!==undefined&&data.series!==series)return reply({error:'Guest series cannot change during registration'},409);
     if(!SERIES.includes(series))return reply({error:'Invalid account'},400);
     const created={name_key:key,nickname:data.nickname,credential_salt:randomHex(),password_salt:randomHex(),iterations:passwordIterations(env),created_ms:now};
     created.password_hash=await passwordHash(data.password,created.password_salt,created.iterations);
-    created.player_hash=randomHex()+randomHex();
+    created.player_hash=claimant?.player_hash||randomHex()+randomHex();
     const [inserted]=await env.DB.batch([env.DB.prepare(`INSERT OR IGNORE INTO verified_accounts
-     (name_key,nickname,player_hash,credential_salt,password_salt,password_hash,iterations,created_ms) VALUES (?,?,?,?,?,?,?,?)`)
-     .bind(key,created.nickname,created.player_hash,created.credential_salt,created.password_salt,created.password_hash,created.iterations,now),
+     (name_key,nickname,player_hash,credential_salt,password_salt,password_hash,iterations,created_ms) SELECT ?,?,?,?,?,?,?,?
+     ${claimant?`WHERE EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND player_hash=? AND secret_hash=? AND expires_ms>MAX(?,${databaseNowSQL}))`:''}`)
+     .bind(key,created.nickname,created.player_hash,created.credential_salt,created.password_salt,created.password_hash,created.iterations,now,...(claimant?[await hash(claimToken),claimant.player_hash,await hash(env.VERIFICATION_SECRET),Date.now()]:[])),
      env.DB.prepare(`INSERT OR IGNORE INTO verified_account_series(player_hash,series,changed_ms)
-      SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM verified_accounts WHERE player_hash=?)`).bind(created.player_hash,series,now,created.player_hash)]);
-    if(!inserted.meta.changes)return reply({error:'Nickname taken'},409);
+      SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM verified_accounts WHERE player_hash=?)`).bind(created.player_hash,series,now,created.player_hash),
+     ...(claimant?[env.DB.prepare(`UPDATE verified_login_sessions SET expires_ms=? WHERE token_hash=? AND expires_ms>MAX(?,${databaseNowSQL}) AND secret_hash=?
+      AND EXISTS (SELECT 1 FROM verified_accounts WHERE player_hash=? AND password_hash=?)`)
+      .bind(now+SESSION_MS,await hash(claimToken),Date.now(),await hash(env.VERIFICATION_SECRET),created.player_hash,created.password_hash),claimChampionshipEntries(env.DB,created.player_hash,key,created.password_hash,now,{tokenHash:await hash(claimToken),secretHash:await hash(env.VERIFICATION_SECRET)})]:[])]);
+    if(!inserted.meta.changes){
+     // A concurrent retry may already have promoted this exact principal.
+     const promoted=claimant?await sessionOwner(env.DB,claimToken,env.VERIFICATION_SECRET):null;
+     const existing=promoted?await env.DB.prepare('SELECT * FROM verified_accounts WHERE player_hash=?').bind(promoted.player_hash).first():null;
+     if(existing&&promoted&&!promoted.guest&&promoted.player_hash===created.player_hash&&nameKey(promoted.nickname)===key&&sameText(await passwordHash(data.password,existing.password_salt,existing.iterations),existing.password_hash))return reply({...await identityReply(env.DB,promoted,claimToken),created:true,claimed:true});
+     return reply({error:'Nickname taken or guest session expired'},409);
+    }
+    if(claimant)return reply({...await identityReply(env.DB,{...claimant,nickname:created.nickname,guest:0,expires_ms:now+SESSION_MS},claimToken),created:true,claimed:true},201);
     return reply({...await newSession(env.DB,created,env.VERIFICATION_SECRET),created:true},201);
+   }
+   if(url.pathname==='/api/verified/guest'){
+    if(request.method!=='POST')return reply({error:'POST required'},405);
+    const now=Date.now(),ip=await hash(request.headers.get('CF-Connecting-IP')||'unknown');
+    if(await limit(`guest:${ip}:${Math.floor(now/60000)}`,10,120000))return reply({error:'Too many requests'},429);
+    await env.DB.prepare('DELETE FROM verified_limits WHERE expires < ?').bind(now).run();
+    const credential=request.headers.get('Authorization')?.replace(/^Bearer /,'');
+    if(credential){
+     const owner=await sessionOwner(env.DB,credential,env.VERIFICATION_SECRET);
+     return owner?reply(await identityReply(env.DB,owner,credential)):reply({error:'Guest session expired'},401);
+    }
+    const data=await body(request,2048),series=data?.series;
+    if(!accountName(data?.nickname)||!SERIES.includes(series))return reply({error:'Nickname and series required'},400);
+    if(await env.DB.prepare('SELECT 1 FROM verified_accounts WHERE name_key=?').bind(nameKey(data.nickname)).first())return reply({error:'Nickname taken'},409);
+    const playerHash=randomHex()+randomHex(),token=randomHex()+randomHex(),expiresAt=now+24*3600000;
+    await env.DB.batch([
+     env.DB.prepare('INSERT INTO verified_guests(player_hash,nickname,created_ms) VALUES (?,?,?)').bind(playerHash,data.nickname,now),
+     env.DB.prepare('INSERT INTO verified_login_sessions(token_hash,player_hash,secret_hash,created_ms,expires_ms) VALUES (?,?,?,?,?)').bind(await hash(token),playerHash,await hash(env.VERIFICATION_SECRET),now,expiresAt),
+     env.DB.prepare('INSERT INTO verified_account_series(player_hash,series,changed_ms) VALUES (?,?,?)').bind(playerHash,series,now)
+    ]);
+    return reply({nickname:data.nickname,token,expiresAt,guest:true,series},201);
    }
    if(url.pathname==='/api/verified/guest-chat-ticket'){
     if(request.method!=='POST')return reply({error:'POST required'},405);
@@ -499,9 +634,7 @@ export default {
     await env.DB.prepare('DELETE FROM verified_login_sessions WHERE token_hash=?').bind(tokenHash).run();
     return reply({signedOut:true});
    }
-   const owner=await env.DB.prepare(`SELECT a.nickname,a.player_hash FROM verified_login_sessions s
-    JOIN verified_accounts a ON a.player_hash=s.player_hash
-    WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=?`).bind(tokenHash,now,secretHash).first();
+   const owner=await sessionOwner(env.DB,token,env.VERIFICATION_SECRET,now);
    if(!owner)return reply({error:'Sign in required'},401);
    const playerHash=owner.player_hash;
    const minute=Math.floor(now/60000),ip=await hash(request.headers.get('CF-Connecting-IP')||'unknown');
@@ -513,8 +646,9 @@ export default {
     // Short-lived, so a logout or a stolen ticket cannot post for long.
     const expiresAt=now+CHAT_TICKET_MS;
     return reply({protocol,nickname:owner.nickname,expiresInMs:CHAT_TICKET_MS,
-     ticket:await sign({kind:'chat',protocol,playerHash,nickname:owner.nickname,issuedAt:now,expiresAt},env.VERIFICATION_SECRET)});
+     ticket:await sign({kind:owner.guest?'guest-chat':'chat',protocol,playerHash,nickname:owner.nickname,issuedAt:now,expiresAt},env.VERIFICATION_SECRET)});
    }
+   if(owner.guest&&url.pathname==='/api/verified/report')return reply({error:'Registered account required'},403);
    if(url.pathname==='/api/verified/report')return await reportReplay(env,await body(request,4096),playerHash,revision,now,reply);
    const data=await body(request,starting?8192:950000);
    if(starting){
@@ -529,20 +663,27 @@ export default {
     !Number.isSafeInteger(lap.lapTicks)||lap.lapTicks<=600||lap.endTick-lap.startTick!==lap.lapTicks||
     !Array.isArray(lap.sectorTicks)||lap.sectorTicks.length!==3||!lap.sectorTicks.every(n=>Number.isSafeInteger(n)&&n>0)||lap.sectorTicks.reduce((a,b)=>a+b,0)!==lap.lapTicks||
     !Number.isSafeInteger(lap.issuedAt)||lap.issuedAt>now+5000)return reply({error:'Invalid verified lap'},403);
-   if(!validPlayer(lap.replayHash)||typeof data.replay!=='string')return reply({error:'A signed public replay is required for leaderboard submission'},403);
-   const replayWrites=await replayStatements(env,lap,data,now,{tokenHash,secretHash});
+   if(!validPlayer(lap.replayHash)||typeof data.replay!=='string'){
+    await uploadFailure(env.DB,lap,'missing_signed_replay',{tokenHash,secretHash});
+    return reply({error:'A signed public replay is required for leaderboard submission'},403);
+   }
+   let replayWrites;
+   try{replayWrites=await replayStatements(env,lap,data,now,{tokenHash,secretHash});}
+   catch(error){await uploadFailure(env.DB,lap,'replay_mismatch',{tokenHash,secretHash});throw error;}
    const insert=env.DB.prepare(`INSERT OR IGNORE INTO verified_laps
     (session_id,lap,revision,player_hash,nickname,start_tick,end_tick,lap_ticks,sector1,sector2,sector3,issued_ms) SELECT ?,?,?,?,?,?,?,?,?,?,?,?
-    WHERE EXISTS (SELECT 1 FROM verified_login_sessions s JOIN verified_accounts a ON a.player_hash=s.player_hash
-     WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=? AND a.player_hash=?)`)
+    WHERE EXISTS (SELECT 1 FROM verified_login_sessions s
+     WHERE s.token_hash=? AND s.expires_ms>MAX(?,${databaseNowSQL}) AND s.secret_hash=? AND s.player_hash=?)`)
     .bind(lap.sessionId,lap.lap,lap.revision,lap.playerHash,lap.nickname,lap.startTick,lap.endTick,lap.lapTicks,...lap.sectorTicks,lap.issuedAt,tokenHash,Date.now(),secretHash,playerHash);
    const entry=championshipEntry(env.DB,lap,Date.now(),{tokenHash,secretHash});
-   const [inserted]=await env.DB.batch([insert,...replayWrites,...(entry?[entry]:[])]);
+   const evidence=env.DB.prepare(`INSERT OR IGNORE INTO verified_lap_evidence(session_id,lap,receipt,replay_hash,accepted_ms)
+    SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM verified_laps WHERE session_id=? AND lap=? AND player_hash=?)
+    AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>MAX(?,${databaseNowSQL}) AND secret_hash=? AND player_hash=?)`)
+    .bind(lap.sessionId,lap.lap,data.receipt,lap.replayHash,now,lap.sessionId,lap.lap,playerHash,tokenHash,Date.now(),secretHash,playerHash);
+   const [inserted]=await env.DB.batch([insert,evidence,...replayWrites,...(entry?[entry]:[])]);
    // Revocation/expiry can occur while reading the body or checking the signature.
    // The write above validates the session atomically; distinguish this from a duplicate lap.
-   if(!inserted.meta.changes&&!await env.DB.prepare(`SELECT 1 FROM verified_login_sessions s
-    JOIN verified_accounts a ON a.player_hash=s.player_hash WHERE s.token_hash=? AND s.expires_ms>? AND s.secret_hash=?`)
-    .bind(tokenHash,Date.now(),secretHash).first())return reply({error:'Sign in required'},401);
+   if(!inserted.meta.changes&&!await sessionOwner(env.DB,token,env.VERIFICATION_SECRET))return reply({error:'Sign in required'},401);
    return reply({protocol,saved:inserted.meta.changes>0,verified:true,lap:lap.lap,lapMs:lap.lapTicks*1000/120});
   }catch(error){console.error('Verified leaderboard request failed',error.status||500);return reply({error:error.status?error.message:'Verified leaderboard unavailable'},error.status||503);}
  }

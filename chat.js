@@ -83,10 +83,10 @@
  }
  // The account service signs account and guest nicknames into short-lived tickets.
  async function chatTicket(identity,renew){
-  const key=identity.guest?'guest:'+identity.nickname:identity.token;
+  const key=identity.token||'guest:'+identity.nickname;
   if(!renew&&ticket?.key===key&&ticket.expires-Date.now()>30000)return ticket.value;
   ticket=null;
-  const guest=identity.guest===true;
+  const guest=identity.guest===true&&!identity.token;
   const response=await fetch(window.LPRVerificationConfig.leaderboard+(guest?'/api/verified/guest-chat-ticket':'/api/verified/chat-ticket'),{
    method:'POST',headers:guest?{'Content-Type':'application/json'}:{Authorization:'Bearer '+identity.token},
    ...(guest?{body:JSON.stringify({nickname:identity.nickname})}:{}),signal:AbortSignal.timeout(10000)});

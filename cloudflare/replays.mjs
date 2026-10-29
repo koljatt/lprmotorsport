@@ -1,3 +1,4 @@
+import {databaseNowSQL,guestNameSQL,principalJoins,principalExists} from './guests.mjs';
 import {hash} from '../verification/protocol.mjs';
 export const replaySchema=[
  `CREATE TABLE IF NOT EXISTS verified_replays (
@@ -21,21 +22,24 @@ export const moderationSchema=[
 replaySchema.push(...moderationSchema);
 // Accounts without a row belong to the human series.
 export const seriesOf=player=>`COALESCE((SELECT series FROM verified_account_series WHERE player_hash=${player}),'human')`;
-// Each series keeps its own fastest recordings on the current revision; everything else is deleted
-// unless it is awaiting review.
+// Each series keeps its current fastest recordings; previously public evidence is archived
+// permanently so retention cannot destroy a restorable official record.
 export const REPLAY_LIMIT=20;
 const ranked=`FROM verified_laps l JOIN verified_replays r USING(session_id,lap)
- JOIN verified_accounts a ON a.player_hash=l.player_hash WHERE l.revision=? AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap)`;
+ ${principalJoins} WHERE ${principalExists} AND l.revision=? AND ${seriesOf('l.player_hash')}=? AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=l.session_id AND x.lap=l.lap)`;
 const order='ORDER BY l.lap_ticks,l.issued_ms,l.session_id,l.lap';
 const top=limit=>SERIES.map(()=>`SELECT session_id,lap FROM (SELECT l.session_id,l.lap ${ranked} ${order} LIMIT ${limit})`).join(' UNION ALL ');
 const topValues=revision=>SERIES.flatMap(series=>[revision,series]);
 export function retentionStatements(db,revision){
  const kept=top(REPLAY_LIMIT),values=topValues(revision);
  return [
+  // Preserve all previously public evidence, including older revisions.
+  db.prepare('INSERT OR IGNORE INTO verified_record_archive SELECT session_id,lap FROM verified_replays WHERE pinned=1'),
   // Sticky pin: a top-ten recording stays public while it remains among its series' retained set.
   db.prepare(`UPDATE verified_replays SET pinned=1 WHERE (session_id,lap) IN (${top(10)})`).bind(...values),
+  db.prepare('INSERT OR IGNORE INTO verified_record_archive SELECT session_id,lap FROM verified_replays WHERE pinned=1'),
   db.prepare(`UPDATE verified_replays SET pinned=0 WHERE pinned=1 AND (session_id,lap) NOT IN (${kept})`).bind(...values),
-  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND (session_id,lap) NOT IN (${kept}) AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=verified_replays.session_id AND x.lap=verified_replays.lap)`).bind(...values),
+  db.prepare(`DELETE FROM verified_replays WHERE review!='flagged' AND NOT EXISTS (SELECT 1 FROM verified_record_archive e WHERE e.session_id=verified_replays.session_id AND e.lap=verified_replays.lap) AND (session_id,lap) NOT IN (${kept}) AND NOT EXISTS (SELECT 1 FROM verified_lap_exclusions x WHERE x.session_id=verified_replays.session_id AND x.lap=verified_replays.lap)`).bind(...values),
   db.prepare('DELETE FROM verified_reports WHERE (session_id,lap) NOT IN (SELECT session_id,lap FROM verified_replays)')
  ];
 }
@@ -49,7 +53,7 @@ export async function replayStatements(env,lap,data,now,login){
    (session_id,lap,payload,payload_hash,expires_ms) SELECT ?,?,?,?,?
    WHERE EXISTS (SELECT 1 FROM verified_laps WHERE session_id=? AND lap=?)
    AND (SELECT COUNT(*) FROM (SELECT 1 ${ranked} AND (l.lap_ticks,l.issued_ms,l.session_id,l.lap)<(?,?,?,?) LIMIT ${REPLAY_LIMIT}))<${REPLAY_LIMIT}
-   ${login?`AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>? AND secret_hash=? AND player_hash=?)`:''}`)
+   ${login?`AND EXISTS (SELECT 1 FROM verified_login_sessions WHERE token_hash=? AND expires_ms>MAX(?,${databaseNowSQL}) AND secret_hash=? AND player_hash=?)`:''}`)
    .bind(lap.sessionId,lap.lap,data.replay,lap.replayHash,lap.issuedAt+30*86400000,lap.sessionId,lap.lap,
     lap.revision,await seriesFor(env.DB,lap.playerHash),lap.lapTicks,lap.issuedAt,lap.sessionId,lap.lap,
     ...(login?[login.tokenHash,Date.now(),login.secretHash,lap.playerHash]:[])));
@@ -93,6 +97,38 @@ async function admin(request,env){
 export async function replayRoute(request,env,url,reply,headers,readBody,revision){
  const privateRoute=url.pathname.startsWith('/api/verified/admin/');
  if(privateRoute&&!await admin(request,env))return reply({error:'Unauthorized'},401);
+ if(privateRoute&&url.pathname==='/api/verified/admin/lap-status'){
+  if(request.method!=='GET')return reply({error:'GET required'},405);
+  const id=url.searchParams.get('sessionId'),lap=Number(url.searchParams.get('lap'));
+  if(!/^[a-f0-9]{32}$/.test(id||'')||!Number.isSafeInteger(lap)||lap<1)return reply({error:'Invalid lap identifier'},400);
+  const row=await env.DB.prepare(`SELECT l.session_id,l.lap,l.revision,l.issued_ms,l.lap_ticks,
+   ${guestNameSQL} nickname,${seriesOf('l.player_hash')} series,
+   r.pinned,r.payload_hash,x.reason exclusion,e.receipt,e.replay_hash,
+   CASE WHEN a.player_hash IS NOT NULL THEN 'account' WHEN g.player_hash IS NOT NULL THEN 'guest' ELSE 'unknown' END owner_type,
+   CASE WHEN ar.session_id IS NULL THEN 0 ELSE 1 END archived
+   FROM verified_laps l ${principalJoins}
+   LEFT JOIN verified_replays r USING(session_id,lap)
+   LEFT JOIN verified_lap_exclusions x USING(session_id,lap)
+   LEFT JOIN verified_lap_evidence e USING(session_id,lap)
+   LEFT JOIN verified_record_archive ar USING(session_id,lap)
+   WHERE l.session_id=? AND l.lap=?`).bind(id,lap).first();
+  const failure=await env.DB.prepare('SELECT reason,at_ms FROM verified_lap_upload_failures WHERE session_id=? AND lap=?').bind(id,lap).first();
+  if(!row)return reply({status:failure?'upload_rejected':'not_received',sessionId:id,lap,failure,detail:'No accepted upload. Inspect client upload queue and verification server diagnostics.'});
+  const reasons=[];
+  if(row.owner_type==='unknown')reasons.push('unknown_owner');
+  if(row.revision!==revision)reasons.push('old_revision');
+  if(row.exclusion)reasons.push('excluded:'+row.exclusion);
+  if(!row.payload_hash)reasons.push('replay_not_retained');
+  else if(!row.pinned)reasons.push('outside_public_set');
+  let rank=null;
+  if(!reasons.length){
+   const better=await env.DB.prepare(`SELECT COUNT(*) n ${ranked} AND r.pinned=1
+    AND (l.lap_ticks,l.issued_ms,l.session_id,l.lap)<(?,?,?,?)`)
+    .bind(revision,row.series,row.lap_ticks,row.issued_ms,id,lap).first();
+   rank=better.n+1;if(rank>10)reasons.push('outside_top_ten');
+  }
+  return reply({...row,status:reasons.length?'not_listed':'listed',rank,reasons,last_upload_failure:failure});
+ }
  if(privateRoute&&url.pathname==='/api/verified/admin/laps'){
   if(request.method==='GET'){
    const series=url.searchParams.get('series')||'human';
@@ -158,7 +194,7 @@ export async function replayRoute(request,env,url,reply,headers,readBody,revisio
   }
   if(request.method!=='GET')return reply({error:'GET required'},405);
   const r=await env.DB.prepare(`SELECT r.payload FROM verified_replays r JOIN verified_laps l USING(session_id,lap)
-   WHERE r.session_id=? AND r.lap=? AND ${isAdmin?"(l.revision=? OR r.review='flagged')":'l.revision=? AND r.pinned=1'}`)
+   WHERE r.session_id=? AND r.lap=? AND ${isAdmin?"(? IS NOT NULL)":'l.revision=? AND r.pinned=1'}`)
    .bind(id,Number(lap),revision).first();
   if(!r)return reply({error:'Recording unavailable'},404);
   const bytes=Uint8Array.from(atob(r.payload),c=>c.charCodeAt(0));
@@ -169,7 +205,7 @@ export async function replayRoute(request,env,url,reply,headers,readBody,revisio
   if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)return reply({error:'Invalid offset'},400);
   const flagged=url.searchParams.get('flagged')==='1';
   const rows=await env.DB.prepare(`SELECT l.session_id,l.lap,l.nickname,l.revision,l.lap_ticks,l.sector1,l.sector2,l.sector3,l.issued_ms,
-   CASE WHEN r.session_id IS NOT NULL AND (l.revision=? OR r.review='flagged') THEN 1 ELSE 0 END AS replay_available,r.pinned,r.review,length(r.payload) AS bytes,
+   CASE WHEN r.session_id IS NOT NULL AND (? IS NOT NULL) THEN 1 ELSE 0 END AS replay_available,r.pinned,r.review,length(r.payload) AS bytes,
    ${seriesOf('l.player_hash')} AS series,
    (SELECT COUNT(*) FROM verified_reports p WHERE p.session_id=l.session_id AND p.lap=l.lap) AS reports
    FROM verified_laps l LEFT JOIN verified_replays r USING(session_id,lap)

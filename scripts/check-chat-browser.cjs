@@ -42,7 +42,8 @@ const {launchBrowser}=require('./browser.cjs');
    assert(await page.locator('#chat-restore').isHidden(),'Opener disappears when chat is restored');
    if(guest){
     await page.locator('#leaderboard-practice').click();await page.locator('#leaderboard-guest-name').fill(name);
-    await page.locator('#leaderboard-guest-start').click();
+    await page.selectOption('#leaderboard-guest-series','human');await page.locator('#leaderboard-guest-start').click();
+    await page.waitForFunction(()=>window.LPRLeaderboard.identity?.guest,null,{polling:50});
     assert.equal(await page.evaluate(()=>window.LPRLeaderboard.chatIdentity?.guest),true,'Guest identity is available to chat');
    }else{
     await page.locator('#leaderboard-login').click();

@@ -8,11 +8,13 @@ const {driver}=require('./helpers-driving.cjs');
  const board=await require('../verification/local-leaderboard.cjs').createLocalLeaderboard({secret,revision,adminToken});
  await new Promise(r=>service.listen(0,'127.0.0.1',r));await new Promise(r=>board.listen(0,'127.0.0.1',r));
  const serviceURL=`http://127.0.0.1:${service.address().port}`,boardURL=`http://127.0.0.1:${board.address().port}`;
+ const guestMode=process.argv.includes('--guest');
  let token;
  const post=(base,path,data,credential=token)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+credential},body:JSON.stringify(data)});
  const signUp=async nickname=>(await(await fetch(boardURL+'/api/verified/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname,password:'salasana',create:true})})).json()).token;
  try{
-  token=await signUp('Driver');const otherToken=await signUp('Other');
+  token=guestMode?(await(await fetch(boardURL+'/api/verified/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:'Driver',series:'human'})})).json()).token:await signUp('Driver');
+  const otherToken=await signUp('Other');
   const begin=await post(boardURL,'/api/verified/start',{nickname:'Driver',revision});assert.equal(begin.status,200);
   const {ticket}=await begin.json();
   const start=()=>post(serviceURL,'/sessions',{ticket,revision,armed:true});
@@ -41,6 +43,16 @@ const {driver}=require('./helpers-driving.cjs');
     assert.equal((await send({...data,seq:2,fromTick:60})).status,409,'Sequence gaps are rejected');
    }
    for(const item of last.laps){receipts.push(item.receipt);recordings.set(item.receipt,item.replay);}seq++;
+   if(guestMode&&receipts.length===1&&!board.db.prepare('SELECT 1 FROM verified_accounts WHERE name_key=?').get('driver')){
+    const saved=await post(boardURL,'/api/verified/laps',{receipt:receipts[0],replay:recordings.get(receipts[0])});assert.equal(saved.status,200);
+    assert.equal((await(await fetch(boardURL+'/api/verified/leaderboard')).json()).results[0].nickname,'Driver (vierailija)');
+    const before=board.db.prepare('SELECT * FROM verified_laps').all();
+    const promotion=await post(boardURL,'/api/verified/account',{nickname:'Driver',password:'salasana',create:true,series:'human'});
+    assert.equal(promotion.status,201);assert.equal((await promotion.json()).token,token);
+    assert.deepEqual(board.db.prepare('SELECT * FROM verified_laps').all(),before);
+    assert.equal((await(await fetch(boardURL+'/api/verified/leaderboard')).json()).results[0].nickname,'Driver');
+    assert.equal(service.sessions.sessions.get(s.id).phase,'running','Promotion preserves the live physics session');
+   }
   }
   assert.equal(receipts.length,2,'Standing and flying laps both receive receipts');
   const firstLap=await verify(receipts[0],secret),flying=await verify(receipts[1],secret);
@@ -82,7 +94,7 @@ const {driver}=require('./helpers-driving.cjs');
    assert.equal((await post(boardURL,'/api/verified/laps',{receipt},otherToken)).status,403,'Receipt is player-bound');
    const tampered=receipt.slice(0,-2)+(receipt.at(-2)==='A'?'B':'A')+receipt.at(-1);
    assert.equal((await post(boardURL,'/api/verified/laps',{receipt:tampered})).status,403,'Forged signature fails');
-   const saved=await post(boardURL,'/api/verified/laps',{receipt,replay});assert.equal(saved.status,200);assert.equal((await saved.json()).saved,true);
+   const saved=await post(boardURL,'/api/verified/laps',{receipt,replay});assert.equal(saved.status,200);assert.equal((await saved.json()).saved,!(guestMode&&receipt===receipts[0]));
    assert.equal((await(await post(boardURL,'/api/verified/laps',{receipt,replay})).json()).saved,false,'Receipt retries never duplicate a lap');
   }
   const rows=await(await fetch(boardURL+'/api/verified/leaderboard')).json();assert.equal(rows.results.length,2);
