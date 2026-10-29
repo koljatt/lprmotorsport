@@ -14,7 +14,7 @@
   queued=false;
   const account=window.LPRLeaderboard?.chatIdentity;
   dialog.classList.toggle('dashboard-remembered',!!account);
-  dialog.classList.toggle('dashboard-account-editing',!account&&!$('#leaderboard-account-fields').hidden);
+  dialog.classList.toggle('dashboard-account-editing',!$('#leaderboard-guest-fields').hidden||(!account&&!$('#leaderboard-account-fields').hidden));
   $('#dashboard-account-name').textContent=account?.nickname||'';
   $('#leaderboard-account-fields').dataset.nickname=account?.nickname||'';
   for(const p of pagers){
@@ -43,6 +43,7 @@
   new MutationObserver(()=>{p.page=0;schedule();}).observe(root,{childList:true,subtree:true});
  }
  new MutationObserver(schedule).observe($('#leaderboard-account-fields'),{attributes:true,attributeFilter:['hidden']});
+ new MutationObserver(schedule).observe($('#leaderboard-guest-fields'),{attributes:true,attributeFilter:['hidden']});
  new MutationObserver(schedule).observe(dialog,{attributes:true,attributeFilter:['class','open']});
  new MutationObserver(schedule).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
  window.addEventListener('resize',schedule);

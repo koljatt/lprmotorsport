@@ -77,6 +77,22 @@ const {launchBrowser}=require('./browser.cjs');
   await page.locator('#leaderboard-logout').click();
   await check('guest-desktop');
   await page.setViewportSize({width:390,height:740});await check('guest-mobile');
+  async function guestEntry(label){
+   await page.locator('#leaderboard-practice').click();
+   await page.waitForFunction(()=>document.querySelector('#settings-dialog').classList.contains('dashboard-account-editing'),null,{polling:20});
+   const form=page.locator('#leaderboard-start-form'),box=await form.boundingBox();
+   assert.equal(await form.evaluate(n=>getComputedStyle(n).position),'fixed',label+' uses the existing mobile entry overlay');
+   assert(box.width>340&&box.x>=0&&box.x+box.width<=390,label+' has full-width fields');
+   for(const selector of ['#leaderboard-guest-name','#leaderboard-guest-series','#leaderboard-guest-start','#leaderboard-guest-back']){
+    const field=page.locator(selector);await field.scrollIntoViewIfNeeded();const b=await field.boundingBox();
+    assert(b.x>=box.x&&b.x+b.width<=box.x+box.width+1,label+' keeps '+selector+' within the entry panel');
+   }
+   await page.locator('#leaderboard-guest-back').click();
+   await page.waitForFunction(()=>!document.querySelector('#settings-dialog').classList.contains('dashboard-account-editing'),null,{polling:20});
+  }
+  await guestEntry('signed-out guest setup');
+  await page.reload();await page.waitForFunction(()=>window.LPRLeaderboard,null,{polling:20});
+  await guestEntry('remembered-account guest setup');
   assert.deepEqual(errors,[]);
   console.log('PASS: populated dashboard and spectator statistics fit without scrolling at desktop, laptop and phone sizes; paging and options work');
  }finally{await browser?.close();game.closeAllConnections();await new Promise(r=>game.close(r));}
