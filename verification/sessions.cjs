@@ -1,50 +1,54 @@
 // Server-owned driving state. Restarts and timeouts invalidate unfinished laps.
-const {Worker}=require('node:worker_threads');
-const path=require('node:path');
+const {VerificationPool}=require('./worker-pool.cjs');
 const {randomBytes,createHash,timingSafeEqual}=require('node:crypto');
 const {revision}=require('./world.cjs');
 const hz=120;
 const fail=(status,code,message,extra={})=>Object.assign(Error(message),{status,code,...extra});
 const equal=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&timingSafeEqual(x,y);};
 class Sessions {
- constructor({clock=()=>performance.now(),maxSessions=2,leadMs=250,lagMs=16000,idleMs=24000,ttlMs=620000,signLap=async()=>{throw Error('Missing signer')}}={}){
-  Object.assign(this,{clock,maxSessions,leadMs,lagMs,idleMs,ttlMs,signLap});this.sessions=new Map();this.creations=[];
+ constructor({clock=()=>performance.now(),workerCount=1,workerHeapMb=256,executorFactory=options=>new VerificationPool(options),maxSessions=2,maxStartsPerMinute=8,leadMs=250,lagMs=16000,lapLagMs=2000,idleMs=24000,ttlMs=620000,onMetric=()=>{},signLap=async()=>{throw Error('Missing signer')}}={}){
+  Object.assign(this,{clock,maxSessions,maxStartsPerMinute,leadMs,lagMs,lapLagMs,idleMs,ttlMs,signLap,onMetric});this.sessions=new Map();this.creations=[];this.closed=false;this.spectatorSalt=randomBytes(32);
+  for(const value of [maxSessions,maxStartsPerMinute])if(!Number.isSafeInteger(value)||value<1||value>256)throw Error('Capacity limits must be integers from 1 to 256');
+  this.pool=executorFactory({workerCount,workerHeapMb,onLost:id=>{const s=this.sessions.get(id);if(s?.slot)this.invalidate(s,'worker_lost');}});
+  this.metricsSince=Date.now();
+  this.metrics={started:performance.now(),starts:0,capacityRejected:0,startRateRejected:0,batches:0,ticks:0,verifiedLaps:0,practiceLaps:0,processingTimeouts:0,lagTerminations:0};
+  this.timings={};
   this.timer=setInterval(()=>this.sweep(),1000);this.timer.unref();
  }
+ countMetric(key,count=1){this.metrics[key]+=count;this.onMetric(key,count);}
  get activeCount(){return [...this.sessions.values()].filter(s=>s.slot).length;}
+ observe(name,value){
+  if(!Number.isFinite(value)||value<0)return;
+  const h=this.timings[name]||(this.timings[name]={count:0,sumMs:0,maxMs:0,buckets:Array(16).fill(0)});
+  h.count++;h.sumMs+=value;h.maxMs=Math.max(h.maxMs,value);h.buckets[Math.min(15,Math.ceil(Math.log2(Math.max(1,value))))]++;
+ }
+ snapshotMetrics(){return {since:this.metricsSince,uptimeMs:performance.now()-this.metrics.started,activeSessions:this.activeCount,maxSessions:this.maxSessions,
+  maxStartsPerMinute:this.maxStartsPerMinute,pool:this.pool.snapshot(),counters:{...this.metrics,started:undefined},timings:JSON.parse(JSON.stringify(this.timings)),
+  cpuMicroseconds:process.cpuUsage(),memoryBytes:process.memoryUsage()};}
  async create(version,identity,{armed=false}={}){
+  if(this.closed)throw fail(410,'session_closed','Verification service closed');
   this.sweep();
   if(version!==revision)throw fail(409,'revision','Simulation revision changed');
-  if(this.activeCount>=this.maxSessions)throw fail(429,'capacity','Two verified sessions are already active');
+  if(this.activeCount>=this.maxSessions){this.countMetric('capacityRejected');throw fail(429,'capacity','Verified session capacity reached');}
   const now=this.clock();this.creations=this.creations.filter(t=>now-t<60000);
-  if(this.creations.length>=8)throw fail(429,'rate_limit','Too many session starts');
+  if(this.creations.length>=this.maxStartsPerMinute){this.countMetric('startRateRejected');throw fail(429,'rate_limit','Too many session starts');}
   this.creations.push(now);
   // Bound completed receipt caches even when starts fail or clients disappear.
   for(const [id,s] of this.sessions){if(!s.slot&&this.sessions.size>=8)this.sessions.delete(id);}
   const id=randomBytes(16).toString('hex'),token=randomBytes(32).toString('hex');
-  const s={id,token,identity,phase:'starting',slot:true,nextSeq:0,ticks:0,receipts:new Map(),lastAccepted:now,created:now,failures:0};
+  const s={id,token,identity,phase:'starting',slot:true,nextSeq:0,ticks:0,receipts:new Map(),lastAccepted:now,created:now,failures:0,lapEligible:true,eligibleFromTick:0};
   this.sessions.set(id,s);
   try{
-   const initial=await this.spawn(s);
+   const initStart=performance.now(),initial=await this.spawn(s);
+   if(!s.slot)throw fail(410,'session_closed','Session was interrupted during initialization');
+   s.live=initial.live;
+   if(s.live){s.live.lapStates=[{lap:1,startTick:0,bestLapMs:0}];s.live.bestLapMs=0;}
+   this.observe('initializationMs',performance.now()-initStart);this.countMetric('starts');
    s.started=this.clock();s.lastAccepted=s.started;s.phase=armed?'armed':'running';
-   return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs};
+   return {id,sessionToken:token,revision,hz,armed,initial:initial.result,maxBatchTicks:120,sendEveryTicks:60,leadMs:this.leadMs,lagMs:this.lagMs,lapLagMs:this.lapLagMs};
   }catch(error){this.invalidate(s,'initialization');throw error;}
  }
- spawn(s){
-  s.worker=new Worker(path.join(__dirname,'session-worker.cjs'),{resourceLimits:{maxOldGenerationSizeMb:128}});
-  return new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>reject(fail(503,'initialization','Session initialization timed out')),20000);
-   s.initReject=reject;
-   s.worker.on('message',message=>{
-    if(message.ready){clearTimeout(timer);s.initReject=null;resolve(message);return;}
-    const pending=s.pending;
-    if(pending&&pending.id===message.id){s.pending=null;clearTimeout(pending.timer);message.error?pending.reject(fail(422,'physics',message.error)):pending.resolve(message);}
-   });
-   const lost=()=>{clearTimeout(timer);const error=fail(410,'worker_lost','Verification worker stopped');s.initReject?.(error);s.pending?.reject(error);if(s.pending)clearTimeout(s.pending.timer);s.pending=null;
-    if(s.phase==='running'||s.phase==='starting'||s.phase==='armed')this.invalidate(s,'worker_lost');};
-   s.worker.once('error',lost);s.worker.once('exit',lost);
-  });
- }
+ spawn(s){return this.pool.create(s.id);}
  owned(id,token){
   this.sweep();const s=this.sessions.get(id);
   if(!s)throw fail(410,'session_lost','Session expired or server restarted; continue in practice mode');
@@ -78,35 +82,82 @@ class Sessions {
   }
   // Do not allow an attacker to wait and then upload an unbounded old replay.
   if(elapsed-s.ticks*1000/hz>this.lagMs){this.invalidate(s,'lag');throw fail(410,'lag','Verification fell too far behind; continue in practice mode');}
-  const promise=this.process(s,data,digest,endTick);s.inflight={seq:data.seq,digest,promise};
+  // Compare arrival with the END of this bounded batch: normal batching is not slowdown.
+  // Keep the original server clock forever; recovery cannot grant a fresh time budget.
+  const arrivalLagMs=elapsed-simMs;
+  if(arrivalLagMs>this.lapLagMs)s.lapEligible=false;
+  const promise=this.process(s,data,digest,endTick,arrivalLagMs);s.inflight={seq:data.seq,digest,promise};
   try{return await promise;}finally{s.inflight=null;}
  }
- async process(s,data,digest,endTick){
+ async process(s,data,digest,endTick,arrivalLagMs){
+  const processingStart=performance.now();
   try{
-   const message=await new Promise((resolve,reject)=>{
-    const id=data.seq,timer=setTimeout(()=>reject(fail(504,'budget','Input verification exceeded its time budget')),10000);
-    s.pending={id,resolve,reject,timer};s.worker.postMessage({id,inputs:data.inputs});
-   });
+   const message=await this.pool.inputs(s.id,data.inputs);
+   this.observe('queueMs',message.queueMs);
+   this.observe('workerWallMs',message.wallMs);this.observe('physicsMs',message.physicsMs);this.observe('replayMs',message.replayMs);
    if(s.phase!=='running')throw fail(410,'session_closed','Session was interrupted');
    if(message.result.crashed)throw fail(422,'crashed','Car crashed; session is not a verified lap');
    if(message.result.ticks!==endTick)throw fail(422,'ticks','Simulation tick mismatch');
    s.ticks=endTick;s.nextSeq++;s.lastAccepted=this.clock();
-   const laps=[];
-   for(const lap of message.laps||[])laps.push({lap,receipt:await this.signLap(s,lap)});
+   if(s.live&&message.live){
+    s.live.frames.push(...message.live.frames);s.live.inputs.push(...message.live.inputs);
+     if(message.live.lapStartTick!==undefined&&s.live.lapStates[0]?.lap===1)
+      s.live.lapStates[0].startTick=message.live.lapStartTick;
+    s.live.frames=s.live.frames.filter(f=>f[0]>=endTick-600);
+    s.live.inputs=s.live.inputs.filter(f=>f[0]>=s.live.frames[0][0]);
+    for(const lap of message.laps||[]){
+     const ms=lap.lapTicks*1000/hz;s.live.bestLapMs=s.live.bestLapMs?Math.min(s.live.bestLapMs,ms):ms;
+     s.live.lapStates.push({lap:lap.lap+1,startTick:lap.endTick,bestLapMs:s.live.bestLapMs});
+    }
+    while(s.live.lapStates.length>1&&s.live.lapStates[1].startTick<=s.live.frames[0][0])s.live.lapStates.shift();
+   }
+   const laps=[],practiceLaps=[];
+   for(const value of message.laps||[]){
+    const {replay,...lap}=value;
+    // Check the crossing itself as well as the batch end, so trailing inputs cannot
+    // hide a late finish. Only server-simulated boundaries can restore eligibility.
+    const crossingLagMs=arrivalLagMs+(endTick-lap.endTick)*1000/hz;
+    if(crossingLagMs>this.lapLagMs)s.lapEligible=false;
+    if(s.lapEligible)laps.push({lap,receipt:await this.signLap(s,{...lap,...(replay?{replayHash:replay.hash}:{})}),...(replay?{replay:replay.payload}:{})});
+    else practiceLaps.push(lap.lap);
+    // Catch-up laps never get receipts. Rejoin only at an exact, timely boundary;
+    // do not retroactively qualify the lap that is already underway in this batch.
+    if(!s.lapEligible&&lap.endTick===endTick&&crossingLagMs<=this.lapLagMs){
+     s.lapEligible=true;s.eligibleFromTick=lap.endTick;
+    }
+   }
    const reply={sessionId:s.id,seq:data.seq,ackTick:s.ticks,phase:'running',result:message.result,
-    wallMs:message.wallMs,serverElapsedMs:this.clock()-s.started,laps};
+    wallMs:message.wallMs,serverElapsedMs:this.clock()-s.started,laps,practiceLaps,
+    eligibility:{eligible:s.lapEligible,fromTick:s.eligibleFromTick,lap:message.result.lap,lagMs:Math.max(0,arrivalLagMs)}};
+   this.metrics.batches++;this.metrics.ticks+=data.inputs.length;this.metrics.verifiedLaps+=laps.length;this.countMetric('practiceLaps',practiceLaps.length);
+   this.observe('batchResponseMs',performance.now()-processingStart);this.observe('arrivalLagMs',Math.max(0,arrivalLagMs));
+   this.observe('ackLagMs',Math.max(0,this.clock()-s.started-endTick*1000/hz));
    s.receipts.set(data.seq,{digest,reply});
    return reply;
   }catch(error){this.invalidate(s,error.code||'physics');throw error;}
  }
- release(s){s.slot=false;if(s.pending){clearTimeout(s.pending.timer);s.pending.reject(fail(410,'session_closed','Session closed'));s.pending=null;}
-  if(s.worker){const worker=s.worker;s.worker=null;void worker.terminate();}}
- invalidate(s,reason){s.phase='invalid';s.reason=reason;this.release(s);}
+ watchId(s){
+  // Opaque, server-local identity keeps successive verified sessions linkable
+  // without exposing the private account hash or session credential.
+  return createHash('sha256').update(this.spectatorSalt).update(String(s.identity.playerHash||s.id)).digest('hex').slice(0,32);
+ }
+ spectators(id){
+  this.sweep();
+  const active=[...this.sessions.values()].filter(s=>s.slot&&s.phase==='running'&&s.live);
+  if(!id)return {results:active.map(s=>({id:s.id,watchId:this.watchId(s),nickname:s.identity.nickname,tick:s.ticks})),revision};
+  const s=active.find(s=>s.id===id);
+  if(!s)throw fail(410,'session_closed','Driving session has ended');
+  return {format:'lpr-live-v1',sceneRevision:revision,hz,lap:s.receipts.get(s.nextSeq-1)?.reply.result.lap||1,
+   nickname:s.identity.nickname,watchId:this.watchId(s),track:s.live.track,frames:s.live.frames,inputs:s.live.inputs,
+   lapStates:s.live.lapStates,bestLapMs:s.live.bestLapMs};
+ }
+ release(s){s.slot=false;void this.pool.release(s.id);}
+ invalidate(s,reason){if(s.slot){if(reason==='budget')this.countMetric('processingTimeouts');if(reason==='lag')this.countMetric('lagTerminations');}s.phase='invalid';s.reason=reason;this.release(s);}
  cancel(id,token){const s=this.owned(id,token);this.invalidate(s,'cancelled');return {cancelled:true};}
  sweep(){const now=this.clock();for(const [id,s] of this.sessions){
   if(s.slot&&((s.phase!=='starting'&&now-s.lastAccepted>this.idleMs)||now-s.created>this.ttlMs))this.invalidate(s,'expired');
   if(!s.slot&&now-s.lastAccepted>120000)this.sessions.delete(id);
  }}
- async close(){clearInterval(this.timer);const workers=[...this.sessions.values()].map(s=>s.worker).filter(Boolean);for(const s of this.sessions.values())this.invalidate(s,'shutdown');await Promise.all(workers.map(w=>w.terminate()));this.sessions.clear();}
+ async close(){this.closed=true;clearInterval(this.timer);for(const s of this.sessions.values())this.invalidate(s,'shutdown');await this.pool.close();this.sessions.clear();}
 }
 module.exports={Sessions};

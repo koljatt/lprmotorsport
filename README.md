@@ -1,26 +1,35 @@
 # LPR Lap Challenge
 
-Tässä kehityshaarassa 3D-peli on yhdistetty palvelimen ajovarmennukseen.
-Käynnistä koko paikallinen ketju komennolla `npm run dev:verified` ja avaa
-http://127.0.0.1:8000. Kirjoita nimimerkki, hyväksy peli- ja käyttötietojen
-kerääminen ja paina **Aloita ajo**. Varmennus valmistellaan automaattisesti.
-Kun yhteys toimii, ajo alkaa ilman harjoitteluvaihetta. Jos yhteyttä joudutaan
-odottamaan, voi ajaa harjoitteluna. Peli yrittää yhteyttä automaattisesti uudelleen
-ja käynnistää virallisen ajon lähtöruudusta heti, kun yhteys on valmis.
-Erillistä lähtölaskentaa ei ole. Palvelin laskee ajan ohjaussyötteistä;
-erillinen varmennettu tuloslista hyväksyy vain palvelimen allekirjoittamat ajat.
-Lentävät jatkokierrokset käyttävät samaa palvelinsessiota.
+Ajo alkaa noin 200 metriä ennen maalilinjaa. Ensimmäinen ylitys on kiihdytysjakso, ja varsinainen kierrosaika alkaa vasta maalilinjalta, jotta ensimmäinenkin mitattu kierros alkaa vauhdista.
 
-Myös **Aloita uudelleen** valmistelee varmennuksen automaattisesti. Lentävät
-jatkokierrokset säilyvät samassa varmennetussa ajossa.
-Harjoittelusta ei lähetetä uusia aikoja vanhalle listalle.
-Vanha lista säilyy näkyvissä erikseen ilman varmennusmerkintää. Katkos, pelin
-piilottaminen tai ajotilan poikkeama muuttaa varmennetun ajon harjoitteluksi.
-Jo allekirjoitettu kierroskuitti jää tarvittaessa lähetysjonoon; saman nimimerkin
-vahvistaminen ja tuloslistan automaattinen päivitys yrittävät tallennusta uudelleen.
+K?ynnist? paikallinen peli ja ajovarmennus komennolla `npm run dev:verified`
+ja avaa http://127.0.0.1:8000. **Pelaa ilman leaderboardia** ei vaadi tili?.
+**Aja leaderboardiin** kirjautuu nimimerkill? ja v?hint??n kahdeksan merkin
+salasanalla. Vapaan nimimerkin varaaminen vahvistetaan erikseen.
+Kehitysanalytiikka on vapaaehtoinen kummassakin pelitilassa.
 
-Ohjeet, luottamusketju, tarkistukset ja vielä tekemätön julkinen käyttöönotto:
-[verification/README.md](verification/README.md).
+Punaiset l?ht?valot pit?v?t auton paikallaan varmennuksen valmistelun ajan;
+vihre?t vapauttavat l?hd?n, kun palvelinsessio on valmis. Palvelin laskee
+kierrosajan ohjaussy?tteist?. Virallinen TOP 10 edellytt?? palvelimen
+allekirjoittamaa kierrosta ja julkisesti katsottavaa uusintaa.
+Lent?v?t jatkokierrokset k?ytt?v?t samaa palvelinsessiota.
+
+Yhteyskatkos voi muuttaa kierroksen harjoitteluksi auton jatkaessa ajoa.
+Varmennus voi palautua seuraavalta t?sm?llisesti varmennetulta maaliviivan
+ylitykselt?; jo ajettua harjoittelukierrosta ei hyv?ksyt? j?lkik?teen.
+Pelin piilottaminen tai ajotilan poikkeama katkaisee varmennuksen.
+**Aloita uudelleen** valmistelee uuden virallisen ajon.
+Kierroskuitti ja uusinta j??v?t tarvittaessa l?hetysjonoon. Saman tilin
+uudelleenkirjautuminen voi l?hett?? ne uudella kirjautumisistunnolla.
+
+Varikkochat avataan puhekuplapainikkeesta. N?kyvyys muistetaan selaimessa;
+viestin kirjoittaminen est?? pelin n?pp?inohjauksen kirjoittamisen ajaksi.
+
+K?ytt??notto ja luottamusketju: [verification/README.md](verification/README.md).
+Uusinnat: [verification/REPLAYS.md](verification/REPLAYS.md).
+Haarojen yhdist?minen ja julkaisun tarkistukset: [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md).
+
+Tulevat päivitykset ja ideat: [docs/future-updates-roadmap.md](docs/future-updates-roadmap.md).
 
 Auton kori, etusiipi ja renkaiden kiinteät sekä pyörivät osat säilytetään
 näytönohjaimen muistissa. Ajon aikana päivitetään niiden asennot; jousituksen
@@ -50,6 +59,15 @@ puheen ja laulun. Ääniasetus säilyy selaimessa. Äänet hiljenevät
 tuloslistan ajaksi ja pelin menettäessä kohdistuksen. Äänet tuotetaan
 selaimen Web Audio API:lla ilman ladattavia äänitiedostoja.
 Äänten toimintatestit: `npm run test:audio`.
+
+## Verified guest records
+
+Guests now use authenticated sessions and the same authoritative verification as
+accounts. Official results display `Nickname (vierailija)`. Register during the
+same active session to retain the original records and enroll eligible laps in
+the open Helsinki daily competition; finalized competitions stay unchanged.
+Architecture, migration, evidence retention, tests and staging validation:
+[verification/VERIFIED-GUESTS.md](verification/VERIFIED-GUESTS.md).
 
 ## Rataeditori
 
@@ -220,7 +238,7 @@ Jarrujen enimmäisvoima on 4500 N, ja voima jaetaan akselien käytettävissä ol
 
 Palvelinpuolinen ajon varmennus simuloi kuljettajan syötteet uudelleen ja vertaa tilaa selaimen tilaan. ECMAScript määrittelee tarkasti vain `+ - * /` ja `Math.sqrt`; `Math.sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `log`, `pow`, `tanh` ja `hypot` saavat erota viimeisessä bitissä selaimen ja Node.js:n V8-versioiden välillä, ja kaoottisessa ajomallissa yksi bitti kasvaa senteiksi minuutissa. Siksi `shared/dmath.js` toteuttaa nämä funktiot fdlibm-algoritmeilla pelkillä tarkasti määritellyillä operaatioilla ja julkaisee ne nimellä `window.LPRMath`. Fysiikkatiedostot (`shared/vehicle-spec.js`, `campus.js`, `shared/track-document.js`, `shared/terrain.js`, `shared/track-objects.js`, `vehicle.js`, `shared/collision-index.js`, `shared/people.js`, `shared/driving.js`) varjostavat `Math`-olion tällä, joten ne on ladattava `shared/dmath.js`:n jälkeen – myös `verification/world.cjs` kääntää sen ensimmäisenä; `**`-operaattoria ei fysiikassa käytetä, koska se ohittaa varjostuksen. Renderöinti ja muu peli käyttävät edelleen natiivia `Math`ia. Tulokset ovat enintään 1 ulp:n päässä natiivista (`tanh` ja `hypot` 2 ulp), eli ajotuntuma ei muutu. `LPRMath` heittää virheen funktioista, joille ei ole deterministista toteutusta (esim. `random`, `asin`), jotta ne eivät päädy fysiikkaan huomaamatta.
 
-Tarkistus: `npm run test:determinism`. Testi vertaa tuloksia natiiviin `Math`iin, ECMAScript-erikoisarvoihin sekä Chromiumissa tallennettuihin sormenjälkiin: `LPRMath.fingerprint()`-tiivisteisiin ja `tests/determinism-scenario.js`-tiedoston 30 sekunnin törmäilevän ajoskenaarion tilatiivisteeseen sekä varmennuspalvelimen maailmassa (`verification/world.cjs`) ajettuun 100 sekunnin autopilottikierrokseen. Node.js:ssä läpäisevä testi todistaa, että selain ja varmennuspalvelin laskevat bitilleen samoin. Selaimessa saman voi tarkistaa kehityspalvelimella (`npm run dev`) pelin konsolissa:
+Tarkistus: `npm run test:determinism`. Testi vertaa tuloksia natiiviin `Math`iin, ECMAScript-erikoisarvoihin sekä Chromiumissa tallennettuihin sormenjälkiin: `LPRMath.fingerprint()`-tiivisteisiin ja `tests/determinism-scenario.js`-tiedoston 30 sekunnin törmäilevän ajoskenaarion tilatiivisteeseen sekä varmennuspalvelimen maailmassa (`verification/world.cjs`) ajettuun 150 sekunnin autopilottikierrokseen. Node.js:ssä läpäisevä testi todistaa, että selain ja varmennuspalvelin laskevat bitilleen samoin. Selaimessa saman voi tarkistaa kehityspalvelimella (`npm run dev`) pelin konsolissa:
 
 ```js
 JSON.stringify(window.LPRMath.fingerprint());

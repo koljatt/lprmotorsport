@@ -28,13 +28,13 @@
     return { hash: hash.toString(16).padStart(8, '0'), impacts, x: car.x, y: car.y };
   }
   // Verification-server world (verification/world.cjs createWorld): a deterministic
-  // autopilot follows the circuit at ~40 km/h for 100 s, completing a full timed lap.
+  // autopilot follows the circuit at ~40 km/h for 150 s, completing a full timed lap.
   function verifiedLap({ world, api, math }) {
     const M = math, track = world.track;
     const f64 = new Float64Array(1), u32 = new Uint32Array(f64.buffer);
     let hash = 0, laps = 0;
     const lapTicks = [];
-    for (let i = 0; i < 12000; i++) {
+    for (let i = 0; i < 18000; i++) {
       const s = world.result().state, near = world.nearestTrack(s.x, s.y);
       const target = track[(near.index + 4) % track.length];
       let error = M.atan2(target.y - s.y, target.x - s.x) - s.angle;

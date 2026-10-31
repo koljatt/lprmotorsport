@@ -1,0 +1,228 @@
+{
+  "checkedAt": "2026-10-26T18:34:31.776751+00:00",
+  "branch": "integration/next-update-20261026",
+  "mainBase": "2f70a4549c2203b616e35c8dcc36b5ebf1027e99",
+  "simulationRevision": "a16f61c7d0e6e86402fe8c1aaab5a42a4a17cda3e6a314f8ee118c228bcd4b2a",
+  "readyForMain": false,
+  "localSuites": [
+    {
+      "suite": "test:chat",
+      "exitCode": 0,
+      "seconds": 0.25241937999999997
+    },
+    {
+      "suite": "test:audio",
+      "exitCode": 0,
+      "seconds": 0.178647977
+    },
+    {
+      "suite": "test:physics",
+      "exitCode": 0,
+      "seconds": 2.395682017
+    },
+    {
+      "suite": "test:determinism",
+      "exitCode": 0,
+      "seconds": 10.756228535999998
+    },
+    {
+      "suite": "test:tools",
+      "exitCode": 0,
+      "seconds": 4.189297927000001
+    },
+    {
+      "suite": "test:performance",
+      "exitCode": 0,
+      "seconds": 1.0131027749999995
+    },
+    {
+      "suite": "test:leaderboard",
+      "exitCode": 0,
+      "seconds": 0.4548909139999996
+    },
+    {
+      "suite": "test:analytics",
+      "exitCode": 0,
+      "seconds": 0.29933831799999827
+    },
+    {
+      "suite": "test:replay-service",
+      "exitCode": 0,
+      "seconds": 0.3847677870000007
+    },
+    {
+      "suite": "test:collision-index",
+      "exitCode": 0,
+      "seconds": 0.18845140600000013
+    },
+    {
+      "suite": "test:asphalt-index",
+      "exitCode": 0,
+      "seconds": 12.068354703999997
+    },
+    {
+      "suite": "test:replay",
+      "exitCode": 0,
+      "seconds": 7.298833238000003
+    },
+    {
+      "suite": "test:live-sessions",
+      "exitCode": 0,
+      "seconds": 5.461271093999996
+    },
+    {
+      "suite": "test:live-client",
+      "exitCode": 0,
+      "seconds": 0.7034166750000004
+    },
+    {
+      "suite": "test:live-lab",
+      "exitCode": 0,
+      "seconds": 0.1633790169999993
+    },
+    {
+      "suite": "test:verified",
+      "exitCode": 0,
+      "seconds": 24.25281116399999
+    },
+    {
+      "suite": "test:recordings",
+      "exitCode": 0,
+      "seconds": 0.43104636700000265
+    },
+    {
+      "suite": "test:verification-capacity",
+      "exitCode": 0,
+      "seconds": 14.597377748
+    },
+    {
+      "suite": "test:staging",
+      "exitCode": 0,
+      "seconds": 0.20757400999999664
+    },
+    {
+      "suite": "test:collision-cache",
+      "exitCode": 0,
+      "seconds": 7.889910837999996
+    },
+    {
+      "suite": "test:championship",
+      "exitCode": 0,
+      "seconds": 0.27556001200000174
+    },
+    {
+      "suite": "test:shared-track-state",
+      "exitCode": 0,
+      "seconds": 9.501329018999996
+    },
+    {
+      "suite": "test:worker-pool",
+      "exitCode": 0,
+      "seconds": 26.196902323000003
+    }
+  ],
+  "rerunAfterFinalChanges": [
+    "node tests/capacity-history.test.cjs",
+    "node tests/verification-metrics.test.cjs",
+    "test:worker-pool"
+  ],
+  "builds": {
+    "game": "passed",
+    "verifiedWorker": "passed",
+    "analyticsWorker": "passed"
+  },
+  "browser": {
+    "status": "blocked in this environment",
+    "attempts": [
+      {
+        "suite": "test:chat-browser",
+        "exitCode": 1,
+        "blocked": true,
+        "reason": "No Chromium executable; Playwright installation failed with an invalid/truncated download"
+      },
+      {
+        "suite": "test:verified-browser",
+        "exitCode": 1,
+        "blocked": true,
+        "reason": "No Chromium executable; Playwright installation failed with an invalid/truncated download"
+      },
+      {
+        "suite": "test:championship-browser",
+        "exitCode": 1,
+        "blocked": true,
+        "reason": "No Chromium executable; Playwright installation failed with an invalid/truncated download"
+      }
+    ]
+  },
+  "additionalBrowserChecks": {
+    "status": "not rerun successfully for the merged candidate; see historicalBrowser for prior source"
+  },
+  "remoteTwoPlayerTest": {
+    "status": "not rerun for this candidate",
+    "previousResult": "one of two clients lost timing eligibility",
+    "evidence": "staging-check-20261026.json"
+  },
+  "localRealtimeTest": {
+    "status": "not rerun for merged candidate; previous source test failed",
+    "command": "npm run test:verified-realtime",
+    "scope": "Two full 3D Chromium clients, software rendering, unmodified local server clock",
+    "reason": "Client switched to practice with lag",
+    "interpretation": "Does not separate slow software rendering, local scheduling and server/network delay; not evidence of Render capacity"
+  },
+  "blockers": [
+    "Rerun the three browser suites with an available Chromium executable for this merged candidate",
+    "Separate network arrival from server-side wait and define bounded recovery",
+    "Pass two-player staging driving and public replay retrieval from candidate commit",
+    "Configure and verify persistent capacity history across staging restart",
+    "Coordinated four-component deployment and backup"
+  ],
+  "notImplemented": [
+    "Lobby and real-time spectator",
+    "Moving obstacle spatial search",
+    "HttpOnly login migration"
+  ],
+  "historicalBrowser": {
+    "sourceIntegration": "2c69b38",
+    "verification": {
+      "generatedAt": "2026-10-26T15:28:45.007Z",
+      "browser": "153.0.8010.0",
+      "revision": "e9cec7741f4d835d64b247fb1bf925572f32032380fcb9ce9074a747344ad2a2",
+      "ticks": 23220,
+      "verifiedLaps": 2,
+      "scope": "Real 3D game with synthetic controls and accelerated server clock; no remote/human capacity claim",
+      "automaticStart": true,
+      "automaticRestart": true,
+      "startLights": true,
+      "heldDuringPreparation": true,
+      "optionalAnalytics": true,
+      "driverSeatReplay": true,
+      "replaySeek": true,
+      "viewerReports": true,
+      "adminSeriesMoves": true,
+      "dailyChampionship": true,
+      "tamperedPhysicsRejected": true,
+      "tamperedPowerRejected": true,
+      "errors": []
+    },
+    "additional": {
+      "championship": "passed, desktop/mobile 390px, series/date/localization",
+      "chat": "passed, two clients, mobile, localization"
+    }
+  },
+  "mergedSources": {
+    "integration": "2c69b38ffd4aa48fe25590662c2612d8bfe8b5de",
+    "workerPool": "244dafff2e4228d0f8aace7162969f961401a70b",
+    "sharedTrack": "4044d41133f4590a4d6e2f3cc259264f26f4215b"
+  },
+  "postMergeRegressions": {
+    "pooledStartsReachD1ExactlyOnce": "passed",
+    "realPooledCapacityRejectionReachesD1": "passed",
+    "poolMetricsAndSinceTimestamp": "passed",
+    "workerPoolLifecycle": "passed"
+  },
+  "workerPoolEvidence": {
+    "sourceCommit": "244dafff2e4228d0f8aace7162969f961401a70b",
+    "path": "worker-pool-measurement.json",
+    "scope": "Source-branch local real-clock measurements, including 16 clients for 120 seconds; not evidence of merged staging/browser capacity"
+  }
+}

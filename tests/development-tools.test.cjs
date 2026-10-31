@@ -97,12 +97,29 @@ async function check(production){
         assert(!fs.readdirSync(path.dirname(file)).some(name=>name.startsWith('.track-objects-')),
           'Atomic saving must not leave temporary files');
         assert.ok((await(await fetch(base+'/data/track-data.js')).text()).includes('"cone"'));
+        if(process.platform==='win32'){
+          const updated={version:1,objects:[{type:'cone',x:200,y:300,angle:0,scale:1}]};
+          const rename=fs.renameSync;
+          fs.renameSync=()=>{const error=Error('Simulated Windows replacement lock');error.code='EPERM';throw error;};
+          try{
+            const response=await fetch(api,{method:'PUT',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify(updated)});
+            assert.equal(response.status,200,await response.text());
+            assert.deepEqual(JSON.parse(fs.readFileSync(file,'utf8')),updated,
+              'Windows EPERM fallback must save and truncate the existing file');
+          }finally{fs.renameSync=rename;}
+          assert(!fs.readdirSync(path.dirname(file)).some(name=>name.startsWith('.track-objects-')),
+            'Windows fallback must clean up its temporary file');
+        }
       }finally{fs.writeFileSync(file,original);}
     }
   }finally{await new Promise(resolve=>server.close(resolve));}
 }
 (async()=>{
   const output=build();
+  for(const match of gameHtml.matchAll(/(?:src|href)="([^"?#]+)(?:\?[^"#]*)?"/g)){
+    const file=match[1];
+    if(/\.(?:js|css)$/.test(file)&&!file.includes('://'))assert(fs.existsSync(path.join(output,file)),`Build includes ${file}`);
+  }
   assert.ok(!fs.existsSync(path.join(output,'tools')));
   assert.ok(!fs.existsSync(path.join(output,'server.js')));
   assert.ok(!fs.existsSync(path.join(output,'tests')));

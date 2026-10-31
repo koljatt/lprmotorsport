@@ -1,0 +1,281 @@
+{
+  "generatedAt": "2026-10-26T09:13:54.215Z",
+  "baseline": "c094c54",
+  "note": "Local measurements only; no production capacity claim. Load uses a real clock and session workers, without browser or HTTP/proxy. CPU comparison isolates the track index with the new recorder in both variants.",
+  "benchmark": {
+    "scope": "Local single-process comparative benchmark, 24000 identical ticks with full recording per run; not production capacity",
+    "revision": "ec564e6d6d7f3aff4cd6764fdfb81b421bfeaa0ec1552bc538413614e4cb8b83",
+    "cpuReductionPercent": 11.625022902811322,
+    "rounds": [
+      {
+        "linear": {
+          "elapsedMs": 4445.8929180000005,
+          "cpuMs": 5000.099,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        },
+        "indexed": {
+          "elapsedMs": 4118.030640999999,
+          "cpuMs": 4676.492,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        }
+      },
+      {
+        "indexed": {
+          "elapsedMs": 3901.2191820000007,
+          "cpuMs": 4457.901,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        },
+        "linear": {
+          "elapsedMs": 4426.032273999997,
+          "cpuMs": 4929.611,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        }
+      },
+      {
+        "linear": {
+          "elapsedMs": 4568.091066999998,
+          "cpuMs": 4999.586,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        },
+        "indexed": {
+          "elapsedMs": 3893.655074000002,
+          "cpuMs": 4221.389,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        }
+      },
+      {
+        "indexed": {
+          "elapsedMs": 3935.4437069999985,
+          "cpuMs": 4254.34,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        },
+        "linear": {
+          "elapsedMs": 4438.243797000003,
+          "cpuMs": 4997.297,
+          "laps": 2,
+          "replayBytes": 1096088,
+          "hash": "cd02228ffecdede724c84c638906be8b405e6796a5e62a9b8f1341a1c7e8790e"
+        }
+      }
+    ]
+  },
+  "load": {
+    "generatedAt": "2026-10-26T09:13:34.390Z",
+    "expectedLapsPerPlayer": 1,
+    "scope": "Local real-clock verification sessions with worker IPC, recordings and admission control; excludes browser, HTTP/proxy and production host",
+    "revision": "ec564e6d6d7f3aff4cd6764fdfb81b421bfeaa0ec1552bc538413614e4cb8b83",
+    "seconds": 120,
+    "runs": [
+      {
+        "players": 16,
+        "elapsedMs": 120029.577026,
+        "cpuMs": 77341.11,
+        "batchP95Ms": 74.19046399999934,
+        "eventLoopP99Ms": 24.018943,
+        "metrics": {
+          "uptimeMs": 120666.90628699999,
+          "activeSessions": 16,
+          "maxSessions": 16,
+          "maxStartsPerMinute": 16,
+          "counters": {
+            "starts": 16,
+            "capacityRejected": 0,
+            "startRateRejected": 0,
+            "batches": 3840,
+            "ticks": 230400,
+            "verifiedLaps": 16,
+            "practiceLaps": 0
+          },
+          "timings": {
+            "initializationMs": {
+              "count": 16,
+              "sumMs": 9187.154321,
+              "maxMs": 631.7965220000001,
+              "buckets": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                3,
+                13,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "workerWallMs": {
+              "count": 3840,
+              "sumMs": 108075.11637200022,
+              "maxMs": 299.5693440000032,
+              "buckets": [
+                0,
+                0,
+                0,
+                85,
+                943,
+                2082,
+                457,
+                215,
+                48,
+                10,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "physicsMs": {
+              "count": 3840,
+              "sumMs": 101947.2622049969,
+              "maxMs": 195.12396999999555,
+              "buckets": [
+                0,
+                0,
+                0,
+                103,
+                1019,
+                2025,
+                446,
+                208,
+                39,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "replayMs": {
+              "count": 3840,
+              "sumMs": 5825.135941999404,
+              "maxMs": 283.50450199999614,
+              "buckets": [
+                3635,
+                36,
+                41,
+                76,
+                32,
+                4,
+                0,
+                0,
+                10,
+                6,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "batchResponseMs": {
+              "count": 3840,
+              "sumMs": 120219.30174200045,
+              "maxMs": 305.99590599999647,
+              "buckets": [
+                0,
+                0,
+                0,
+                7,
+                479,
+                2448,
+                593,
+                252,
+                50,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "arrivalLagMs": {
+              "count": 3840,
+              "sumMs": 3387.4925929994133,
+              "maxMs": 15.626789999994799,
+              "buckets": [
+                2675,
+                668,
+                401,
+                83,
+                13,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            },
+            "ackLagMs": {
+              "count": 3840,
+              "sumMs": 123396.05843999902,
+              "maxMs": 306.90528899998753,
+              "buckets": [
+                0,
+                0,
+                0,
+                4,
+                426,
+                2415,
+                673,
+                260,
+                51,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          },
+          "cpuMicroseconds": {
+            "user": 81923882,
+            "system": 3326000
+          },
+          "memoryBytes": {
+            "rss": 1596805120,
+            "heapTotal": 30744576,
+            "heapUsed": 26964088,
+            "external": 4070418,
+            "arrayBuffers": 277675
+          }
+        }
+      }
+    ]
+  }
+}

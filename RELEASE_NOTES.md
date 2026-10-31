@@ -1,3 +1,22 @@
+# Seuraava julkaisu — luonnos
+
+Ei vielä julkaistu. Julkaise vasta, kun uusi `lpr-verified`-Worker on käytössä.
+
+## Pelaaminen ja tietojen kerääminen
+
+- Pelaa ilman leaderboardia: ei tiliä eikä tulosten lähetystä.
+- Aja leaderboardiin: nimimerkkitili, varmennus ja kierrosaikojen tallennus.
+- Kehitysanalytiikka on vapaaehtoinen molemmissa tiloissa. Suostumuksen peruminen ei keskeytä pelaamista eikä leaderboard-osallistumista.
+
+## Oma nimimerkki salasanalla
+
+- Nimimerkki varataan salasanalla: kukaan muu ei voi ajaa sillä nimellä.
+- Samalla nimimerkillä ja salasanalla kirjaudut millä tahansa laitteella. Kirjautuminen muistetaan enintään seitsemän päivää.
+- Kirjaudu ulos mitätöi tämän laitteen istunnon myös palvelimella; muut laitteet ja tallennetut kierrosajat säilyvät.
+- Päivityksen jälkeen aiemmin kirjautuneilta pyydetään salasana uudelleen.
+- Tuloslista alkaa taas alusta: TOP 10:ssä näkyvät vain tileillä ajetut kierrokset.
+- Salasanaa ei voi palauttaa. Unohtuneen salasanan nimimerkin voi vapauttaa ylläpito.
+
 # Julkaisu 25.10.2026 — palvelimella varmennettu tuloslista
 
 ## Uusi alku tuloslistalle
@@ -20,3 +39,11 @@ Ajon tila näkyy koko ajan ruudulla. Ensimmäinen pelaaja saattaa odottaa palvel
 heräämistä jopa minuutin; samanaikaisesti virallisia ajoja mahtuu kaksi.
 
 Vanhat ajat eivät siirry uudelle tuloslistalle.
+
+
+## Daily championship
+- Daily fastest lap and most-laps standings, Helsinki midnight turnover and date history.
+- Participation, lap milestones and consecutive-day streak bonuses; monthly points.
+- Password account identity across devices; optional analytics remains independent.
+- Finalizes at midnight immediately. Late receipts retain all-time eligibility only.
+- No bot exclusions beyond the existing authoritative driving verification.

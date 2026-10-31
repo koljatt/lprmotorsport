@@ -466,13 +466,13 @@ window.LPRRenderer3D = class LPRRenderer3D {
       beginTree:()=>{treeStart=data.length;},endTree:tree=>{
         this.obstacleMeshes.push({body:tree.body,start:treeStart,end:data.length});
       }},window.LPRCampus.treeSeed);
+    const gantryHalf = window.LPRCampus.gantryHalfWidth;
     for (const side of [-1,1]) {
-      const x = first.x + normals[0].x * (shoulderOuter + 5) * side;
-      const z = first.y + normals[0].z * (shoulderOuter + 5) * side;
+      const x = first.x + normals[0].x * gantryHalf * side;
+      const z = first.y + normals[0].z * gantryHalf * side;
       box(x,0,z,3,30,3,[.035,.17,.12]);
     }
     const beamCenter = [first.x, first.y];
-    const gantryHalf = shoulderOuter + 5;
     for (let i = -gantryHalf; i < gantryHalf; i += 4) {
       const x = beamCenter[0] + normals[0].x * (i + 2);
       const z = beamCenter[1] + normals[0].z * (i + 2);
@@ -1860,6 +1860,20 @@ window.LPRRenderer3D = class LPRRenderer3D {
           rod(center,center.map((value,i)=>value+normal[i]*.025),.065,[.42,.44,.43]);
         }
       }
+      // Close the driver tub beneath the wheel. Side walls alone leave the
+      // asphalt visible through the open floor and the rear of the nose.
+      // Shared edges keep these panels sealed as the whole body tilts.
+      quad(bodyPoint(-9.4,-2.7,.85),bodyPoint(-9.4,2.7,.85),
+        bodyPoint(-1.2,2.7,.85),bodyPoint(-1.2,-2.7,.85),cockpitBlack);
+      // Follow the curved nose crown across the top of the front bulkhead.
+      for(let band=0;band<bands.length-1;band++) {
+        const a=bands[band],b=bands[band+1];
+        const [f,w,h]=sections[0];
+        quad(bodyPoint(f,w*a,.85),bodyPoint(f,w*b,.85),
+          surfacePoint(f,w,h,b),surfacePoint(f,w,h,a),cockpitBlack);
+      }
+      quad(bodyPoint(-9.4,-2.7,.85),bodyPoint(-9.4,-2.7,4),
+        bodyPoint(-9.4,2.7,4),bodyPoint(-9.4,2.7,.85),cockpitBlack);
       // Low side fairings sit inside the tyres and below the cockpit rim.
       for(const side of [-1,1]) {
         quad(bodyPoint(-7.8,side*3.1,2.2),bodyPoint(-7.8,side*5.1,1.7),
