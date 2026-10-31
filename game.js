@@ -6,7 +6,6 @@
   const ui = {
     lap: document.querySelector('#lap-count'),
     time: document.querySelector('#lap-time'),
-    best: document.querySelector('#best-time'),
     speed: document.querySelector('#speed'),
     lateralG: document.querySelector('#lateral-g'),
     grip: document.querySelector('#grip-state'),
@@ -34,13 +33,13 @@
     soundButton.setAttribute('aria-pressed', String(audio.enabled));
   }
   function syncAudio() {
-    const paused = document.hidden || !audioFocused || ui.dialog.open;
+    const paused = document.hidden || !audioFocused || (ui.dialog.open && !window.LPRSpectator?.active);
     if (audio.paused !== paused) audio.setPaused(paused);
     const muted = paused || !audio.enabled;
     if (muted && !saunaLife.muted) saunaLife.stopSound();
     saunaLife.muted = muted;
   }
-  const startAngle = Math.atan2(track[1].y - track[0].y, track[1].x - track[0].x);
+  const startAngle = LPRCampus.launchPosition.angle;
   const held = { left: false, right: false, gas: false, brake: false };
   const keyboard = new Set();
   const touchPointers = new Map();
@@ -330,7 +329,7 @@
     window.LPRRaceEffects?.clear();
     clearInput();
     saunaLife.leave();
-    car = { x: track[0].x, y: track[0].y, angle: startAngle, speed: 0, lap: 1, lapStart: 0, stage: 0, started: false, offroad: false, damage:0, crashed:false, pool:false, poolX:0, poolZ:0 };
+    car = { x: LPRCampus.launchPosition.x, y: LPRCampus.launchPosition.y, angle: startAngle, speed: 0, lap: 1, lapStart: 0, lapTimingArmed:false, stage: 0, started: false, offroad: false, damage:0, crashed:false, pool:false, poolX:0, poolZ:0 };
     dynamics.reset(car);
     dynamics.parameters.tractionControlEnabled=true;
     car.tcEnabled=true;
@@ -382,6 +381,7 @@
   }
 
   function readInput() {
+    if(window.LPRChat?.typing||document.activeElement?.closest?.('#guest-register-form'))return {steer:0,gas:0,brake:0,analog:false,wheel:false};
     const pad = currentPad();
     if (pad && (!activePad || activePad.id !== pad.id)) {
       activePad = pad;
@@ -474,7 +474,7 @@
       lastDeviceUpdate = now;
     }
     if (ui.dialog.open || car.sauna || car.sale || car.pool) {
-      if (car.started) {
+      if (car.lapTimingArmed) {
         car.lapElapsedMs = Math.max(0, now - car.lapStart);
         ui.time.textContent = formatTime(car.lapElapsedMs);
       }
@@ -501,12 +501,11 @@
     if (!input.wheel) input.steer = Math.abs(input.steer) < .04 ? 0 : input.steer;
     if (!car.started && input.gas > .08) {
       car.started = true;
-      window.LPRAnalytics?.event('lap_start');
-      if(!window.LPRVerifiedDriving) window.LPRLeaderboard?.startLap?.();
       car.lapStart = now;
       ui.notice.classList.add('hidden');
     }
     const steps = Math.max(1, Math.ceil(dt * 90));
+    let crossedFinishLine = false;
     for (let i = 0; i < steps; i++) {
       car.grassFraction = grassContact(car);
       const previous = { x:car.x, y:car.y, angle:car.angle };
@@ -516,6 +515,7 @@
         audio.impact(car.impactSpeed);
         if(damage>0) showNotice(t("Auto vaurioitui."),2500);
       });
+      crossedFinishLine ||= window.LPRCampus.crossesFinishLine(previous,car);
       if(collision && car.crashed) {
         car.crashedAt=now;
         showNotice(t("Auto hajosi! Aloita uudelleen."),0);
@@ -532,16 +532,24 @@
     car.grassFraction = grassContact(car);
     car.offroad = car.grassFraction > .5;
     if (!car.crashed && nearest.distance < ROAD_HALF && car.speed > 2.2) {
-      if (car.stage === 0 && nearest.index > 55 && nearest.index < 85) {
+      if (!car.lapTimingArmed && crossedFinishLine) {
+        car.lapTimingArmed=true;
+        car.lapStart=now;
+        car.stage=0;
+        timing.reset();
+        window.LPRAnalytics?.event('lap_start');
+        if(!window.LPRVerifiedDriving) window.LPRLeaderboard?.startLap?.();
+      }
+      else if (car.lapTimingArmed && car.stage === 0 && nearest.index > 55 && nearest.index < 85) {
         car.stage = 1;
         showSector(now - car.lapStart);
       }
-      else if (car.stage === 1 && nearest.index > 115 && nearest.index < 145) {
+      else if (car.lapTimingArmed && car.stage === 1 && nearest.index > 115 && nearest.index < 145) {
         car.stage = 2;
         showSector(now - car.lapStart);
       }
-      else if (car.stage === 2 && nearest.index > 175 && nearest.index < 205) car.stage = 3;
-      else if (car.stage === 3 && (nearest.index < 5 || nearest.index > 235)) {
+      else if (car.lapTimingArmed && car.stage === 2 && nearest.index > 175 && nearest.index < 205) car.stage = 3;
+      else if (car.lapTimingArmed && car.stage === 3 && crossedFinishLine) {
         const lapTime = now - car.lapStart;
         if (lapTime > 5000) {
           window.LPRAnalytics?.event('lap_complete', { lapMs: Math.round(lapTime) });
@@ -553,7 +561,6 @@
             localStorage.setItem('lpr-best-time-lut-20261011-v3', String(best));
             timing.best = timing.sectors.slice();
             localStorage.setItem('lpr-best-sectors-lut-20261011-v3', JSON.stringify({ lapTime: best, sectors: timing.best }));
-            ui.best.textContent = formatTime(best);
             showNotice(t("record", { time: formatTime(lapTime) }), 3500);
           } else showNotice(t("lapResult", { time: formatTime(lapTime) }), 2500);
           car.lap++;
@@ -567,8 +574,8 @@
         }
       }
     }
-    if (car.started) ui.time.textContent = formatTime(now - car.lapStart);
-    car.lapElapsedMs=car.started ? Math.max(0,now-car.lapStart) : 0;
+    if (car.lapTimingArmed) ui.time.textContent = formatTime(now - car.lapStart);
+    car.lapElapsedMs=car.lapTimingArmed ? Math.max(0,now-car.lapStart) : 0;
     car.throttleInput=input.gas;
     car.brakeInput=input.brake;
     ui.speed.textContent = String(Math.round(car.speed * 3.6));
@@ -585,13 +592,14 @@
     renderer.peopleTime=result.ticks*1000/120;
     window.LPRVerifiedDriving.step(input,result,event);
     car.stage=result.stage;car.lap=result.lap;
-    car.lapElapsedMs=(result.ticks-result.lapStartTick)*1000/120;
+    car.started=result.started;
+    car.lapElapsedMs=result.started?(result.ticks-result.lapStartTick)*1000/120:0;
     if(event.split!==null)showSector(event.split*1000/120);
     if(event.completed){
       const lapMs=event.completed.lapTicks*1000/120;
       window.LPRAnalytics?.event('lap_complete',{lapMs:Math.round(lapMs)});
       audio.lap(false);timing.reset();ui.lap.textContent=String(car.lap);
-      showNotice('Kierros '+formatTime(lapMs)+(window.LPRVerifiedDriving.active?'':' · harjoittelu'),3000);
+      showNotice('Kierros '+formatTime(lapMs)+(window.LPRVerifiedDriving.lapEligible?' · tarkistetaan':' · harjoittelu'),3000);
       // Do not reset a flying lap after verification was lost: stay in practice until the player explicitly restarts.
     }
     car.throttleInput=input.gas;car.brakeInput=input.brake;
@@ -605,10 +613,9 @@
   window.LPRVerifiedDriving?.attach({prepare(){reset({verified:true});ui.notice.classList.add('hidden');},start(){
     reset({verified:true});
     drivingWorld=window.LPRDriving.create({car,dynamics,onImpact:(contact,damage)=>{audio.impact(car.impactSpeed);if(damage>0)showNotice(t("Auto vaurioitui."),2500);}});
-    car.started=true;car.lapStart=performance.now();
+    car.started=false;car.lapTimingArmed=false;car.lapStart=0;
     accumulator=0;lastFrame=performance.now();
     ui.dialog.close();ui.notice.classList.add('hidden');
-    window.LPRAnalytics?.event('lap_start');
   },saved(lapMs){showNotice('Kierrosaika '+formatTime(lapMs)+' tallennettu',3500);}});
 
   let lastPresentation = null;
@@ -618,6 +625,8 @@
   let simTick = 0, accumulator = 0;
   function simulate(now) {
     if (document.hidden) { lastFrame = Math.max(lastFrame, now); return; }
+    // Spectating presents another driver; frame() keeps lastFrame current meanwhile.
+    if (window.LPRSpectator?.active) return;
     // The timer may already have advanced the clock past a frame's timestamp.
     if (now <= lastFrame) return;
     accumulator += Math.min((now - lastFrame) / 1000, .1);
@@ -639,10 +648,30 @@
   let clock = 0;
   function syncClock() {
     const pad = typeof activePad === 'undefined' ? null : activePad; // absent in the frame-loop test sandbox
-    const wanted = !!pad && !!window.LPRWheel?.isWheel(pad) && !document.hidden;
+    const wanted = !!pad && !!window.LPRWheel?.isWheel(pad) && !document.hidden && !window.LPRSpectator?.active;
     if (wanted && !clock && typeof setInterval === 'function') clock = setInterval(() => simulate(performance.now()), 4);
     else if (!wanted && clock) { clearInterval(clock); clock = 0; }
   }
+  function resetSpectatorPresentation(){
+    clearInput();accumulator=0;lastFrame=performance.now();lastPresentation=null;
+    renderer.visualSteering=null;renderer.lastWheelFrame=0;
+    audio.stopEffects();
+  }
+  window.LPRSpectator?.attach({
+    begin(){
+      window.LPRVerifiedDriving?.cancel(null);resetSpectatorPresentation();
+      ui.notice.classList.add('hidden');sectorUI.hidden=true;
+      window.LPRRaceEffects?.clear();
+      document.querySelector('#verification-state').textContent='';
+      saunaLife.stopSound();syncAudio();audio.unlock();resize();
+    },
+    switchDriver:resetSpectatorPresentation,
+    end(){
+      resetSpectatorPresentation();syncAudio();resize();
+      ui.lap.textContent=String(car.lap);ui.time.textContent=formatTime(car.lapElapsedMs||0);
+      ui.speed.textContent=String(Math.round(car.speed*3.6));
+    }
+  });
   function frame(now) {
     requestAnimationFrame(frame);
     if (document.hidden) { lastPresentation = null; return; }
@@ -651,6 +680,25 @@
     const elapsed = lastPresentation === null ? interval : now - lastPresentation;
     if (elapsed < interval - .01) return;
     lastPresentation = now - (elapsed >= interval ? elapsed % interval : 0);
+    if(window.LPRSpectator?.active){
+      // Spectating uses this exact renderer, camera, resolution and game HUD.
+      // Never simulate local inputs or submit laps while watching another driver.
+      lastFrame=now;accumulator=0;
+      window.LPRWheel?.updateFfb(car,false,STEP);syncClock();
+      const remote=window.LPRSpectator.presentation(now);
+      if(remote){
+        const observed=remote.car;
+        ui.lap.textContent=String(observed.lap);ui.time.textContent=formatTime(observed.lapElapsedMs);
+        ui.speed.textContent=String(Math.round(observed.speed*3.6));
+        ui.lateralG.textContent=`${Math.abs(observed.lateralG).toFixed(1)} G`;
+        ui.grip.textContent=observed.damage>0?`${t('VAURIO')} ${Math.round(observed.damage*100)} %`:observed.offroad?t('RADAN ULKOPUOLELLA'):t('PITO OK');
+        ui.tc.textContent=observed.tcActive?t('TC RAJOITTAA TEHOA'):t(observed.tcEnabled?'TC PÄÄLLÄ':'TC POIS');
+        renderer.updatePeople(remote.time);renderer.render(observed,remote.time);
+        syncAudio();audio.update(observed);
+      }else audio.setPaused(true);
+      window.LPRAnalytics?.sample('menu',false,false);
+      return;
+    }
     simulate(now);
     syncClock();
     window.LPRAnalytics?.sample(ui.dialog.open ? 'menu' : car.crashed ? 'crashed' : car.sale ? 'shop' : car.sauna ? 'sauna' : car.pool ? 'pool' : 'driving', !!activePad && (activePad.axes.some(v => Math.abs(v) > .1) || activePad.buttons.some(b => b.pressed)), held.left || held.right || held.gas || held.brake);
@@ -724,6 +772,7 @@
     event.preventDefault(); keyboard.delete(event.code); syncHeld();
   });
   window.addEventListener('blur', clearInput);
+  window.addEventListener('lpr-chat-focus', clearInput);
   // Older iOS Safari versions also emit proprietary pinch gesture events.
   // Restrict the fallback to gameplay so settings retain normal touch behavior.
   const gameSurface = document.querySelector('.app');
@@ -780,13 +829,20 @@
     window.LPRLeaderboard?.refresh();
     void window.LPRVerifiedDriving?.refresh();
   });
+  document.querySelector('#leaderboard-drive')?.addEventListener('click', () => {
+    if(window.LPRLeaderboard?.requiresName || window.LPRSpectator?.active)return;
+    ui.dialog.classList.remove('lobby-ready');
+    document.querySelector('#close-settings').hidden=false;
+    ui.dialog.close();
+    reset();
+  });
   document.querySelector('#close-settings').addEventListener('click', () => {
-    if (!window.LPRLeaderboard?.requiresName) ui.dialog.close();
+    if (!window.LPRLeaderboard?.requiresName && !ui.dialog.classList.contains('lobby-ready')) ui.dialog.close();
   });
   window.addEventListener('resize', resize);
   const landscapeDriving = window.matchMedia('(pointer:coarse) and (orientation:landscape), (max-width:900px) and (max-height:500px) and (orientation:landscape)');
   landscapeDriving.addEventListener('change', event => {
-    if (event.matches && ui.dialog.open && !window.LPRLeaderboard?.requiresName) ui.dialog.close();
+    if (event.matches && ui.dialog.open && !window.LPRLeaderboard?.requiresName && !ui.dialog.classList.contains('lobby-ready') && !window.LPRSpectator?.active) ui.dialog.close();
   });
   new ResizeObserver(resize).observe(document.querySelector('.game-shell'));
   window.addEventListener('gamepadconnected', event => {
@@ -794,7 +850,6 @@
   });
   window.addEventListener('gamepaddisconnected', () => { activePad = null; });
 
-  ui.best.textContent = best ? formatTime(best) : '--:--.---';
   reset();
   openTestScene(window.location.search);
   resize();

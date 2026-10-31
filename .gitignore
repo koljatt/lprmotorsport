@@ -3,3 +3,9 @@
 /artifacts/replay-probe/
 
 /artifacts/verification/
+/artifacts/integration/
+/artifacts/release-20261027/
+*.log
+.env
+.env.*
+!.env.example

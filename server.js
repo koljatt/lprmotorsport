@@ -30,9 +30,19 @@ function createServer({production=false}={}) {
         const doc={version:1,objects:validate(JSON.parse(body))};
         const file=path.join(root,'data/track-objects.json');
         const temporary=path.join(root,`data/.track-objects-${randomUUID()}.tmp`);
+        const contents=JSON.stringify(doc,null,2)+'\n';
         try{
-          fs.writeFileSync(temporary,JSON.stringify(doc,null,2)+'\n');
-          fs.renameSync(temporary,file);
+          fs.writeFileSync(temporary,contents);
+          try{fs.renameSync(temporary,file);}
+          catch(error){
+            if(process.platform!=='win32'||error.code!=='EPERM')throw error;
+            const descriptor=fs.openSync(file,'r+');
+            try{
+              fs.writeFileSync(descriptor,contents);
+              fs.ftruncateSync(descriptor,Buffer.byteLength(contents));
+              fs.fsyncSync(descriptor);
+            }finally{fs.closeSync(descriptor);}
+          }
         }finally{if(fs.existsSync(temporary))fs.unlinkSync(temporary);}
         return reply(200,'Saved');
       } catch(error){return reply(400,error.message);}

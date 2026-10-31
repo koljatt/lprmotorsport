@@ -2,8 +2,8 @@
 (function(root){
   // Shared physics must give bit-identical results in the browser and on the verification server.
   const Math=root.LPRMath||globalThis.Math;
-  function create() {
-    const campus=root.LPRCampus,site=campus.saunaSite;
+  function create({campus=root.LPRCampus}={}) {
+    const site=campus.saunaSite;
     const forwardX=-Math.cos(Math.PI/4),forwardZ=-Math.sin(Math.PI/4),rightX=-forwardZ,rightZ=forwardX;
     const frame={stop:[site.x,0,site.y],forwardX,forwardZ,rightX,rightZ};
     const positions=[[-48,-30],[-27,-35],[-16,-29],[4,-35],[18,-30],[39,-23],[-46,15],[-23,23],[-7,26],[10,20],[-49,-16],[-42,29]];

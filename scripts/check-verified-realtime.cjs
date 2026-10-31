@@ -1,6 +1,6 @@
 // Two real-time browser clients, full 3D rendering, unmodified monotonic server clock.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {chromium}=require('playwright'),{driver}=require('../tests/helpers-driving.cjs');
+const {launchBrowser}=require('./browser.cjs'),{driver}=require('../tests/helpers-driving.cjs');
 (async()=>{
  const secret='real-time-local-test-'.repeat(4),{revision}=require('../verification/world.cjs');let browser;
  const game=require('../server.js').createServer();await new Promise(r=>game.listen(0,'127.0.0.1',r));
@@ -11,11 +11,11 @@ const {chromium}=require('playwright'),{driver}=require('../tests/helpers-drivin
  const serviceURL=`http://127.0.0.1:${service.address().port}`,boardURL=`http://127.0.0.1:${board.address().port}`;
  const errors=[],players=[];
  try{
-  browser=await chromium.launch({headless:true,channel:'chrome',args:['--enable-unsafe-swiftshader']});
+  browser=await launchBrowser({headless:true,args:['--enable-unsafe-swiftshader']});
   for(let i=0;i<2;i++){
    const context=await browser.newContext({viewport:{width:640,height:480}}),page=await context.newPage();
    page.on('pageerror',error=>errors.push(error.message));
-   await page.route('**/verification/config.js',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
+   await page.route('**/verification/config.js*',route=>route.fulfill({contentType:'text/javascript',body:`window.LPRVerificationConfig=${JSON.stringify({service:serviceURL,leaderboard:boardURL})};`}));
    await page.route('https://lpr-leaderboard.panu-musakka.workers.dev/**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({version:'lut-20261011-v3',results:[]})}));
    await page.route('**/game.js?*',route=>{
     let source=fs.readFileSync(path.join(__dirname,'../game.js'),'utf8').replaceAll('\r\n','\n');
@@ -25,7 +25,9 @@ const {chromium}=require('playwright'),{driver}=require('../tests/helpers-drivin
    });
    await page.goto(origin,{waitUntil:'domcontentloaded',timeout:60000});await page.waitForFunction(()=>window.__verifiedGame);
    await page.evaluate(source=>{window.__driver=eval('('+source+')');},driver.toString());
-   await page.fill('#leaderboard-name','Realtime '+(i+1));await page.check('#analytics-consent');
+   await page.click('#leaderboard-create');
+   await page.fill('#leaderboard-name','Realtime '+(i+1));await page.fill('#leaderboard-password','realtime-test-password');
+   await page.click('#leaderboard-start');await page.click('label:has(#leaderboard-series-human)');
    players.push({page,context});
   }
   const started=performance.now();

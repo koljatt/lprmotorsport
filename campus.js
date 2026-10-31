@@ -36,6 +36,44 @@ window.LPRCampus = (() => {
   // Rotate existing samples so the road geometry stays exactly the same.
   const startIndex = Math.round(50 / window.LPRVehicleSpec.metresPerWorldUnit / (length / track.length));
   track.push(...track.splice(0, startIndex));
+  const start={x:track[0].x,y:track[0].y};
+  const startLength=Math.hypot(track[1].x-start.x,track[1].y-start.y);
+  const gantryHalfWidth=road.shoulderOuter+5;
+  const gantryPostHalfWidth=1.5;
+  const finishGate={
+    x:start.x,y:start.y,
+    tangentX:(track[1].x-start.x)/startLength,
+    tangentY:(track[1].y-start.y)/startLength,
+    normalX:-(track[1].y-start.y)/startLength,
+    normalY:(track[1].x-start.x)/startLength,
+    halfWidth:gantryHalfWidth-gantryPostHalfWidth
+  };
+  const trackDistances=[0];
+  for(let i=0;i<track.length;i++) trackDistances.push(trackDistances[i]+Math.hypot(
+    track[(i+1)%track.length].x-track[i].x,track[(i+1)%track.length].y-track[i].y));
+  const launchAlong=trackDistances[track.length]-200/window.LPRVehicleSpec.metresPerWorldUnit;
+  let launchSegment=0;
+  while(trackDistances[launchSegment+1]<launchAlong) launchSegment++;
+  const launchFrom=track[launchSegment],launchTo=track[(launchSegment+1)%track.length];
+  const launchFraction=(launchAlong-trackDistances[launchSegment])/
+    (trackDistances[launchSegment+1]-trackDistances[launchSegment]);
+  const launchPosition={
+    x:launchFrom.x+(launchTo.x-launchFrom.x)*launchFraction,
+    y:launchFrom.y+(launchTo.y-launchFrom.y)*launchFraction,
+    angle:Math.atan2(launchTo.y-launchFrom.y,launchTo.x-launchFrom.x)
+  };
+  function crossesFinishLine(previous,current) {
+    const before=(previous.x-finishGate.x)*finishGate.tangentX+
+      (previous.y-finishGate.y)*finishGate.tangentY;
+    const after=(current.x-finishGate.x)*finishGate.tangentX+
+      (current.y-finishGate.y)*finishGate.tangentY;
+    if(before>0||after<=0)return false;
+    const fraction=-before/(after-before);
+    const x=previous.x+(current.x-previous.x)*fraction;
+    const y=previous.y+(current.y-previous.y)*fraction;
+    const lateral=(x-finishGate.x)*finishGate.normalX+(y-finishGate.y)*finishGate.normalY;
+    return Math.abs(lateral)<=finishGate.halfWidth;
+  }
   const outsideTrackClearance = (x,y,clearance) => {
     const clearanceSquared=clearance*clearance;
     for(let i=0;i<track.length;i++) {
@@ -123,25 +161,59 @@ window.LPRCampus = (() => {
         [panel.rear-panel.sweep*.72*10.25,side*10.25],[panel.rear-panel.sweep*.72*1.35,side*1.35]]);
     bodyParts.push([[12.45,side*10.05],[12.4,side*10.28],[11,side*10.28],[11.1,side*10.05]]);
   }
+  // Collision parts are read-only local coordinates. One entry per live car;
+  // WeakMap ownership prevents abandoned cars from retaining cached geometry.
+  const collisionShapes=new WeakMap();
+  let tyreHullCache;
+  function tyreCollisionHull() {
+    const profile=carGeometry.tyreProfile,cached=tyreHullCache;
+    let same=!!cached&&Object.is(cached.rimRadius,carGeometry.rimRadius)&&
+      Object.is(cached.tyreRadius,carGeometry.tyreRadius)&&Object.is(cached.halfWidth,carGeometry.tyreHalfWidth)&&cached.profile.length===profile.length;
+    if(same)for(let i=0;i<profile.length;i++)if(!Object.is(profile[i][0],cached.profile[i][0])||!Object.is(profile[i][1],cached.profile[i][1])){same=false;break;}
+    if(same)return cached.hull;
+    const points=[...profile.map(([axial,r])=>[r,axial]),
+      ...profile.slice().reverse().map(([axial,r])=>[-r,axial])];
+    const band=carGeometry.rimRadius+(1.88-1.12)/1.18*(carGeometry.tyreRadius-carGeometry.rimRadius);
+    for(const axial of [-carGeometry.tyreHalfWidth,carGeometry.tyreHalfWidth])points.push([band,axial],[-band,axial]);
+    const hull=freezeCollisionParts([convexHull(points)])[0];
+    tyreHullCache={rimRadius:carGeometry.rimRadius,tyreRadius:carGeometry.tyreRadius,halfWidth:carGeometry.tyreHalfWidth,
+      profile:profile.map(p=>p.slice()),hull};
+    return hull;
+  }
+  function freezeCollisionParts(parts) {
+    for(const part of parts){if(Object.isFrozen(part))continue;for(const point of part)Object.freeze(point);Object.freeze(part);}
+    return Object.freeze(parts);
+  }
   function carCollisionParts(state) {
-    const damage=state.damage || 0,impactSide=state.impactSide || .3;
-    const parts=bodyParts.map(part=>part.map(([f,s])=>{
-      f*=spec.bodyLengthScale;
-      const crush=Math.max(0,f-2)*damage;
-      return [f-crush*.55,s+impactSide*crush*.25];
-    }));
-    for(const axle of [0,1]) for(const side of [-1,1]) {
-      const angle=axle===0?(state.steerAngle || 0)+side*damage*.65:0,c=Math.cos(angle),s=Math.sin(angle);
+    const damage=state.damage || 0,impactSide=state.impactSide || .3,steerAngle=state.steerAngle || 0;
+    const hull=tyreCollisionHull();
+    let cached=collisionShapes.get(state);
+    const sameBody=!!cached&&Object.is(cached.damage,damage)&&Object.is(cached.impactSide,impactSide)&&
+      Object.is(cached.bodyLengthScale,spec.bodyLengthScale)&&cached.hull===hull&&
+      Object.is(cached.wheelForward,carGeometry.wheelForward)&&Object.is(cached.wheelRear,carGeometry.wheelRear)&&Object.is(cached.wheelSide,carGeometry.wheelSide);
+    if(sameBody&&Object.is(cached.steerAngle,steerAngle))return cached.parts;
+    if(!sameBody){
+      const body=freezeCollisionParts(bodyParts.map(part=>part.map(([f,s])=>{
+        f*=spec.bodyLengthScale;
+        const crush=Math.max(0,f-2)*damage;
+        return [f-crush*.55,s+impactSide*crush*.25];
+      })));
+      cached={damage,impactSide,bodyLengthScale:spec.bodyLengthScale,hull,
+        wheelForward:carGeometry.wheelForward,wheelRear:carGeometry.wheelRear,wheelSide:carGeometry.wheelSide,body};
+      collisionShapes.set(state,cached);
+    }
+    // Rear tyre geometry is independent of steering. Keep it with the body;
+    // only the front pair needs rebuilding when steering changes.
+    function wheelPart(axle,side) {
+      const angle=axle===0?steerAngle+side*damage*.65:0,c=Math.cos(angle),s=Math.sin(angle);
       const crush=axle===0?6.1*damage:0;
       const f=(axle===0?carGeometry.wheelForward:carGeometry.wheelRear)-crush*.55,lateral=side*carGeometry.wheelSide+impactSide*crush*.25;
-      const profile=[...carGeometry.tyreProfile.map(([axial,r])=>[r,axial]),
-        ...carGeometry.tyreProfile.slice().reverse().map(([axial,r])=>[-r,axial])];
-      // Raised sidewall mouldings also belong to the visible wheel.
-      const band=carGeometry.rimRadius+(1.88-1.12)/1.18*(carGeometry.tyreRadius-carGeometry.rimRadius);
-      for(const axial of [-carGeometry.tyreHalfWidth,carGeometry.tyreHalfWidth]) profile.push([band,axial],[-band,axial]);
-      parts.push(convexHull(profile).map(([x,y])=>[f+x*c-y*s,lateral+x*s+y*c]));
+      return hull.map(([x,y])=>[f+x*c-y*s,lateral+x*s+y*c]);
     }
-    return parts;
+    if(!sameBody)cached.rear=freezeCollisionParts([-1,1].map(side=>wheelPart(1,side)));
+    const front=freezeCollisionParts([-1,1].map(side=>wheelPart(0,side)));
+    cached.parts=Object.freeze([...cached.body,...front,...cached.rear]);cached.steerAngle=steerAngle;
+    return cached.parts;
   }
   function convexHull(points) {
     const sorted=points.slice().sort((a,b)=>a[0]-b[0] || a[1]-b[1]);
@@ -361,6 +433,10 @@ window.LPRCampus = (() => {
     [80,15,[.57,.59,.55]],[111,15,[.85,.85,.8]],[143,15,[.16,.19,.2]],[105,-35,[.7,.7,.65]]];
   const footprint=(x,y,width,depth,angle=0)=>({minX:x-width/2,maxX:x+width/2,
     minY:y-depth/2,maxY:y+depth/2,angle});
+  const finishPostBounds=[-1,1].map(side=>footprint(
+    finishGate.x+finishGate.normalX*gantryHalfWidth*side,
+    finishGate.y+finishGate.normalY*gantryHalfWidth*side,
+    gantryPostHalfWidth*2,gantryPostHalfWidth*2));
   const vehicleBounds=campusCars.map(car=>{
     const p=world(car.row,car.z);
     return footprint(p.x,p.y,car.width*scale,car.depth*scale,car.angle);
@@ -408,22 +484,23 @@ window.LPRCampus = (() => {
   const poolSite={x:saunaSite.x-57*diagonal,y:saunaSite.y-57*diagonal};
   const poolBounds=footprint(poolSite.x,poolSite.y,28,28);
   const peopleBounds=[];
-  const obstacleBounds=[...buildingBounds,...saleAccessBounds,...treeBounds,...vehicleBounds,...tyreBarrierBounds,poolBounds];
+  const obstacleBounds=[...buildingBounds,...saleAccessBounds,...treeBounds,...vehicleBounds,...finishPostBounds,...tyreBarrierBounds,poolBounds];
   // SI velocities and masses; only positions and mesh coordinates use world units.
   const bodies=[];
-  function makeBody(bounds,kind,mass=Infinity) {
+  function makeBody(bounds,kind,mass=Infinity,targetBodies=bodies) {
     const body={bounds,kind,mass,x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2,
       angle:bounds.angle||0,vx:0,vy:0,spin:0,damage:0,bend:0,bendVelocity:0,dents:[]};
     body.origin={x:body.x,y:body.y,angle:body.angle};
     body.spawn={...body.origin};
     body.width=bounds.maxX-bounds.minX;body.depth=bounds.maxY-bounds.minY;
-    Object.defineProperty(bounds,'body',{value:body,enumerable:false});bodies.push(body);return body;
+    Object.defineProperty(bounds,'body',{value:body,enumerable:false});targetBodies.push(body);return body;
   }
   buildingBounds.forEach(b=>makeBody(b,'wall'));
   treeBounds.forEach((b,i)=>{Object.defineProperty(trees[i],'body',{value:makeBody(b,'tree'),enumerable:false});});
   saleAccessBounds.forEach(b=>makeBody(b,'wall'));
   vehicleBounds.forEach((b,i)=>makeBody(b,i===vehicleBounds.length-1?'sauna':'car',
     i===vehicleBounds.length-1?3500:i===vehicleBounds.length-2?4200:1200));
+  finishPostBounds.forEach(b=>makeBody(b,'wall'));
   const poolBody=makeBody(poolBounds,'pool',2200);
   function registerPerson(index,x,y) {
     if(peopleBounds[index]) return peopleBounds[index].body;
@@ -497,7 +574,8 @@ window.LPRCampus = (() => {
     }
     return {depth,normal};
   }
-  function stepObstacles(seconds,car,onImpact) {
+  function stepObstacles(seconds,car,onImpact,sessionBodies=bodies) {
+    const bodies=sessionBodies;
     const duration=Math.max(0,Math.min(seconds,.1));
     const motion=bodies.reduce((max,b)=>Number.isFinite(b.mass)?Math.max(max,
       Math.hypot(b.vx,b.vy)/spec.metresPerWorldUnit+Math.abs(b.spin)*Math.hypot(b.width,b.depth)/2):max,0);
@@ -540,7 +618,8 @@ window.LPRCampus = (() => {
       b.vx*=drag;b.vy*=drag;b.spin*=Math.exp(-3*dt);updateBounds(b);
     }
   }
-  function resetObstacles() {
+  function resetObstacles(sessionBodies=bodies) {
+    const bodies=sessionBodies;
     for(const b of bodies) {
       b.origin={...b.spawn};b.pose=undefined;
       Object.assign(b,{...b.origin,vx:0,vy:0,spin:0,damage:0,bend:0,bendVelocity:0,dents:[],direction:undefined});updateBounds(b);
@@ -572,6 +651,63 @@ window.LPRCampus = (() => {
   }
   const resolveBuildingCollision=(state,previous,onImpact)=>resolveBoundsCollision(state,previous,buildingBounds,onImpact);
   const resolveObstacleCollision=(state,previous,onImpact)=>resolveBoundsCollision(state,previous,obstacleBounds,onImpact);
+  function prepareSessionFactory() {
+    const campus=this;
+    if(peopleBounds.length||bodies.some(b=>b.damage||b.vx||b.vy||b.spin))throw Error('Prepare track before starting any driving worlds');
+    resetObstacles();
+    const freeze=value=>{
+      if(value&&typeof value==='object'&&!Object.isFrozen(value)){
+        for(const child of Object.values(value))freeze(child);Object.freeze(value);
+      }return value;
+    };
+    const bodyIds=new Map(bodies.map((body,i)=>[body,i]));
+    const boundIds=new Map();
+    const spawns=campus.obstacleBounds.map((bounds,i)=>{
+      boundIds.set(bounds,i);return {...bounds,bodyIndex:bodyIds.get(bounds.body)};
+    });
+    const bodySpawns=bodies.map(body=>{
+      const {bounds,...fields}=body;
+      return {...fields,origin:{...body.origin},spawn:{...body.spawn},dents:body.dents.map(d=>({...d}))};
+    });
+    const indices=list=>list.map(b=>boundIds.get(b));
+    const definition=freeze({track:campus.track,road:campus.road,length:campus.length,finishGate:campus.finishGate,
+      launchPosition:campus.launchPosition,
+      saunaSite:{...campus.saunaSite},bonfireSite:{...campus.bonfireSite},poolSite:{...campus.poolSite},
+      peopleSites:(campus.peopleSites||[]).map(p=>({...p})),carGeometry:campus.carGeometry,
+      bounds:{...campus.bounds},spawns,bodySpawns,
+      buildings:indices(campus.buildingBounds),trees:indices(campus.treeBounds),vehicles:indices(campus.vehicleBounds),
+      tyres:indices(campus.tyreBarrierBounds),bodyBounds:bodies.map(b=>boundIds.get(b.bounds)),pool:bodyIds.get(campus.poolBody)});
+    function createSession(){
+      const sessionBodies=[],localBounds=definition.spawns.map(({bodyIndex,...bounds})=>({...bounds}));
+      // Body registration order matters for contact resolution. Preserve it exactly.
+      for(let i=0;i<definition.bodySpawns.length;i++){
+        const original=definition.bodySpawns[i],boundIndex=definition.bodyBounds[i];
+        const body=makeBody(localBounds[boundIndex],original.kind,original.mass,sessionBodies);
+        Object.assign(body,original,{bounds:localBounds[boundIndex],origin:{...original.origin},spawn:{...original.spawn},dents:original.dents.map(d=>({...d}))});
+      }
+      const localPeople=[];
+      const select=ids=>ids.map(i=>localBounds[i]);
+      return {track:definition.track,road:definition.road,length:definition.length,finishGate:definition.finishGate,
+        launchPosition:definition.launchPosition,
+        crossesFinishLine,world,
+        saunaSite:definition.saunaSite,bonfireSite:definition.bonfireSite,poolSite:definition.poolSite,
+        peopleSites:definition.peopleSites,carGeometry:definition.carGeometry,bounds:definition.bounds,
+        obstacleBounds:localBounds,buildingBounds:select(definition.buildings),treeBounds:select(definition.trees),
+        vehicleBounds:select(definition.vehicles),tyreBarrierBounds:select(definition.tyres),
+        bodies:sessionBodies,poolBody:sessionBodies[definition.pool],carCollisionParts,resolveBoundsCollision,
+        resolveBuildingCollision:(state,previous,onImpact)=>resolveBoundsCollision(state,previous,select(definition.buildings),onImpact),
+        resolveObstacleCollision:(state,previous,onImpact)=>resolveBoundsCollision(state,previous,localBounds,onImpact),
+        registerPerson(index,x,y){
+          if(localPeople[index])return localPeople[index].body;
+          const bounds=footprint(x,y,5,5);localPeople[index]=bounds;localBounds.push(bounds);
+          return makeBody(bounds,'person',80,sessionBodies);
+        },
+        makeBody:(bounds,kind,mass)=>makeBody(bounds,kind,mass,sessionBodies),
+        stepObstacles:(seconds,car,onImpact)=>stepObstacles(seconds,car,onImpact,sessionBodies),
+        resetObstacles:()=>resetObstacles(sessionBodies),movePerson,placeBody,deformPoint};
+    }
+    return Object.freeze({definition,createSession});
+  }
   function build({box,quad,materialBox=box,objectGeometry=(body,draw)=>draw()}) {
     const block = (x,z,w,d,h,color,y=0,material) => { const p=world(x,z); (material ? materialBox : box)(p.x,y,p.y,w*scale,h,d*scale,color,material); };
     const windowPane = (x,y,z,side,shade) => {
@@ -985,8 +1121,8 @@ window.LPRCampus = (() => {
     // Three small marina jetties on the lakefront.
     for(let i=0;i<3;i++) block(727+i*24,213,5,64,1,[.56,.46,.32],0,'wood');
   }
-  return { track, road, length, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
+  return { track, road, length, finishGate, launchPosition, gantryHalfWidth, crossesFinishLine, finishPostBounds, world, occupied, build, saunaSite, bonfireSite, trees, treeSeed, treeBounds,
     campusCars, studentCarModels, lakesideCars, vehicleBounds, buildingBounds, obstacleBounds, resolveBoundsCollision, resolveBuildingCollision,
     resolveObstacleCollision, carGeometry, carCollisionParts, tyreBarrier, tyreBarrierBounds,
-    bodies,poolSite,poolBody,registerPerson,movePerson,placeBody,makeBody,stepObstacles,resetObstacles,deformPoint, bounds:{width:5200,height:4400} };
+    prepareSessionFactory,bodies,poolSite,poolBody,registerPerson,movePerson,placeBody,makeBody,stepObstacles,resetObstacles,deformPoint, bounds:{width:5200,height:4400} };
 })();

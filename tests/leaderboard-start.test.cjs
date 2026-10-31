@@ -9,7 +9,7 @@ const windowHandlers=new Map(),documentHandlers=new Map();
 const emitDocument=(type,event={})=>{for(const fn of documentHandlers.get(type)||[])fn(event)};
 const emitWindow=(type,event={})=>{for(const fn of windowHandlers.get(type)||[])fn(event)};
 const element=id=>{
-  if(!nodes.has(id)){const handlers={};nodes.set(id,{dataset:{control:id.match(/data-control="(\w+)"/)?.[1]},setPointerCapture(){},trigger(type,event){handlers[type]?.(event)},tagName:'DIV',open:false,value:'',classList:{add(){},remove(){},toggle(){}},style:{setProperty(){}},setAttribute(){},querySelector:element,
+  if(!nodes.has(id)){const handlers={};nodes.set(id,{dataset:{control:id.match(/data-control="(\w+)"/)?.[1]},setPointerCapture(){},trigger(type,event){handlers[type]?.(event)},tagName:'DIV',open:false,value:'',classList:{add(){},remove(){},toggle(){},contains(){return false}},style:{setProperty(){}},setAttribute(){},querySelector:element,
     addEventListener:(type,handler)=>{handlers[type]=handler},click(){handlers.click?.()},showModal(){this.open=true},close(){this.open=false;handlers.close?.()},clientWidth:800});}
   return nodes.get(id);
 };
@@ -43,7 +43,21 @@ assert(game.car.started);assert.equal(game.car.lapStart,2000);assert(!game.car.o
 // Move through the genuine gate/sector logic without replacing scoring or submission.
 game.dynamics.step=()=>{};
 const track=ctx.window.LPRCampus.track;
+const gate=ctx.window.LPRCampus.finishGate;
+function crossFinish(simTime,wallTime=simTime) {
+  game.car.x=gate.x-gate.tangentX*2;game.car.y=gate.y-gate.tangentY*2;game.car.speed=10;
+  let steps=0;
+  game.dynamics.step=()=>{steps++;game.car.x=gate.x+gate.tangentX*steps*2;game.car.y=gate.y+gate.tangentY*steps*2;};
+  // Cross in the first of several substeps, not the final one.
+  game.update(.04,simTime,wallTime);
+  game.dynamics.step=()=>{};
+}
+assert(!game.car.lapTimingArmed,'The acceleration zone does not start timing');
+assert.equal(onlineStarts,0,'The acceleration zone does not request a lap ticket');
+crossFinish(2000);
+assert(game.car.lapTimingArmed,'Forward crossing arms the first timed lap');
 for(const [index,time] of [[65,12000],[125,22000],[185,27000],[0,42000]]){
+  if(index===0){crossFinish(time);continue;}
   game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;
   game.update(0,time);
 }
@@ -56,7 +70,7 @@ assert.equal(game.car.lap,2);
 assert.equal(analytics.filter(e=>e.type==='lap_start').length,2);
 assert.equal(analytics.find(e=>e.type==='lap_complete').lapMs,40000,'Analytics uses genuine lap completion');
 // A complete lap with sauna, pool and shop visits remains eligible.
-game.reset();game.held.gas=true;game.update(0,50000);
+game.reset();game.held.gas=true;game.update(0,50000);crossFinish(50000);
 for(const [toggle,position,time] of [
   ['toggleSauna',{x:900,y:650},55000],
   ['togglePool',{x:864,y:668},60000],
@@ -69,6 +83,7 @@ for(const [toggle,position,time] of [
   game[toggle]();
 }
 for(const [index,time] of [[65,75000],[125,85000],[185,90000],[0,105000]]) {
+  if(index===0){crossFinish(time);continue;}
   game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;game.update(0,time);
 }
 assert.equal(submissions.length,2,'Visited lap submits normally');
@@ -103,23 +118,25 @@ right.trigger('pointerdown',pointer(7));emitWindow('resize');assert.equal(game.r
 console.log('PASS: touch arrows match WASD, simultaneous throttle, release, opposite arrows, cancellation, focus and orientation');
 
 // Menus and leaving the app keep the lap eligible, with all elapsed time counted.
-game.reset();game.held.gas=true;game.update(0,200000);
+game.reset();game.held.gas=true;game.update(0,200000);crossFinish(200000);
 element('#leaderboard-button').click();assert(dialog.open);
 game.update(5,205000);assert.equal(game.car.lapStart,200000,'Menu time remains in the lap clock');
 dialog.close();ctx.document.hidden=true;clock=206000;emitDocument('visibilitychange');
 ctx.document.hidden=false;clock=260000;emitDocument('visibilitychange');
 assert.equal(game.car.lapStart,200000,'Time in another app remains in the lap clock');
 for(const [index,time] of [[65,270000],[125,280000],[185,290000],[0,300000]]) {
- game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;game.update(0,time);
+ if(index===0){crossFinish(time);continue;}
+  game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;game.update(0,time);
 }
 assert.equal(submissions.length,3);assert.equal(submissions[2].ms,100000,'Interrupted lap submits normally including time away');
 console.log('PASS: leaderboard menu and app switching preserve submission and full elapsed time');
 
 // Fixed physics time and timed-v1 wall-clock scoring must remain independent.
-game.reset();game.held.gas=true;game.update(0,1000,400000);
+game.reset();game.held.gas=true;game.update(0,1000,400000);crossFinish(1000,400000);
 assert.equal(game.car.lapStart,400000,'Server-timed lap starts on the wall clock');
 for(const [index,simTime,wallTime] of [[65,2000,410000],[125,3000,420000],[185,4000,430000],[0,5000,440000]]) {
- game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;game.update(0,simTime,wallTime);
+ if(index===0){crossFinish(simTime,wallTime);continue;}
+  game.car.x=track[index].x;game.car.y=track[index].y;game.car.speed=10;game.update(0,simTime,wallTime);
 }
 assert.equal(submissions.at(-1).ms,40000,'Slow simulation cannot shorten the timed-v1 reported lap');
 assert.equal(observedPeopleTime,5000,'Collision people follow simulation time');

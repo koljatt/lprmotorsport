@@ -1,12 +1,12 @@
 // Optional browser check: requires Playwright and installed Chromium.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {chromium}=require('playwright');
+const {launchBrowser}=require('./browser.cjs');
 const {createServer}=require('../experiment/server.cjs');
 (async()=>{
  const server=createServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
  let browser;
  try{
-  browser=await chromium.launch({headless:true,args:['--no-sandbox']});const page=await browser.newPage();const errors=[];
+  browser=await launchBrowser({headless:true,args:['--no-sandbox']});const page=await browser.newPage();const errors=[];
   page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${server.address().port}`);
   const recording=await page.evaluate(async()=>{document.querySelector('#streaming').checked=false;const api=window.ReplayLabTest;await api.start(true);
    for(let i=0;i<120*240&&!api.result;i++)api.step();return {replay:api.recording,expected:api.result,source:'synthetic-browser-chromium'};});

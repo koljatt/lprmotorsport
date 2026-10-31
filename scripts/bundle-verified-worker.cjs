@@ -8,11 +8,14 @@ const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n');
 const { revision } = require('../verification/world.cjs');
 
+const replays = read('cloudflare/replays.mjs').replace(/^import .*;\n/gm,'').replace(/^export /gm,'');
 const protocol = read('verification/protocol.mjs').replace(/^export /gm, '');
 let worker = read('cloudflare/verified-worker.mjs');
 const importLine = /^import \{[^}]*\} from '\.\.\/verification\/protocol\.mjs';\n/m;
 if (!importLine.test(worker)) throw Error('verified-worker.mjs must import ../verification/protocol.mjs');
-worker = worker.replace(importLine, '');
+worker = worker.replace(importLine, '').replace(/^import .*replays\.mjs';\n/m,'').replace(/^import .*championship\.mjs';\n/m,'').replace(/^import .*guests\.mjs';\n/m,'');
+const guestCode=read('cloudflare/guests.mjs').replace(/^import .*;\n/gm,'').replace(/^export /gm,'');
+const championshipCode=read('cloudflare/championship.mjs').replace(/^import .*;\n/gm,'').replace(/^export /gm,'');
 if (!worker.includes("const BUILD_REVISION='';")) throw Error('verified-worker.mjs must define BUILD_REVISION');
 worker = worker.replace("const BUILD_REVISION='';", `const BUILD_REVISION=${JSON.stringify(revision)};`);
 worker = worker.replace(/^export const schema=/m, 'const schema=');
@@ -24,6 +27,9 @@ fs.writeFileSync(output, [
   `// Simulation revision ${revision} (rebuild and repaste whenever the physics changes).`,
   '// --- verification/protocol.mjs ---',
   protocol.trim(),
+  guestCode.trim(),
+  replays.trim(),
+  championshipCode.trim(),
   '// --- cloudflare/verified-worker.mjs ---',
   worker.trim(),
   ''

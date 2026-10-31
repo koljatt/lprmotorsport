@@ -11,12 +11,14 @@
     <meta name="theme-color" content="#07110f" />
     <meta name="description" content="LPR Motorsport Lap Challenge – aja kierros Formula Student -radalla." />
     <title>Skinnarila Grand Prix · LPR Motorsport</title>
-    <link rel="stylesheet" href="styles.css?v=single-line-topbar-20261015" />
-    <link rel="stylesheet" href="3d.css?v=top10-medals-20261025" />
-    <script src="i18n.js?v=verified-launch-20261025" defer></script>
+    <link rel="stylesheet" href="styles.css?v=track-record-20261027" />
+    <link rel="stylesheet" href="3d.css?v=verified-guests-20261029" />
+    <link rel="stylesheet" href="dashboard.css?v=viewport-chat-20261027" />
+    <link rel="stylesheet" href="release-notes.css?v=20261027-language-switch" />
+    <script src="i18n.js?v=track-record-20261027" defer></script>
     <script src="shared/dmath.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/vehicle-spec.js?v=deterministic-math-20261024" defer></script>
-    <script src="campus.js?v=deterministic-math-20261024" defer></script>
+    <script src="campus.js?v=collision-cache-20261026" defer></script>
     <script src="shared/track-document.js?v=deterministic-math-20261024" defer></script>
     <script src="shared/terrain.js?v=deterministic-math-20261024" defer></script>
     <script src="data/track-data.js?v=2" defer></script>
@@ -27,19 +29,26 @@
     <script src="shared/driving.js?v=verified-launch-20261025" defer></script>
     <script src="verification/revision.js" defer></script>
     <script src="verification/config.js?v=verified-launch-20261025" defer></script>
-    <script src="experiment/live-client.js?v=verified-launch-20261025" defer></script>
+    <script src="experiment/live-client.js?v=lap-realtime-20261025" defer></script>
     <script src="sale.js?v=solid-shelves-long-checkout-20261013" defer></script>
     <script src="renderer3d.js?v=verified-launch-20261025" defer></script>
     <script src="vehicle.js?v=deterministic-math-20261024" defer></script>
     <script src="sauna.js?v=sound-20261013" defer></script>
     <script src="timing.js?v=sectors-20261009" defer></script>
-    <script src="analytics.js?v=verified-launch-20261025" defer></script>
-    <script src="leaderboard.js?v=verified-top10-20261025" defer></script>
+    <script src="analytics.js?v=expiring-sessions-20261025" defer></script>
+    <script src="leaderboard.js?v=verified-guests-20261029" defer></script>
     <script src="audio.js?v=warm-sound-20261013" defer></script>
     <script src="race-effects.js?v=skinnarila-20261015" defer></script>
-    <script src="verified-driving.js?v=verified-single-top10-20261025" defer></script>
+    <script src="verified-driving.js?v=verified-guests-20261029" defer></script>
+    <script src="track-record.js?v=20261027" defer></script>
+    <script src="championship.js?v=daily-hud-20261027" defer></script>
+    <script src="dashboard.js?v=guest-entry-layout-20261029" defer></script>
+    <script src="chat.js?v=verified-guests-20261029" defer></script>
+    <script src="replay-pose.js" defer></script>
+    <script src="spectate-menu.js?v=native-view-20261027" defer></script>
     <script src="wheel-ffb.js?v=wheel-ffb-20261026" defer></script>
-    <script src="game.js?v=verified-launch-20261025" defer></script>
+    <script src="game.js?v=verified-guests-20261029" defer></script>
+    <script src="release-notes.js?v=20261027" defer></script>
   </head>
   <body>
     <main class="app">
@@ -55,7 +64,21 @@
         </div>
       </header>
 
+      <aside id="chat-panel" class="chat-panel" aria-labelledby="chat-title" hidden>
+        <div class="chat-heading"><h2 id="chat-title">Varikkochat</h2><button id="chat-close" class="icon-button" type="button" aria-label="Sulje chat">×</button></div>
+        <p class="hint">Yhteinen chat · viestit ovat julkisia. Älä jaa henkilötietoja.</p>
+        <p class="chat-presence"><span class="chat-online-dot" aria-hidden="true"></span><span>Paikalla</span> <strong id="chat-online-count" role="status">—</strong></p>
+        <ol id="chat-messages" aria-label="Chat-viestit" aria-live="polite" aria-relevant="additions"></ol>
+        <form id="chat-form">
+          <label for="chat-input">Viesti</label>
+          <div class="chat-compose"><input id="chat-input" type="text" maxlength="280" placeholder="Kirjoita varikolle…" autocomplete="off" required /><button type="submit">Lähetä</button></div>
+        </form>
+        <p id="chat-status" class="hint" role="status"></p>
+      </aside>
+      <button id="chat-restore" class="chat-restore" type="button" aria-expanded="false" aria-controls="chat-panel" hidden>Varikkochat <span aria-hidden="true">💬</span></button>
       <section class="game-shell" aria-label="Ajopeli">
+        <p id="spectate-label" role="status" hidden></p>
+        <p id="spectate-connection" role="status" hidden></p>
         <p id="verification-state" role="status" class="verification-state"></p>
         <div id="start-lights" class="start-lights" data-phase="" role="status" hidden>
           <div class="start-lights-row" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -64,9 +87,13 @@
         <div class="hud">
           <div class="hud-item"><span>KIERROS</span><strong id="lap-count">1</strong></div>
           <div class="hud-item wide"><span>AIKA</span><strong id="lap-time">00:00.000</strong></div>
-          <div class="hud-item wide"><span>PARAS</span><strong id="best-time">--:--.---</strong></div>
+          <div class="hud-item wide track-record"><span>RATAENNÄTYS</span><strong id="best-time">--:--.---</strong><small id="record-holder">—</small></div>
           <div class="hud-item speed"><span>NOPEUS</span><strong><span id="speed">0</span> <small>km/h</small></strong></div>
         </div>
+        <section id="daily-race-hud" class="daily-race-hud" aria-label="Päivän kisa">
+          <div><span id="daily-race-label">Päivän kisa · Ihmiset</span><strong id="daily-race-countdown">Ladataan…</strong></div>
+          <div class="daily-race-leader"><span id="daily-race-leader-label">Johdossa</span><strong><span id="daily-race-name">—</span><span id="daily-race-time"></span></strong></div>
+        </section>
         <canvas id="track" aria-label="3D-näkymä kuljettajan paikalta"></canvas>
         <div id="sector-time" class="sector-time" role="status" hidden></div>
         <canvas id="cockpit" aria-hidden="true"></canvas>
@@ -93,6 +120,7 @@
       <div class="dialog-head">
         <div class="race-heading"><h2 id="leaderboard-title">SKINNARILA<br>GRAND PRIX</h2><p class="race-eyebrow">LPR MOTORSPORT · TIME ATTACK</p></div>
         <div class="dialog-actions">
+        <button id="release-notes-open" type="button">Mitä uutta?</button>
         <div class="language-switcher" role="group" aria-label="Kieli / Language">
           <button type="button" data-language="fi" aria-label="Suomi" aria-pressed="true" title="Suomi" lang="fi"><svg viewBox="0 0 36 22" aria-hidden="true"><path fill="#fff" d="M0 0h36v22H0z"/><path fill="#003580" d="M10 0h6v22h-6zM0 8h36v6H0z"/></svg></button>
           <button type="button" data-language="en" aria-label="English" aria-pressed="false" title="English" lang="en"><svg viewBox="0 0 60 30" aria-hidden="true"><path fill="#012169" d="M0 0h60v30H0z"/><path stroke="#fff" stroke-width="6" d="m0 0 60 30m0-30L0 30"/><path fill="#c8102e" d="M0 0 30 15h-4.472L0 2.236zM60 0 30 15v-2.236L55.528 0zM60 30 30 15h4.472L60 27.764zM0 30 30 15v2.236L4.472 30z"/><path stroke="#fff" stroke-width="10" d="M30 0v30M0 15h60"/><path stroke="#c8102e" stroke-width="6" d="M30 0v30M0 15h60"/></svg></button>
@@ -101,23 +129,145 @@
         </div>
       </div>
       <div class="leaderboard-entry-grid">
-      <section class="leaderboard-panel verified-standings" aria-label="Varmennettujen kierrosaikojen TOP 10">
-        <h3>TOP 10</h3>
-        <p id="verification-status" role="status" hidden></p>
-        <ol id="verified-list" aria-live="polite"></ol>
-      </section>
           <form id="leaderboard-start-form" class="leaderboard-panel leaderboard-start-form">
-            <h3>Kuljettaja</h3>
+            <h3>Kuljettaja <span id="dashboard-account-name"></span></h3>
+            <button id="leaderboard-drive" class="leaderboard-start" type="button" hidden>Siirry radalle</button>
+            <div id="leaderboard-choices" class="leaderboard-choices">
+              <button id="leaderboard-login" class="leaderboard-choice" type="button">Kirjaudu sisään</button>
+              <button id="leaderboard-practice" class="leaderboard-choice" type="button">Jatka vierailijana</button>
+            </div>
+            <div id="leaderboard-guest-fields" hidden>
+              <h4>Jatka vierailijana</h4>
+              <label for="leaderboard-guest-name">Nimimerkki</label>
+              <input id="leaderboard-guest-name" maxlength="24" autocomplete="nickname" placeholder="Valitse nimimerkki" />
+              <p>Varmennetut kierrokset tallennetaan virallisiin tuloksiin nimellä (vierailija). Voit luoda tilin tämän istunnon aikana ja säilyttää kierroksesi. Vierailija ei saa kisapisteitä. Ajoasi voi seurata suorana.</p>
+              <label for="leaderboard-guest-series">Sarja</label>
+              <select id="leaderboard-guest-series"><option value="">Valitse sarja</option><option value="human">Ihmiset</option><option value="bot">Botit</option></select>
+              <button id="leaderboard-guest-start" class="leaderboard-start" type="button">Aloita pelaaminen</button>
+              <button id="leaderboard-guest-back" class="leaderboard-back" type="button">Takaisin</button>
+            </div>
+            <div id="leaderboard-account-fields" hidden>
+            <button id="leaderboard-back" class="leaderboard-back" type="button">Takaisin valikkoon</button>
+            <h4 id="leaderboard-account-title">Kirjaudu sisään</h4>
+            <button id="leaderboard-create" class="leaderboard-choice" type="button">Luo uusi käyttäjätunnus</button>
+            <p id="leaderboard-create-step" class="leaderboard-create-step" hidden></p>
+            <p>Leaderboardiin osallistuminen tallentaa nimimerkin, varmennetut kierrosajat ja ajon tarkastamiseen tarvittavat tiedot. Kehitysanalytiikka on vapaaehtoinen.</p>
+            <div id="leaderboard-credentials">
             <label for="leaderboard-name">Nimimerkki</label>
-            <input id="leaderboard-name" required maxlength="24" autocomplete="nickname" autocapitalize="off" enterkeyhint="go" placeholder="Nimimerkki" />
+            <input id="leaderboard-name" required maxlength="24" autocomplete="username" autocapitalize="off" enterkeyhint="next" placeholder="Nimimerkki" />
+            <label id="leaderboard-password-label" for="leaderboard-password">Salasana</label>
+            <input id="leaderboard-password" type="password" minlength="8" maxlength="128" autocomplete="current-password" enterkeyhint="go" placeholder="Vähintään 8 merkkiä" />
+            <p id="leaderboard-password-hint" class="leaderboard-password-hint">Salasana varaa nimimerkin sinulle. Salasanaa ei voi palauttaa.</p>
+            <p class="leaderboard-password-hint">Leaderboard-ajoasi voi seurata suorana nimimerkilläsi.</p>
+            </div>
+            <fieldset id="leaderboard-series-step" class="leaderboard-series" hidden>
+              <legend>Kummassa sarjassa ajat?</legend>
+              <p id="leaderboard-series-name" class="leaderboard-series-name"></p>
+              <div class="leaderboard-series-options">
+              <label class="leaderboard-series-option"><input id="leaderboard-series-human" type="radio" name="leaderboard-series" value="human" />
+                <svg class="leaderboard-series-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><circle cx="32" cy="18" r="10" fill="currentColor"/><path d="M14 56c0-11 8-20 18-20s18 9 18 20z" fill="currentColor"/><path d="M22 15c2-6 7-9 10-9s8 3 10 9" fill="none" stroke="#0b1a14" stroke-width="2.5" stroke-linecap="round"/></svg>
+                <span><strong>Ihmisten sarja</strong> <small>Ajan itse näppäimistöllä tai kosketusohjaimilla.</small></span></label>
+              <label class="leaderboard-series-option"><input id="leaderboard-series-bot" type="radio" name="leaderboard-series" value="bot" />
+                <svg class="leaderboard-series-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><line x1="32" y1="4" x2="32" y2="12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="4" r="3" fill="currentColor"/><rect x="14" y="12" width="36" height="26" rx="6" fill="currentColor"/><circle cx="24" cy="24" r="4" fill="#0b1a14"/><circle cx="40" cy="24" r="4" fill="#0b1a14"/><rect x="23" y="31" width="18" height="3" rx="1.5" fill="#0b1a14"/><rect x="9" y="20" width="5" height="10" rx="2" fill="currentColor"/><rect x="50" y="20" width="5" height="10" rx="2" fill="currentColor"/><rect x="18" y="41" width="28" height="17" rx="4" fill="currentColor"/><circle cx="32" cy="49.5" r="3" fill="#0b1a14"/></svg>
+                <span><strong>Bottien sarja</strong> <small>Autoa ohjaa ohjelma tai muu automaattinen ohjaus.</small></span></label>
+              </div>
+              <p class="leaderboard-series-note">Ihmiset ja botit kilpailevat eri tuloslistoilla. Sarjaa voi myöhemmin vaihtaa vain ylläpito.</p>
+            </fieldset>
+            </div>
+            <details class="leaderboard-options">
+            <summary>Lisäasetukset</summary>
+            <label class="chat-visibility"><input id="chat-visible" type="checkbox" /> <span>Näytä chat ajon aikana</span></label>
             <fieldset class="analytics-settings" aria-label="Analytiikka / Analytics">
-              <label><input id="analytics-consent" type="checkbox" required /> <span id="analytics-label"></span></label>
+              <label><input id="analytics-consent" type="checkbox" /> <span id="analytics-label"></span></label>
               <details><summary>Tiedot / Details</summary><p id="analytics-info"></p><a href="privacy.html" target="_blank" rel="noopener">Tietosuoja / Privacy</a><br><button id="analytics-delete" type="button">Poista analytiikkatietoni</button><p id="analytics-status" role="status"></p></details>
             </fieldset>
-            <button id="leaderboard-start" class="leaderboard-start" type="submit">Aloita ajo <span aria-hidden="true">→</span></button>
+            </details>
+            <button id="leaderboard-start" class="leaderboard-start" type="submit" hidden><span id="leaderboard-start-label">Kirjaudu sisään</span> <span aria-hidden="true">→</span></button>
+            <button id="leaderboard-logout" class="leaderboard-logout" type="button" hidden>Kirjaudu ulos</button>
             <p id="leaderboard-status" role="status"></p>
           </form>
+      <section class="leaderboard-panel active-drivers" aria-labelledby="active-drivers-title">
+        <h3 id="active-drivers-title">Aktiiviset kuljettajat</h3>
+        <p class="active-drivers-note">Katso ajoa painamalla kuljettajan nimeä. Chat toimii myös katselun aikana.</p>
+        <p id="active-drivers-status" role="status">Haetaan kuljettajia…</p>
+        <ul id="active-drivers-list"></ul>
+      </section>
+      <section class="leaderboard-panel verified-standings" aria-label="Varmennettujen kierrosaikojen TOP 10">
+        <h3>TOP 10</h3>
+        <div class="series-tabs" role="group" aria-label="Sarja">
+          <button id="verified-series-human" type="button" aria-pressed="true">Ihmiset</button>
+          <button id="verified-series-bot" type="button" aria-pressed="false">Botit</button>
+        </div>
+        <p id="verification-status" role="status" hidden></p>
+        <p><small>TOP 10 edellyttää julkisesti katsottavaa, varmennettua uusintaa.</small></p>
+        <ol id="verified-list" aria-live="polite"></ol>
+      </section>
       </div>
+      <section id="spectate-view" hidden aria-label="Suora ajonseuranta">
+        <div id="spectate-game"></div>
+        <aside id="spectate-sidebar" aria-label="Vaihda seurattavaa kuljettajaa">
+          <button id="spectate-back" type="button">← Takaisin kuljettajalistaan</button>
+        </aside>
+      </section>
+      <section id="championship" class="leaderboard-panel championship" aria-labelledby="championship-title">
+        <div class="championship-heading"><h3 id="championship-title">Päivän kisa</h3><button id="dashboard-details-open" type="button">Kisapäivä ja pisteet</button></div>
+        <p>Uusi kisa joka päivä Suomen aikaa. Vain varmennetut kierrokset.</p>
+        <div class="series-tabs" role="group" aria-label="Päiväkisan sarja">
+          <button id="championship-series-human" type="button" aria-pressed="true">Ihmiset</button>
+          <button id="championship-series-bot" type="button" aria-pressed="false">Botit</button>
+        </div>
+        <div class="championship-controls">
+          <label for="championship-day">Kisapäivä</label>
+          <input id="championship-day" type="date" min="2026-01-01" />
+          <button id="championship-today" type="button">Tänään</button>
+          <button id="championship-refresh" type="button">Päivitä</button>
+        </div>
+        <p id="championship-clock"></p><p id="championship-notice" role="status"></p>
+        <p id="championship-personal" class="championship-personal"></p>
+        <div class="championship-grid">
+          <section><h4>Päivän nopeimmat</h4><div id="championship-fastest"></div></section>
+          <section><h4>Eniten kierroksia</h4><div id="championship-volume"></div></section>
+          <section><h4>Kuukauden pistekisa</h4><p id="championship-month"></p><div id="championship-monthly"></div></section>
+        </div>
+        <details><summary>Mistä pisteitä saa?</summary>
+          <p>Nopeuskisan sijat 1–10: 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 pistettä.</p>
+          <p>Kierrosmääräkisan sijat 1–8: 10, 8, 6, 5, 4, 3, 2, 1 pistettä.</p>
+          <p>Päivän ensimmäinen kierros: 5 pistettä. Rajapyykit 5, 15 ja 30 kierrosta: kukin +2 pistettä.</p>
+          <p>Ajoputki: yksi varmennettu kierros päivässä. Bonus 1 piste per peräkkäinen päivä, enintään 7 pistettä päivässä. Väliin jäänyt päivä aloittaa putken alusta.</p>
+          <p>Tasatulokset jakavat sijan ja pisteet. Päivän pisteet vahvistuvat heti keskiyöllä Suomen aikaa. Kuukausikisaan lasketaan vain vahvistetut päivät. Myöhäisemmät tallennukset pääsevät edelleen kaikkien aikojen listalle.</p>
+        </details>
+      </section>
+      <section id="dashboard-details" class="dashboard-popover" hidden aria-label="Kisapäivä ja pisteet">
+        <button id="dashboard-details-close" type="button">Sulje</button>
+        <div id="dashboard-details-content"></div>
+      </section>
+      <section id="release-notes-panel" hidden aria-labelledby="release-notes-title" role="region">
+        <div class="release-notes-content">
+          <div class="release-notes-heading">
+            <div><h2 id="release-notes-title">Mitä uutta?</h2><p id="release-notes-meta"></p></div>
+            <div class="release-notes-actions">
+              <div class="language-switcher" role="group" aria-label="Kieli / Language">
+                <button type="button" data-language="fi" aria-label="Suomi" aria-pressed="true" title="Suomi" lang="fi"><svg viewBox="0 0 36 22" aria-hidden="true"><path fill="#fff" d="M0 0h36v22H0z"/><path fill="#003580" d="M10 0h6v22h-6zM0 8h36v6H0z"/></svg></button>
+                <button type="button" data-language="en" aria-label="English" aria-pressed="false" title="English" lang="en"><svg viewBox="0 0 60 30" aria-hidden="true"><path fill="#012169" d="M0 0h60v30H0z"/><path stroke="#fff" stroke-width="6" d="m0 0 60 30m0-30L0 30"/><path fill="#c8102e" d="M0 0 30 15h-4.472L0 2.236zM60 0 30 15v-2.236L55.528 0zM60 30 30 15h4.472L60 27.764zM0 30 30 15v2.236L4.472 30z"/><path stroke="#fff" stroke-width="10" d="M30 0v30M0 15h60"/><path stroke="#c8102e" stroke-width="6" d="M30 0v30M0 15h60"/></svg></button>
+              </div>
+              <button id="release-notes-close" type="button">Sulje</button>
+            </div>
+          </div>
+          <ol id="release-notes-list"></ol>
+        </div>
+      </section>
     </dialog>
+    <details id="guest-register-panel" class="guest-register-panel" hidden>
+      <summary>Luo tili ja säilytä kierroksesi</summary>
+      <form id="guest-register-form">
+        <p>Rekisteröidy tämän vierailijaistunnon aikana. Ajo jatkuu normaalisti. Sarja säilyy. Tänään ajetut varmennetut kierrokset lasketaan avoimeen päiväkisaan. Suljetut kisat eivät muutu.</p>
+        <label for="guest-register-name">Tilin nimimerkki</label>
+        <input id="guest-register-name" required maxlength="24" autocomplete="username" />
+        <label for="guest-register-password">Salasana</label>
+        <input id="guest-register-password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" />
+        <button type="submit">Luo tili</button>
+        <p id="guest-register-status" role="status"></p>
+      </form>
+    </details>
   </body>
 </html>

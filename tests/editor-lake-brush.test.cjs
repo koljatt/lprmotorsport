@@ -62,6 +62,7 @@ function editor(objects=[],withSale=false,protocol='http:',withSites=false,withR
     set saveMode(mode){saveMode=mode;},get writes(){return writes;},
     barrier(){nodes.get('type').value='barrier';nodes.get('type').emit('change');},
     tyreWall(){nodes.get('type').value='tyreWall';nodes.get('type').emit('change');},
+    cone(){nodes.get('type').value='cone';nodes.get('type').emit('change');},
     lake(){nodes.get('type').value='lake';nodes.get('type').emit('change');},
     asphalt(){nodes.get('type').value='asphalt';nodes.get('type').emit('change');},
     hill(){nodes.get('type').value='hill';nodes.get('type').emit('change');},
@@ -72,6 +73,17 @@ function editor(objects=[],withSale=false,protocol='http:',withSites=false,withR
 }
 
 (async()=>{
+  const placeConeOnAsphalt=editor([{type:'asphalt',x:1200,y:1000,angle:0,scale:1}]);
+  placeConeOnAsphalt.cone();
+  placeConeOnAsphalt.pointer('pointerdown',1200,1000);
+  const coneOnAsphalt=await placeConeOnAsphalt.document();
+  assert.equal(coneOnAsphalt.objects.length,2,'Adding a cone over asphalt must place rather than select the asphalt');
+  assert.equal(coneOnAsphalt.objects[0].type,'asphalt','The existing asphalt must remain unchanged');
+  assert.equal(coneOnAsphalt.objects[1].type,'cone','The selected cone must be added over the asphalt');
+  assert.equal(coneOnAsphalt.objects[1].x,1200);
+  assert.equal(coneOnAsphalt.objects[1].y,1000);
+  console.log('PASS: selected objects are placed over existing asphalt in add mode');
+
   // Compare the editor's actual canvas shapes with the game's generated mesh.
   // A thin centre-line symbol used to hide the guardrail's two wide beams.
   for(const [angle,scale,length] of [[0,1,40],[Math.PI/2,2,23],[Math.PI/4,.2,1],[-.7,5,50]]){

@@ -1,7 +1,7 @@
 (function(root){
  class LiveClient {
   constructor({revision,token='',ticket,armed=false,base='',fetch:request=root.fetch.bind(root),onUpdate=()=>{},onLost=()=>{},maxBufferedTicks=2400,recoveryWindowMs=15000,requestTimeoutMs=5000}={}){
-   Object.assign(this,{revision,token,ticket,armed,base,request,onUpdate,onLost,maxBufferedTicks,recoveryWindowMs,requestTimeoutMs});this.active=false;this.queue=[];this.seq=0;this.tick=0;this.generation=0;this.flushThrough=0;
+   Object.assign(this,{revision,token,ticket,armed,base,request,onUpdate,onLost,maxBufferedTicks,recoveryWindowMs,requestTimeoutMs});this.active=false;this.queue=[];this.seq=0;this.tick=0;this.generation=0;this.flushThrough=0;this.boundaries=[];
   }
   async start(){
    // Wake a sleeping free service before allocating the timed driving session.
@@ -27,7 +27,10 @@
   }
   async flush(final=false){
    // Force only the inputs queued at this call, not future flying-lap inputs.
-   if(final)this.flushThrough=Math.max(this.flushThrough,this.tick+this.queue.length);
+   if(final){
+    this.flushThrough=Math.max(this.flushThrough,this.tick+this.queue.length);
+    if(this.flushThrough>this.tick&&!this.boundaries.includes(this.flushThrough))this.boundaries.push(this.flushThrough);
+   }
    if(this.pumping)return this.pumping;
    if(!this.active)return;
    this.pumping=this.pump();
@@ -37,7 +40,8 @@
    const generation=this.generation;
    try{
     while(this.active&&generation===this.generation&&(this.queue.length>=60||(this.tick<this.flushThrough&&this.queue.length))){
-     const inputs=this.queue.slice(0,120),payload={revision:this.revision,seq:this.seq,fromTick:this.tick,inputs};
+     const boundary=this.boundaries[0]??Infinity;
+     const inputs=this.queue.slice(0,Math.min(120,boundary-this.tick)),payload={revision:this.revision,seq:this.seq,fromTick:this.tick,inputs};
      const body=JSON.stringify(payload),deadline=performance.now()+this.recoveryWindowMs;
      let ack,retries=0;
      for(;;){
@@ -59,6 +63,7 @@
      if(!this.active||generation!==this.generation)return;
      if(ack.seq!==this.seq||ack.ackTick!==this.tick+inputs.length)throw Error('Invalid server acknowledgment');
      this.queue.splice(0,inputs.length);this.tick=ack.ackTick;this.seq++;
+     while(this.boundaries.length&&this.boundaries[0]<=this.tick)this.boundaries.shift();
      this.onUpdate({...ack,bufferedTicks:this.queue.length,recovered:retries>0});
      if(ack.verified){if(this.queue.length)throw Error('Inputs continue after the server finish');this.active=false;return ack;}
     }
