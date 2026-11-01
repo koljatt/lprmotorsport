@@ -201,7 +201,10 @@ return class VehicleDynamics {
     // First unwind to centre before building lock in the opposite direction.
     const steerTarget = !analog && reversing ? 0 : desiredSteer;
     const steerChange = steerTarget - state.steer;
-    state.steer += Math.max(-response * dt, Math.min(response * dt, steerChange));
+    // A physical wheel is the rack's position: the driver's hands are the only
+    // rate limit. Keyboard, touch and gamepad keep the smoothed rack below.
+    if (!assisted) state.steer = desiredSteer;
+    else state.steer += Math.max(-response * dt, Math.min(response * dt, steerChange));
     // Keyboard buttons request a turn rate. The steering rack adds a little angle
     // when the car responds less than requested, while keeping lateral demand sane.
     let targetAngle;
@@ -226,7 +229,8 @@ return class VehicleDynamics {
       targetAngle = Math.max(-p.maxRoadWheelAngle, Math.min(p.maxRoadWheelAngle, targetAngle));
     }
     const rackChange = (targetAngle - state.steerAngle) * (analog ? 1 : 1 - Math.exp(-18 * dt));
-    state.steerAngle += Math.max(-2.8 * dt, Math.min(2.8 * dt, rackChange));
+    if (!assisted) state.steerAngle = targetAngle;
+    else state.steerAngle += Math.max(-2.8 * dt, Math.min(2.8 * dt, rackChange));
 
     const speed = Math.max(0, state.vx);
     const drag = 0.5 * 1.225 * p.dragArea * speed * speed;
@@ -293,6 +297,9 @@ return class VehicleDynamics {
       state.lateralG = state.vx * state.yawRate / gravity;
       state.longitudinalG = ax / gravity;
       state.tireUse = Math.min(1, Math.abs(state.lateralG) / mu);
+      // Force-feedback telemetry only; not read by the simulation.
+      state.frontLateralForce = 0;
+      state.frontGripLimit = frontLimit;
     } else {
       const alphaFront = Math.atan2(state.vy + p.frontAxle * state.yawRate, speed) - state.steerAngle;
       const alphaRear = Math.atan2(state.vy - p.rearAxle * state.yawRate, speed);
@@ -308,6 +315,9 @@ return class VehicleDynamics {
       frontFy *= frontScale;
       rearFx *= rearScale;
       rearFy *= rearScale;
+      // Force-feedback telemetry only; not read by the simulation.
+      state.frontLateralForce = frontFy;
+      state.frontGripLimit = frontLimit;
       const frontBodyFx = frontFx * Math.cos(state.steerAngle) - frontFy * Math.sin(state.steerAngle);
       const frontBodyFy = frontFx * Math.sin(state.steerAngle) + frontFy * Math.cos(state.steerAngle);
       const vxDot = (frontBodyFx + rearFx - drag - rolling) / p.mass + state.vy * state.yawRate+gradeForward;

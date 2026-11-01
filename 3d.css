@@ -356,6 +356,22 @@ dialog { touch-action: pan-y pinch-zoom; }
   #verified-list li, #leaderboard-list li { padding:1px 0; font-size:11px; }
 }
 
+/* Wheel and force-feedback settings */
+#wheel-dialog { width:min(560px,calc(100% - 24px)); }
+#wheel-dialog .dialog-head { justify-content:space-between; align-items:center; }
+#wheel-dialog h3 { font:800 22px/1 'Barlow Condensed',Impact,sans-serif; letter-spacing:.04em; margin:22px 0 4px; }
+#wheel-dialog .wheel-live { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:12px; font-size:11px; font-weight:800; letter-spacing:.1em; color:#9fbcae; }
+#wheel-dialog .wheel-live label { display:grid; gap:4px; }
+#wheel-dialog meter { width:100%; height:10px; }
+#wheel-dialog .wheel-settings { display:grid; gap:10px; margin-top:14px; font-size:13px; font-weight:700; }
+#wheel-dialog .wheel-settings label { display:grid; grid-template-columns:1fr auto; gap:4px 10px; align-items:center; }
+#wheel-dialog .wheel-settings input[type=range] { grid-column:1 / -1; width:100%; accent-color:#06cb8c; }
+#wheel-dialog .wheel-settings label.check { grid-template-columns:auto 1fr; font-weight:600; color:#c6dbd0; }
+#wheel-dialog output { color:#06cb8c; font-variant-numeric:tabular-nums; }
+#wheel-dialog .wheel-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+#wheel-dialog .wheel-buttons button { border:1px solid #227e58; background:#075c40; color:#fff; border-radius:8px; padding:10px 14px; font-size:13px; font-weight:800; }
+#wheel-dialog .wheel-buttons button:disabled { opacity:.5; cursor:not-allowed; }
+#wheel-button[hidden] { display:none; }
 
 #verified-list .replay-link{font-size:.72rem;color:#d1ef85;text-decoration:underline;margin-left:auto;white-space:nowrap;padding:8px}#verified-list li{flex-wrap:wrap}
 .championship{margin-top:18px;text-align:left}

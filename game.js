@@ -369,12 +369,13 @@
 
   function currentPad() {
     if (!navigator.getGamepads) return null;
-    const pads = navigator.getGamepads();
-    return Array.from(pads).find(Boolean) || null;
+    const pads = Array.from(navigator.getGamepads()).filter(Boolean);
+    return pads.find(pad => window.LPRWheel?.isWheel(pad)) || pads[0] || null;
   }
 
   function padInput(pad) {
     if (!pad) return { steer: 0, gas: 0, brake: 0 };
+    if (window.LPRWheel?.isWheel(pad)) return window.LPRWheel.read();
     if (pad.mapping === 'standard') return { steer: pad.axes[0] || 0, gas: pad.buttons[7]?.value || 0, brake: pad.buttons[6]?.value || 0 };
     return { steer: 0, gas: 0, brake: 0 };
   }
@@ -387,10 +388,11 @@
     } else if (!pad) {
       activePad = null;
     }
+    if (window.LPRWheel?.dialogOpen) return { steer: 0, gas: 0, brake: 0, analog: false, wheel: false };
     const device = padInput(pad);
     const local = held.left || held.right || held.gas || held.brake;
     const steer = (held.right ? 1 : 0) - (held.left ? 1 : 0);
-    return local ? { steer, gas: held.gas ? 1 : 0, brake: held.brake ? 1 : 0, analog: false, wheel: false } : { ...device, analog: !!pad, wheel: false };
+    return local ? { steer, gas: held.gas ? 1 : 0, brake: held.brake ? 1 : 0, analog: false, wheel: false } : { ...device, analog: !!pad, wheel: !!device.wheel };
   }
 
   function nearestTrack(x, y) {
@@ -468,7 +470,7 @@
       return;
     }
     if (now - lastDeviceUpdate > 1000) {
-      ui.input.textContent = activePad ? activePad.mapping === 'standard' ? t("PELIOHJAIN") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6");
+      ui.input.textContent = activePad ? window.LPRWheel?.isWheel(activePad) ? window.LPRWheel.label() : activePad.mapping === 'standard' ? t("PELIOHJAIN") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6") : t("KOSKETUS / N\u00c4PP\u00c4IMIST\u00d6");
       lastDeviceUpdate = now;
     }
     if (ui.dialog.open || car.sauna || car.sale || car.pool) {
@@ -496,7 +498,7 @@
       }
       return;
     }
-    input.steer = Math.abs(input.steer) < .04 ? 0 : input.steer;
+    if (!input.wheel) input.steer = Math.abs(input.steer) < .04 ? 0 : input.steer;
     if (!car.started && input.gas > .08) {
       car.started = true;
       car.lapStart = now;
@@ -585,7 +587,7 @@
 
   function updateDriving(now) {
     if(car.crashed){window.LPRVerifiedDriving.cancel();showNotice(t("Auto hajosi! Aloita uudelleen."),0);return;}
-    const input=readInput();input.steer=Math.abs(input.steer)<.04?0:input.steer;input.tc=car.tcEnabled;
+    const input=readInput();if(!input.wheel)input.steer=Math.abs(input.steer)<.04?0:input.steer;input.tc=car.tcEnabled;
     const event=drivingWorld.step(input),result=drivingWorld.result();
     renderer.peopleTime=result.ticks*1000/120;
     window.LPRVerifiedDriving.step(input,result,event);
@@ -617,9 +619,39 @@
   },saved(lapMs){showNotice('Kierrosaika '+formatTime(lapMs)+' tallennettu',3500);}});
 
   let lastPresentation = null;
-  // Fixed physics step; existing timed-v1 scoring remains on the wall clock.
+  // Fixed 120 Hz physics on its own clock, independent of the display rate.
+  // Timed-v1 scoring remains on the wall clock.
   const STEP = 1 / 120, STEP_MS = 1000 / 120;
   let simTick = 0, accumulator = 0;
+  function simulate(now) {
+    if (document.hidden) { lastFrame = Math.max(lastFrame, now); return; }
+    // Spectating presents another driver; frame() keeps lastFrame current meanwhile.
+    if (window.LPRSpectator?.active) return;
+    // The timer may already have advanced the clock past a frame's timestamp.
+    if (now <= lastFrame) return;
+    accumulator += Math.min((now - lastFrame) / 1000, .1);
+    lastFrame = now;
+    while (accumulator >= STEP) {
+      accumulator -= STEP;
+      simTick++;
+      update(STEP, simTick * STEP_MS, now);
+      // Wheel input is read inside update(); force feedback follows every tick.
+      window.LPRWheel?.updateFfb(car, !ui.dialog.open && !window.LPRWheel.dialogOpen && !car.sauna && !car.sale && !car.pool && !car.crashed, STEP);
+    }
+  }
+  // Ticks run between frames rather than in bursts at the start of each frame.
+  // Browsers clamp repeating timers to about 4 ms, so a tick runs within ~4 ms of
+  // being due; frame() catches up any remaining ticks before it renders.
+  // Only with a wheel connected: input and force feedback then gain from even
+  // 120 Hz ticks. Phones and keyboards keep the frame-driven loop and avoid
+  // 250 timer wake-ups per second. Test sandboxes have no timers at all.
+  let clock = 0;
+  function syncClock() {
+    const pad = typeof activePad === 'undefined' ? null : activePad; // absent in the frame-loop test sandbox
+    const wanted = !!pad && !!window.LPRWheel?.isWheel(pad) && !document.hidden && !window.LPRSpectator?.active;
+    if (wanted && !clock && typeof setInterval === 'function') clock = setInterval(() => simulate(performance.now()), 4);
+    else if (!wanted && clock) { clearInterval(clock); clock = 0; }
+  }
   function resetSpectatorPresentation(){
     clearInput();accumulator=0;lastFrame=performance.now();lastPresentation=null;
     renderer.visualSteering=null;renderer.lastWheelFrame=0;
@@ -652,6 +684,7 @@
       // Spectating uses this exact renderer, camera, resolution and game HUD.
       // Never simulate local inputs or submit laps while watching another driver.
       lastFrame=now;accumulator=0;
+      window.LPRWheel?.updateFfb(car,false,STEP);syncClock();
       const remote=window.LPRSpectator.presentation(now);
       if(remote){
         const observed=remote.car;
@@ -666,13 +699,8 @@
       window.LPRAnalytics?.sample('menu',false,false);
       return;
     }
-    accumulator += Math.min((now - lastFrame) / 1000, .1);
-    lastFrame = now;
-    while (accumulator >= STEP) {
-      accumulator -= STEP;
-      simTick++;
-      update(STEP, simTick * STEP_MS, now);
-    }
+    simulate(now);
+    syncClock();
     window.LPRAnalytics?.sample(ui.dialog.open ? 'menu' : car.crashed ? 'crashed' : car.sale ? 'shop' : car.sauna ? 'sauna' : car.pool ? 'pool' : 'driving', !!activePad && (activePad.axes.some(v => Math.abs(v) > .1) || activePad.buttons.some(b => b.pressed)), held.left || held.right || held.gas || held.brake);
     syncAudio();
     audio.update(car);
